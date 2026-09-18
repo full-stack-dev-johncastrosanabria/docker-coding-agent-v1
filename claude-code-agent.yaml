@@ -1,0 +1,6 @@
+agents:
+  root:
+    description: Claude Code running on your Claude subscription
+    harness:
+      type: claude-code
+      effort: high
