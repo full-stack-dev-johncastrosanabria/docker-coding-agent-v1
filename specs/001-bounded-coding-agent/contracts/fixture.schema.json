@@ -34,7 +34,8 @@
         "trusted",
         "untrusted",
         "both"
-      ]
+      ],
+      "description": "profile resolution (research R23): 'both' runs under the dca bench --trust profile; 'untrusted' always runs untrusted; 'trusted' runs trusted under --trust trusted and is not-applicable under --trust untrusted. In V1 every fixture except S5a/S5b is 'both' and S5a/S5b are 'untrusted', so trusted acceptance and untrusted capability acceptance each have exactly 28 applicable fixtures."
     },
     "gate_condition": {
       "enum": [
@@ -310,6 +311,36 @@
         "properties": {
           "expected_disposition": {
             "const": "blocked"
+          }
+        }
+      }
+    },
+    {
+      "description": "V1 trust-level assignment (deterministic denominators, research R23): every fixture except S5a/S5b is trust_level 'both'; S5a/S5b are 'untrusted' (enforced by the gate_condition rules)",
+      "if": {
+        "properties": {
+          "id": {
+            "enum": [
+              "S5a",
+              "S5b"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "then": {
+        "properties": {
+          "trust_level": {
+            "const": "untrusted"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "trust_level": {
+            "const": "both"
           }
         }
       }

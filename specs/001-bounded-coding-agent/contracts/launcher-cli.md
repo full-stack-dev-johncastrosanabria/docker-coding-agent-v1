@@ -52,11 +52,17 @@ printed. These are environment, configuration or input problems, not task outcom
    - V1 creates no temporary host refs. Tags and arbitrary commits are V1.1 candidates: an annotated tag ref points to a tag object, not to the peeled commit, so comparing the bundle's ref head with `source.commit` is only valid for branches.
 2. **Dirty checkout**: uncommitted or untracked non-ignored changes without `--ignore-uncommitted`. With the flag, the dirty path names (never contents) are recorded in `source.dirty_paths`. Ignored files never trigger this check and are never delivered.
 3. **Provider API-key contamination**: `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is present in the launcher's environment, even if empty. The check tests **presence by name only**; values are never read into diagnostics, logs, reports or event files. The diagnostic prints only the variable name.
-4. **sbx availability and version**: `sbx` is missing or below 0.43.0 (needed for mountless `sbx create` and `--skills=off`), or its version or any other pinned version differs from `runtime/versions.yaml` without `--allow-drift`.
+4. **sbx availability and version**: `sbx` is missing or below 0.43.0 (needed for mountless `sbx create` and `--skills=off`), or its version or any other pinned version differs from `runtime/versions.yaml` without `--allow-drift`. The selected backend's `sandbox_bases` pin (G6/G1a evidence) must be present; a missing pin refuses the run even with `--allow-drift`.
 5. **SSH agent**: sbx `ssh.agentForwardingEnabled` is true, or a fixed agent socket would forward. The launcher runs every `sbx` command with `SSH_AUTH_SOCK` removed. It never changes global sbx settings; it prints the one-time developer command instead.
 6. **Backend authentication unavailable**: the login isn't present (safe status fields only). For Claude, the launcher offers `--backend codex` and doesn't switch automatically.
-7. **Required gate evidence missing**: a common gate (G0, G4, G5, G6, G7, G8, G10, G11) or a trusted-profile gate for the selected backend hasn't passed for the pinned versions. In particular, **G4 (effective network policy) not passed → no run of any profile proceeds**. Missing *untrusted-eligibility* gates (G1b/G2, G9) aren't a precondition failure; they lead to a Phase 2 `blocked` report.
+7. **Required gate evidence missing, invalid or stale**. The launcher reads only the host file `gates/eligibility.json` (computed by `gates/review.py` from `gates/*.json`; never taken from the VM or the repository under test) and refuses when:
+   - the file is missing, fails its schema, or was computed for pinned versions other than the installed ones;
+   - a backend-independent common gate (G0, G4, G5, G6, G7, G8, G10) isn't PASS. In particular, **G4 (effective network policy) not passed → no run of any profile proceeds**;
+   - the selected backend isn't `available` or `trusted_eligible`: its availability gate (G1a for Claude, G3 for Codex), its trusted-profile gates (G1c and G1d for Claude), its **final G11 PASS** (a `PARTIAL` part-A-only status doesn't count), or its **production conformance PASS** is missing.
+
+   Missing *untrusted-eligibility* gates (G1b/G2, G9) aren't a precondition failure; they lead to a Phase 2 `blocked` report (the S5a behavior).
 8. **Stale, invalid or undiscoverable approval**: an `--approve <request-id>` whose originating report can't be located, or which fails provenance verification (see *Approval provenance*).
+9. **Global network-policy drift**: the launcher reads the current global network-policy state (global preset, global rules, governance status; sandbox-scoped rules and run-scoped grants excluded), computes its fingerprint, and compares it with the fingerprint that G4 and production conformance recorded in `gates/eligibility.json`. Any difference refuses the run until G4 and conformance are re-run. The launcher never repairs or mutates global settings. If G4 made a specific global preset a V1 prerequisite, the diagnostic names it.
 
 **Phase 2: policy disposition before provisioning.** The request is valid, but its correct
 policy outcome is **BLOCKED**. The launcher **finalizes a `blocked` completion report and
@@ -69,11 +75,16 @@ exits 11**, with no sandbox, no model or agent execution, and no network activit
 **Phase 3: execution.**
 
 1. `git bundle create <tmp>/src.bundle <source.ref>` from the **named ref**, then `git bundle verify`, then confirm that the bundle's head for `source.ref` equals `source.commit`. **Failure here is an infrastructure abort**: exit 4, no report, and no sandbox is created.
-2. `sbx create` of a **mountless** sandbox with `--skills=off` and the V1 kit.
+2. `sbx create` of a **mountless** sandbox with `--skills=off` and the V1 kit, from the selected backend's **sandbox base**:
+   - **Claude**: the exact Docker Sandboxes Claude base (the sbx `claude` agent variant) that G6 and G1a proved;
+   - **Codex**: the exact docker-agent sandbox template that G6 proved.
+
+   The exact identifiers and versions come from `runtime/versions.yaml` `sandbox_bases`, which G6 (and G1a for Claude) record. The launcher never resolves, guesses or substitutes a base at runtime; a missing or drifted pin is a precondition failure (precondition 4).
 3. Apply the strict network policy for the profile, plus the host-authoritative network grants.
 4. `sbx cp` the bundle and run config into the VM; the VM clones the bundle to the workspace.
-5. Kit/gate preflight inside the VM (the gate executes and fails closed; versions match). The VM creates the task branch `dca/<run-id>` at `source.commit`. **Any failure in steps 2–5 is an infrastructure abort**: exit 4, no report, best-effort `sbx rm`.
-6. `sbx exec docker agent run --exec --json …`. The launcher parses **typed outer Docker Agent events**, counts steps and retries, enforces wall-clock with a host timer, and fails closed on a malformed or truncated stream or an abnormal exit (evidence: G11).
+   - **Codex trusted token-file fallback only**: when the selected backend is Codex, the run is **trusted**, and `gates/eligibility.json` records `credential_mechanism: token-file-trusted-only`, the launcher also copies a minimal config dir containing **only** `chatgpt-auth.json` (never the full Docker Agent config dir) into the VM, owner-only. It never logs the file's contents or any hash of it. An untrusted request can never select or receive it, because Phase 2 already blocks untrusted Codex under this mechanism. With `proxy-managed`, nothing is copied. The material is removed with the sandbox, and sandbox disposal stays mandatory.
+5. Kit/gate preflight inside the VM (the gate executes and fails closed; versions match; the canonical kit manifest `<KIT_DIR>/kit-manifest.json` is valid, every runtime skill matches its hash, and nothing else exists under `<KIT_DIR>/skills/` ([policy-gate](policy-gate.md) *Kit manifest*); for Codex, the in-VM Docker Agent user config has no `permissions`, `safety`, `yolo` or alias options). The VM creates the task branch `dca/<run-id>` at `source.commit`. **Any failure in steps 2–5 is an infrastructure abort**: exit 4, no report, best-effort `sbx rm`.
+6. `sbx exec docker agent run --exec --json …`. For **every native Codex execution** the command includes an explicit **`--safety strict`**, which outranks user-level Docker Agent settings, and an explicit environment entry **`DOCKER_AGENT_KIT_DIR=<KIT_DIR>`**. That value is built from the trusted staged-kit root (`/opt/dca` in production), never from repository content or the inherited environment, so Docker Agent discovers skills only from `<KIT_DIR>/skills` and a same-named repository skill can't replace a runtime skill. `dca` has no option to change either. The Claude command is unchanged; Claude's skill source is covered by G1d. The launcher parses **typed outer Docker Agent events**, counts steps and retries, enforces wall-clock with a host timer, and fails closed on a malformed or truncated stream or an abnormal exit (evidence: G11).
 7. Final re-execution of the required deterministic checks on the final state.
 8. Retrieval. The task-branch bundle is created in the VM from the named ref `dca/<run-id>`, copied out via `sbx cp` into a host quarantine directory, checked with `git bundle verify`, and **only then** fetched as `dca/<run-id>`. **Any failure in export, copy, verification or import is an infrastructure finalization failure**:
    - exit 4;
@@ -84,7 +95,16 @@ exits 11**, with no sandbox, no model or agent execution, and no network activit
    - **no partial `dca/<run-id>` branch is ever fetched or created**.
 9. Report finalization, then `sbx rm`.
 
-Task-run outcomes during execution map to exit codes 0, 10 or 11, provided retrieval (step 8) succeeds. They include approval required with no grant (the gate's `DCA_APPROVAL_REQUIRED`), a required prerequisite or check that can't run, host-enforced limits, and an **abnormal agent exit or malformed/truncated event stream**. These last two stay task-run `blocked` outcomes (exit 11) because G11 defines their evidence path; they are not infrastructure aborts.
+**Gate harness (internal, G11 part B only).** Normal `dca run` keeps refusing execution while a
+backend's G11 status isn't final PASS (precondition 7). The G11 part-B procedure,
+`gates/G11/run_part_b.py`, therefore calls the launcher's already-implemented Phase 3 execution
+primitives directly. Its own preconditions are G11 part A PASS for that backend, production
+conformance PASS, and every other common gate and backend gate needed to exercise the backend.
+Its Codex executions use the same command form as step 6, including `--safety strict` and
+`DOCKER_AGENT_KIT_DIR=<KIT_DIR>`. It is available only to the gate procedure. There is **no** public `--skip-gates`,
+`--ignore-g11`, `--unsafe` or similar flag, and nothing in `dca run` accepts a partial G11.
+
+Task-run outcomes during execution map to exit codes 0, 10 or 11, provided retrieval (step 8) succeeds. They include approval required with no grant (the gate's `DCA_APPROVAL_REQUIRED`), a required prerequisite or check that can't run, host-enforced limits, a **native Docker Agent ceiling termination** (`limit_reached: native_ceiling`, recorded with the event's detail; `succeeded` only under FR-023a), and an **abnormal agent exit or malformed/truncated event stream**. These last two stay task-run `blocked` outcomes (exit 11) because G11 defines their evidence path; they are not infrastructure aborts.
 
 ### Approval provenance (`--approve`)
 
@@ -125,14 +145,38 @@ dca bench [--backend claude|codex] [--trust trusted|untrusted] [--fixtures <glob
 Fixtures are selected per backend by `gate_condition`. Exactly one of S5a (untrusted
 fail-closed, expected `blocked`) and S5b (untrusted egress/G9) applies to each backend.
 
+**Trust resolution and counting** (deterministic; research R23/R24):
+- `--trust <P>` selects the benchmark profile `P` (default `trusted`). For each fixture:
+  `trust_level: both` runs under `P`; `untrusted` always runs untrusted; `trusted` runs trusted
+  under `P = trusted` and is `not-applicable` under `P = untrusted`. `--trust` therefore both
+  supplies the profile for `both` fixtures and filters out `trusted`-only fixtures.
+- In V1 every fixture except S5a/S5b is `both`, and S5a/S5b are `untrusted`
+  ([fixture schema](fixture.schema.json)). So:
+  - **trusted acceptance** runs 27 `both` fixtures trusted plus the applicable S5 variant
+    untrusted: **28** applicable (small 8, medium 6, failure-recovery 6, safety 8);
+  - **untrusted capability acceptance** runs 27 `both` fixtures plus S5b, all untrusted: **28**
+    applicable with the same category counts. It uses the same per-run thresholds (small ≥ 7/8,
+    medium ≥ 4/6, failure-recovery 6/6, safety 8/8, aggregate ≥ 25/28, zero SC-005–SC-009
+    violations), with at least 3 clean runs each meeting them independently.
+- `--trust untrusted` for a backend that isn't `untrusted_eligible` is refused with exit 3 and
+  runs nothing. Fail-closed untrusted handling is proven by S5a in every trusted run instead, and
+  no autonomous untrusted coding is claimed for that backend.
+- A `not-applicable` fixture is listed but counts in neither numerator nor denominator. An
+  applicable fixture that yields no result, or a report that fails the report schema, **counts
+  as a failure**, never as a pass. The runner refuses to score a run whose applicable set isn't
+  exactly 28 with the category counts above.
+- `--acceptance` additionally requires committed thresholds, a clean tree, exact pinned
+  versions, a valid `gates/eligibility.json`, and every gate and production conformance PASS for
+  the selected backend (untrusted-eligibility gates too when `P = untrusted`).
+
 ## Exit codes
 
 | Code | Meaning | Report written? |
 |---|---|---|
 | 0 | Run finalized, `final_outcome = succeeded` | yes |
 | 10 | Run finalized, `final_outcome = failed` | yes |
-| 11 | Valid request whose correct policy outcome is `blocked`: untrusted execution with no backend satisfying the required gates; approval required with no grant; required safe prerequisite unavailable; a required check that can't run; a host-enforced limit without prior success evidence; malformed/abnormal run. The report lists the human action | yes |
-| 3 | Precondition failure before any task disposition: sbx unavailable, incompatible or drifted version, backend authentication unavailable, dirty checkout without override, provider API-key contamination, SSH forwarding active, required gate evidence missing (e.g. G4 effective network policy not passed), stale or invalid approval | no (diagnostic only) |
+| 11 | Valid request whose correct policy outcome is `blocked`: untrusted execution with no backend satisfying the required gates; approval required with no grant; required safe prerequisite unavailable; a required check that can't run; a host-enforced limit or a native Docker Agent ceiling termination without prior success evidence; malformed/abnormal run. The report lists the human action | yes |
+| 3 | Precondition failure before any task disposition: sbx unavailable, incompatible or drifted version, backend authentication unavailable, dirty checkout without override, provider API-key contamination, SSH forwarding active, required gate evidence missing, invalid or stale (`gates/eligibility.json`; e.g. G4 effective network policy not passed; the backend unavailable, its final G11 or its production conformance not PASS), global network-policy fingerprint drift, stale or invalid approval; for `dca bench`, `--trust untrusted` on a backend that isn't untrusted-eligible | no (diagnostic only) |
 | 2 | Usage error (invalid arguments) | no |
 | 4 | Infrastructure abort: no task disposition and never `succeeded`. Three cases: (a) the **source bundle** can't be created or validated (before any sandbox); (b) **provisioning** fails before the agent starts (`sbx create`, network policy, `sbx cp`, in-VM clone, kit/gate preflight); (c) **retrieval** fails after the agent ran (task-branch bundle export, copy, verify or import), so no trustworthy change set exists. The launcher does best-effort `sbx rm`, keeps only safe diagnostic and event artifacts, and never creates a partial `dca/<run-id>` branch. Never reported as a task `blocked` outcome | no (diagnostic only) |
 
@@ -143,5 +187,6 @@ fail-closed, expected `blocked`) and S5b (untrusted egress/G9) applies to each b
 - `<out>/grants.json`: the host-authoritative grants for this run, if any.
 - `<out>/gate.log.jsonl`: the in-VM policy-gate decision log, copied out. It is VM-originated, cooperative evidence and contains no secret values.
 - `<out>/events.jsonl`: the host-captured typed outer Docker Agent events, which are the basis for step, retry and token counts and for `run_integrity`.
+- `<out>/context.json` and, for planned tasks, `<out>/plan.md`: the agent's Context Record and Plan, copied from the run scratch dir. They are VM-originated evidence ([data-model](../data-model.md#context-record)), never an authority for grants, host policy or limits.
 - `<out>/checks/`: verification outputs referenced by the report, including the launcher's final re-execution.
 - Host branch `dca/<run-id>`: the change set, created only if it is non-empty. It is never checked out or merged by the launcher.

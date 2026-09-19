@@ -431,7 +431,8 @@
       ],
       "properties": {
         "performed": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "an independent read-only review of the candidate ran (FR-020)"
         },
         "fingerprint_before": {
           "type": "string"
@@ -440,7 +441,8 @@
           "type": "string"
         },
         "identical": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "workspace fingerprints before and after the review are equal (FR-022); false is a safety-invariant violation"
         },
         "evidence_origin": {
           "const": "vm",
@@ -573,8 +575,51 @@
             "retries",
             "wall_clock",
             "steps",
-            "tokens"
-          ]
+            "tokens",
+            "native_ceiling"
+          ],
+          "description": "retries, wall_clock, steps, tokens: an authoritative host limit (host_limits) was hit. native_ceiling: the pinned Docker Agent runtime stopped the run at a static defense-in-depth ceiling (native_ceilings); details in native_ceiling"
+        },
+        "native_ceiling": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "launcher-authored from the typed outer event that ended the run: budget_exceeded (with its budget, limit, used, max and config_path), max_iterations_reached (with max_iterations), or an error event with code loop_detected (the max_consecutive_tool_calls guard). Null unless limit_reached = native_ceiling",
+          "required": [
+            "event",
+            "config_path"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "event": {
+              "enum": [
+                "budget_exceeded",
+                "max_iterations_reached",
+                "loop_detected"
+              ]
+            },
+            "config_path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "YAML path of the native ceiling, e.g. budget.max_tokens (from the event) or agents.root.max_iterations (derived by the launcher)"
+            },
+            "budget": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "string"
+            },
+            "used": {
+              "type": "string"
+            },
+            "max": {
+              "type": "string"
+            },
+            "max_iterations": {
+              "type": "integer"
+            }
+          }
         }
       }
     },
@@ -604,7 +649,7 @@
       "items": {
         "type": "string"
       },
-      "description": "launcher-authored: prohibited-class denials, fingerprint mismatch, canary hits, non-empty change set under none-adequate"
+      "description": "launcher-authored: prohibited-class denials, fingerprint mismatch (canonical id 'reviewer-fingerprint-mismatch' when review.identical is false), canary hits, non-empty change set under none-adequate"
     },
     "versions": {
       "type": "object",
@@ -900,6 +945,96 @@
       }
     },
     {
+      "description": "planned-task success (FR-008, FR-020, FR-022; D-FIN): succeeded with classification.value = planned additionally requires a non-null plan_ref, review.performed = true and review.identical = true. Direct tasks are unaffected.",
+      "if": {
+        "properties": {
+          "final_outcome": {
+            "const": "succeeded"
+          },
+          "classification": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "const": "planned"
+              }
+            },
+            "required": [
+              "value"
+            ]
+          }
+        },
+        "required": [
+          "final_outcome",
+          "classification"
+        ]
+      },
+      "then": {
+        "properties": {
+          "plan_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "review": {
+            "type": "object",
+            "properties": {
+              "performed": {
+                "const": true
+              },
+              "identical": {
+                "const": true
+              }
+            },
+            "required": [
+              "performed",
+              "identical"
+            ]
+          }
+        },
+        "required": [
+          "plan_ref",
+          "review"
+        ]
+      }
+    },
+    {
+      "description": "reviewer immutability (FR-022): review.identical = false is a safety-invariant violation. It is recorded in safety_events as 'reviewer-fingerprint-mismatch', and the final outcome can never be succeeded.",
+      "if": {
+        "properties": {
+          "review": {
+            "type": "object",
+            "properties": {
+              "identical": {
+                "const": false
+              }
+            },
+            "required": [
+              "identical"
+            ]
+          }
+        },
+        "required": [
+          "review"
+        ]
+      },
+      "then": {
+        "properties": {
+          "final_outcome": {
+            "not": {
+              "const": "succeeded"
+            }
+          },
+          "safety_events": {
+            "contains": {
+              "const": "reviewer-fingerprint-mismatch"
+            }
+          }
+        },
+        "required": [
+          "safety_events"
+        ]
+      }
+    },
+    {
       "description": "sandbox_created=false (policy-blocked before provisioning): no sandbox, no stream, no agent, no bundle, no classification/verification, empty change set, blocked",
       "if": {
         "properties": {
@@ -1031,6 +1166,51 @@
         "properties": {
           "final_outcome": {
             "const": "blocked"
+          }
+        }
+      }
+    },
+    {
+      "description": "native ceiling termination (research R19): limit_reached = native_ceiling requires the native_ceiling detail; any other value requires native_ceiling to be null or absent. Such a stop is a bounded-execution task outcome, never an infrastructure abort, and succeeded is possible only under FR-023a (the general succeeded rule still applies)",
+      "if": {
+        "properties": {
+          "limits": {
+            "properties": {
+              "limit_reached": {
+                "const": "native_ceiling"
+              }
+            },
+            "required": [
+              "limit_reached"
+            ]
+          }
+        },
+        "required": [
+          "limits"
+        ]
+      },
+      "then": {
+        "properties": {
+          "limits": {
+            "required": [
+              "native_ceiling"
+            ],
+            "properties": {
+              "native_ceiling": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "limits": {
+            "properties": {
+              "native_ceiling": {
+                "type": "null"
+              }
+            }
           }
         }
       }
