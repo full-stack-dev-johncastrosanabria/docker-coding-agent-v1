@@ -1,0 +1,28 @@
+{
+  "claude_code": {
+    "exact": "0.0.0-synthetic",
+    "tested": "2.1.277"
+  },
+  "docker_agent": "v1.136.0",
+  "docker_agent_artifact": {
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "url": "https://synthetic.invalid/docker-agent",
+    "verification": "recorded-reproducibility-pin"
+  },
+  "docker_agent_config_version": 15,
+  "harness_module": "github.com/rumpl/harness@9376b9c76461",
+  "sandbox_bases": {
+    "claude": {
+      "base": "synthetic.invalid/claude-base",
+      "version": "0.0.0-synthetic"
+    },
+    "codex": {
+      "base": "synthetic.invalid/codex-base",
+      "version": "0.0.0-synthetic"
+    }
+  },
+  "sbx": {
+    "exact": "0.0.0-synthetic",
+    "minimum": "0.43.0"
+  }
+}

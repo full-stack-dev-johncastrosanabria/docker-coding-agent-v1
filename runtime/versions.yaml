@@ -1,0 +1,28 @@
+{
+  "claude_code": {
+    "exact": null,
+    "tested": "2.1.277"
+  },
+  "docker_agent": "v1.136.0",
+  "docker_agent_artifact": {
+    "sha256": null,
+    "url": null,
+    "verification": null
+  },
+  "docker_agent_config_version": 15,
+  "harness_module": "github.com/rumpl/harness@9376b9c76461",
+  "sandbox_bases": {
+    "claude": {
+      "base": null,
+      "version": null
+    },
+    "codex": {
+      "base": null,
+      "version": null
+    }
+  },
+  "sbx": {
+    "exact": null,
+    "minimum": "0.43.0"
+  }
+}

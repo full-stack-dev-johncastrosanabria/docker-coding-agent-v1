@@ -1,0 +1,879 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docker-coding-agent-v1/gates/eligibility.schema.json",
+  "title": "Gate eligibility (gates/eligibility.json)",
+  "description": "Computed by the gate review (T024) from gates/*.json; the only gate evidence the launcher reads (launcher-cli precondition 7). The schema enforces soundness (a recorded eligibility flag never exceeds its evidence, and a trusted-eligible backend has non-null pins); gates/eligibility_rules.py also enforces completeness (recorded flags equal the flags computed from the statuses) and the pin binding (runtime_versions_digest and pinned_versions equal the current runtime/versions.yaml; otherwise the document is stale). One backend's status never affects the other's eligibility; a common-gate failure makes both ineligible.",
+  "type": "object",
+  "required": [
+    "generated_at",
+    "pinned_versions",
+    "runtime_versions_digest",
+    "common_gates",
+    "network_policy_fingerprint",
+    "backends"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "generated_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "pinned_versions": {
+      "type": "object",
+      "description": "Explicit pins copied from runtime/versions.yaml when the review ran. null means the pin's gate hasn't recorded it yet.",
+      "required": [
+        "docker_agent",
+        "docker_agent_config_version",
+        "docker_agent_artifact_sha256",
+        "sbx",
+        "claude_code",
+        "sandbox_bases"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "docker_agent": {
+          "type": "string",
+          "minLength": 1,
+          "description": "versions.yaml docker_agent"
+        },
+        "docker_agent_config_version": {
+          "type": "integer",
+          "description": "versions.yaml docker_agent_config_version"
+        },
+        "docker_agent_artifact_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "versions.yaml docker_agent_artifact.sha256 (G6)"
+        },
+        "sbx": {
+          "$ref": "#/$defs/pin",
+          "description": "versions.yaml sbx.exact (G0)"
+        },
+        "claude_code": {
+          "$ref": "#/$defs/pin",
+          "description": "versions.yaml claude_code.exact (G0)"
+        },
+        "sandbox_bases": {
+          "type": "object",
+          "description": "versions.yaml sandbox_bases (G6; G1a confirms the Claude base)",
+          "required": [
+            "claude",
+            "codex"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "claude": {
+              "$ref": "#/$defs/sandboxBase"
+            },
+            "codex": {
+              "$ref": "#/$defs/sandboxBase"
+            }
+          }
+        }
+      }
+    },
+    "runtime_versions_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Canonical digest of the complete runtime/versions.yaml the review ran against: 'sha256:' + hex SHA-256 of json.dumps(obj, sort_keys=True, separators=(',', ':'), ensure_ascii=False) encoded as UTF-8 (tasks.md, Global constraints). Any changed pin, including the docker-agent artifact SHA-256 or a sandbox base, makes the document stale (launcher-cli precondition 7)."
+    },
+    "common_gates": {
+      "type": "object",
+      "required": [
+        "G0",
+        "G4",
+        "G5",
+        "G6",
+        "G7",
+        "G8",
+        "G10"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "G0": {
+          "$ref": "#/$defs/status"
+        },
+        "G4": {
+          "$ref": "#/$defs/status"
+        },
+        "G5": {
+          "$ref": "#/$defs/status"
+        },
+        "G6": {
+          "$ref": "#/$defs/status"
+        },
+        "G7": {
+          "$ref": "#/$defs/status"
+        },
+        "G8": {
+          "$ref": "#/$defs/status"
+        },
+        "G10": {
+          "$ref": "#/$defs/status"
+        }
+      }
+    },
+    "network_policy_fingerprint": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "from G4, re-recorded by production conformance; compared by launcher preflight (precondition 9)"
+    },
+    "backends": {
+      "type": "object",
+      "required": [
+        "claude",
+        "codex"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "claude": {
+          "$ref": "#/$defs/claude"
+        },
+        "codex": {
+          "$ref": "#/$defs/codex"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "status": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "PARTIAL",
+        "NOT-RUN",
+        "NOT-APPLICABLE"
+      ]
+    },
+    "pin": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "sandboxBase": {
+      "type": "object",
+      "required": [
+        "base",
+        "version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "$ref": "#/$defs/pin"
+        },
+        "version": {
+          "$ref": "#/$defs/pin"
+        }
+      }
+    },
+    "claude": {
+      "type": "object",
+      "required": [
+        "available",
+        "trusted_eligible",
+        "untrusted_eligible",
+        "credential_mechanism",
+        "gate_status",
+        "production_conformance",
+        "fallbacks_applied"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "type": "boolean",
+          "description": "true only if G1a (the Claude availability gate) passed"
+        },
+        "trusted_eligible": {
+          "type": "boolean"
+        },
+        "untrusted_eligible": {
+          "type": "boolean"
+        },
+        "credential_mechanism": {
+          "enum": [
+            "sbx-host-oauth",
+            "none"
+          ]
+        },
+        "gate_status": {
+          "type": "object",
+          "required": [
+            "G1a",
+            "G1b",
+            "G1c",
+            "G1d",
+            "G9",
+            "G11"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "G1a": {
+              "$ref": "#/$defs/status"
+            },
+            "G1b": {
+              "$ref": "#/$defs/status"
+            },
+            "G1c": {
+              "$ref": "#/$defs/status"
+            },
+            "G1d": {
+              "$ref": "#/$defs/status"
+            },
+            "G9": {
+              "$ref": "#/$defs/status"
+            },
+            "G11": {
+              "$ref": "#/$defs/status"
+            }
+          }
+        },
+        "production_conformance": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT-RUN",
+            "NOT-APPLICABLE"
+          ]
+        },
+        "fallbacks_applied": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "unavailable_reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "description": "available is recorded explicitly and equals (G1a == PASS)",
+          "if": {
+            "properties": {
+              "gate_status": {
+                "properties": {
+                  "G1a": {
+                    "const": "PASS"
+                  }
+                },
+                "required": [
+                  "G1a"
+                ]
+              }
+            },
+            "required": [
+              "gate_status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "available": {
+                "const": true
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "available": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "description": "an unavailable backend has unavailable_reason, both eligibility flags false and production_conformance NOT-APPLICABLE",
+          "if": {
+            "properties": {
+              "available": {
+                "const": false
+              }
+            },
+            "required": [
+              "available"
+            ]
+          },
+          "then": {
+            "required": [
+              "unavailable_reason"
+            ],
+            "properties": {
+              "trusted_eligible": {
+                "const": false
+              },
+              "untrusted_eligible": {
+                "const": false
+              },
+              "production_conformance": {
+                "const": "NOT-APPLICABLE"
+              }
+            }
+          }
+        },
+        {
+          "description": "trusted_eligible requires available, the backend's final G11 PASS (not PARTIAL), its own production conformance PASS and its trusted gates PASS (common gates are checked at the document root)",
+          "if": {
+            "properties": {
+              "trusted_eligible": {
+                "const": true
+              }
+            },
+            "required": [
+              "trusted_eligible"
+            ]
+          },
+          "then": {
+            "properties": {
+              "available": {
+                "const": true
+              },
+              "production_conformance": {
+                "const": "PASS"
+              },
+              "gate_status": {
+                "properties": {
+                  "G11": {
+                    "const": "PASS"
+                  },
+                  "G1c": {
+                    "const": "PASS"
+                  },
+                  "G1d": {
+                    "const": "PASS"
+                  }
+                },
+                "required": [
+                  "G11",
+                  "G1c",
+                  "G1d"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "description": "untrusted_eligible additionally requires the secret-unreadability gate and G9 PASS",
+          "if": {
+            "properties": {
+              "untrusted_eligible": {
+                "const": true
+              }
+            },
+            "required": [
+              "untrusted_eligible"
+            ]
+          },
+          "then": {
+            "properties": {
+              "trusted_eligible": {
+                "const": true
+              },
+              "gate_status": {
+                "properties": {
+                  "G1b": {
+                    "const": "PASS"
+                  },
+                  "G9": {
+                    "const": "PASS"
+                  }
+                },
+                "required": [
+                  "G1b",
+                  "G9"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "codex": {
+      "type": "object",
+      "required": [
+        "available",
+        "trusted_eligible",
+        "untrusted_eligible",
+        "credential_mechanism",
+        "gate_status",
+        "production_conformance",
+        "fallbacks_applied"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "type": "boolean",
+          "description": "true only if G3 (the Codex availability gate) passed"
+        },
+        "trusted_eligible": {
+          "type": "boolean"
+        },
+        "untrusted_eligible": {
+          "type": "boolean"
+        },
+        "credential_mechanism": {
+          "enum": [
+            "proxy-managed",
+            "token-file-trusted-only",
+            "none"
+          ]
+        },
+        "gate_status": {
+          "type": "object",
+          "required": [
+            "G3",
+            "G2",
+            "G9",
+            "G11"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "G3": {
+              "$ref": "#/$defs/status"
+            },
+            "G2": {
+              "$ref": "#/$defs/status"
+            },
+            "G9": {
+              "$ref": "#/$defs/status"
+            },
+            "G11": {
+              "$ref": "#/$defs/status"
+            }
+          }
+        },
+        "production_conformance": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT-RUN",
+            "NOT-APPLICABLE"
+          ]
+        },
+        "fallbacks_applied": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "unavailable_reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "description": "available is recorded explicitly and equals (G3 == PASS)",
+          "if": {
+            "properties": {
+              "gate_status": {
+                "properties": {
+                  "G3": {
+                    "const": "PASS"
+                  }
+                },
+                "required": [
+                  "G3"
+                ]
+              }
+            },
+            "required": [
+              "gate_status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "available": {
+                "const": true
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "available": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "description": "an unavailable backend has unavailable_reason, both eligibility flags false and production_conformance NOT-APPLICABLE",
+          "if": {
+            "properties": {
+              "available": {
+                "const": false
+              }
+            },
+            "required": [
+              "available"
+            ]
+          },
+          "then": {
+            "required": [
+              "unavailable_reason"
+            ],
+            "properties": {
+              "trusted_eligible": {
+                "const": false
+              },
+              "untrusted_eligible": {
+                "const": false
+              },
+              "production_conformance": {
+                "const": "NOT-APPLICABLE"
+              }
+            }
+          }
+        },
+        {
+          "description": "trusted_eligible requires available, the backend's final G11 PASS (not PARTIAL), its own production conformance PASS and its trusted gates PASS (common gates are checked at the document root)",
+          "if": {
+            "properties": {
+              "trusted_eligible": {
+                "const": true
+              }
+            },
+            "required": [
+              "trusted_eligible"
+            ]
+          },
+          "then": {
+            "properties": {
+              "available": {
+                "const": true
+              },
+              "production_conformance": {
+                "const": "PASS"
+              },
+              "gate_status": {
+                "properties": {
+                  "G11": {
+                    "const": "PASS"
+                  }
+                },
+                "required": [
+                  "G11"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "description": "untrusted_eligible additionally requires the secret-unreadability gate and G9 PASS",
+          "if": {
+            "properties": {
+              "untrusted_eligible": {
+                "const": true
+              }
+            },
+            "required": [
+              "untrusted_eligible"
+            ]
+          },
+          "then": {
+            "properties": {
+              "trusted_eligible": {
+                "const": true
+              },
+              "gate_status": {
+                "properties": {
+                  "G2": {
+                    "const": "PASS"
+                  },
+                  "G9": {
+                    "const": "PASS"
+                  }
+                },
+                "required": [
+                  "G2",
+                  "G9"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "description": "claude trusted eligibility requires every common gate PASS",
+      "if": {
+        "properties": {
+          "backends": {
+            "properties": {
+              "claude": {
+                "properties": {
+                  "trusted_eligible": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "trusted_eligible"
+                ]
+              }
+            },
+            "required": [
+              "claude"
+            ]
+          }
+        },
+        "required": [
+          "backends"
+        ]
+      },
+      "then": {
+        "properties": {
+          "common_gates": {
+            "properties": {
+              "G0": {
+                "const": "PASS"
+              },
+              "G4": {
+                "const": "PASS"
+              },
+              "G5": {
+                "const": "PASS"
+              },
+              "G6": {
+                "const": "PASS"
+              },
+              "G7": {
+                "const": "PASS"
+              },
+              "G8": {
+                "const": "PASS"
+              },
+              "G10": {
+                "const": "PASS"
+              }
+            },
+            "required": [
+              "G0",
+              "G4",
+              "G5",
+              "G6",
+              "G7",
+              "G8",
+              "G10"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "description": "codex trusted eligibility requires every common gate PASS",
+      "if": {
+        "properties": {
+          "backends": {
+            "properties": {
+              "codex": {
+                "properties": {
+                  "trusted_eligible": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "trusted_eligible"
+                ]
+              }
+            },
+            "required": [
+              "codex"
+            ]
+          }
+        },
+        "required": [
+          "backends"
+        ]
+      },
+      "then": {
+        "properties": {
+          "common_gates": {
+            "properties": {
+              "G0": {
+                "const": "PASS"
+              },
+              "G4": {
+                "const": "PASS"
+              },
+              "G5": {
+                "const": "PASS"
+              },
+              "G6": {
+                "const": "PASS"
+              },
+              "G7": {
+                "const": "PASS"
+              },
+              "G8": {
+                "const": "PASS"
+              },
+              "G10": {
+                "const": "PASS"
+              }
+            },
+            "required": [
+              "G0",
+              "G4",
+              "G5",
+              "G6",
+              "G7",
+              "G8",
+              "G10"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "description": "claude trusted eligibility requires non-null pins: docker-agent artifact SHA-256, exact sbx, exact Claude Code and the Claude sandbox base and version",
+      "if": {
+        "properties": {
+          "backends": {
+            "properties": {
+              "claude": {
+                "properties": {
+                  "trusted_eligible": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "trusted_eligible"
+                ]
+              }
+            },
+            "required": [
+              "claude"
+            ]
+          }
+        },
+        "required": [
+          "backends"
+        ]
+      },
+      "then": {
+        "properties": {
+          "pinned_versions": {
+            "properties": {
+              "docker_agent_artifact_sha256": {
+                "type": "string"
+              },
+              "sbx": {
+                "type": "string"
+              },
+              "claude_code": {
+                "type": "string"
+              },
+              "sandbox_bases": {
+                "properties": {
+                  "claude": {
+                    "properties": {
+                      "base": {
+                        "type": "string"
+                      },
+                      "version": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "codex trusted eligibility requires non-null pins: docker-agent artifact SHA-256, exact sbx and the Codex sandbox base and version",
+      "if": {
+        "properties": {
+          "backends": {
+            "properties": {
+              "codex": {
+                "properties": {
+                  "trusted_eligible": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "trusted_eligible"
+                ]
+              }
+            },
+            "required": [
+              "codex"
+            ]
+          }
+        },
+        "required": [
+          "backends"
+        ]
+      },
+      "then": {
+        "properties": {
+          "pinned_versions": {
+            "properties": {
+              "docker_agent_artifact_sha256": {
+                "type": "string"
+              },
+              "sbx": {
+                "type": "string"
+              },
+              "sandbox_bases": {
+                "properties": {
+                  "codex": {
+                    "properties": {
+                      "base": {
+                        "type": "string"
+                      },
+                      "version": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "G4 PASS records the global network-policy fingerprint",
+      "if": {
+        "properties": {
+          "common_gates": {
+            "properties": {
+              "G4": {
+                "const": "PASS"
+              }
+            },
+            "required": [
+              "G4"
+            ]
+          }
+        },
+        "required": [
+          "common_gates"
+        ]
+      },
+      "then": {
+        "properties": {
+          "network_policy_fingerprint": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}

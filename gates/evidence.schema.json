@@ -1,0 +1,588 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docker-coding-agent-v1/gates/evidence.schema.json",
+  "title": "Gate evidence (gates/<ID>.json)",
+  "description": "Machine-readable gate evidence (tasks.md T005). Every object is closed and there is no free-form secret field: evidence records only booleans, status codes, byte lengths, pattern IDs, paths and hashes, never secret values, tokens, authorization headers, sensitive bodies or credential file contents. `provenance` binds the evidence to the environment it actually proved: the gate review (T024) uses it only while it still matches the current runtime/versions.yaml; otherwise the evidence is stale and the gate must be re-run.",
+  "type": "object",
+  "required": [
+    "gate",
+    "status",
+    "run_at",
+    "versions",
+    "provenance",
+    "criteria"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "gate": {
+      "enum": [
+        "G0",
+        "G1a",
+        "G1b",
+        "G1c",
+        "G1d",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7",
+        "G8",
+        "G9",
+        "G10",
+        "G11",
+        "INVENTORY",
+        "PRODUCTION-CONFORMANCE"
+      ]
+    },
+    "status": {
+      "$ref": "#/$defs/status"
+    },
+    "backends": {
+      "type": "object",
+      "description": "per-backend statuses, required where the gate is judged per backend (G9, G11, PRODUCTION-CONFORMANCE)",
+      "additionalProperties": false,
+      "properties": {
+        "claude": {
+          "$ref": "#/$defs/backendStatus"
+        },
+        "codex": {
+          "$ref": "#/$defs/backendStatus"
+        }
+      }
+    },
+    "run_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "versions": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/safeName"
+      },
+      "additionalProperties": {
+        "type": [
+          "string",
+          "integer",
+          "null"
+        ]
+      },
+      "description": "Informational observed versions (for example Docker Engine and git). Not provenance: the review reads only `provenance`."
+    },
+    "provenance": {
+      "type": "object",
+      "description": "The environment this evidence proves (tasks.md, Global constraints: gate-evidence provenance). G0: the pins it observes and establishes. G6: the pins it establishes and the runtime_versions_digest of the post-G6 runtime/versions.yaml. Every other gate document: the runtime_versions_digest of the runtime/versions.yaml in force when it ran. Digest: 'sha256:' + hex SHA-256 of json.dumps(obj, sort_keys=True, separators=(',', ':'), ensure_ascii=False) encoded as UTF-8."
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/criterion"
+      }
+    },
+    "fallback_applied": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "not_run_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "$defs": {
+    "status": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "PARTIAL",
+        "NOT-RUN",
+        "NOT-APPLICABLE"
+      ]
+    },
+    "safeName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]*$",
+      "not": {
+        "pattern": "(token|secret|passw|credential|authoriz|cookie|api[_-]?key|bearer)"
+      }
+    },
+    "criterion": {
+      "type": "object",
+      "required": [
+        "id",
+        "description",
+        "result"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT-RUN",
+            "NOT-APPLICABLE"
+          ]
+        },
+        "evidence_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "backendStatus": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "not_run_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "criteria": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/criterion"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "NOT-RUN"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "not_run_reason"
+            ],
+            "properties": {
+              "not_run_reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "pin": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sandboxBase": {
+      "type": "object",
+      "required": [
+        "base",
+        "version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "$ref": "#/$defs/pin"
+        },
+        "version": {
+          "$ref": "#/$defs/pin"
+        }
+      }
+    },
+    "g0Provenance": {
+      "type": "object",
+      "description": "G0: the exact pins it observes and establishes; compared field by field with runtime/versions.yaml (no digest, because G6 still adds pins after G0)",
+      "required": [
+        "pins"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pins": {
+          "type": "object",
+          "required": [
+            "docker_agent",
+            "docker_agent_config_version",
+            "sbx",
+            "claude_code"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "docker_agent": {
+              "$ref": "#/$defs/pin",
+              "description": "versions.yaml docker_agent"
+            },
+            "docker_agent_config_version": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "description": "versions.yaml docker_agent_config_version"
+            },
+            "sbx": {
+              "$ref": "#/$defs/pin",
+              "description": "versions.yaml sbx.exact"
+            },
+            "claude_code": {
+              "$ref": "#/$defs/pin",
+              "description": "versions.yaml claude_code.exact"
+            }
+          }
+        }
+      }
+    },
+    "g6Provenance": {
+      "type": "object",
+      "description": "G6: the pins it establishes, plus the digest of the post-G6 runtime/versions.yaml",
+      "required": [
+        "pins",
+        "runtime_versions_digest"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pins": {
+          "type": "object",
+          "required": [
+            "docker_agent_artifact_sha256",
+            "sandbox_bases"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "docker_agent_artifact_sha256": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "versions.yaml docker_agent_artifact.sha256"
+            },
+            "sandbox_bases": {
+              "type": "object",
+              "description": "versions.yaml sandbox_bases",
+              "required": [
+                "claude",
+                "codex"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "claude": {
+                  "$ref": "#/$defs/sandboxBase"
+                },
+                "codex": {
+                  "$ref": "#/$defs/sandboxBase"
+                }
+              }
+            }
+          }
+        },
+        "runtime_versions_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "digestProvenance": {
+      "type": "object",
+      "description": "every gate document other than G0 and G6: the digest of the runtime/versions.yaml in force when the gate ran",
+      "required": [
+        "runtime_versions_digest"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "runtime_versions_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "NOT-RUN always carries its reason (backend completion rule)",
+      "if": {
+        "properties": {
+          "status": {
+            "const": "NOT-RUN"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "not_run_reason"
+        ],
+        "properties": {
+          "not_run_reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "description": "PARTIAL exists only for G11, until part B completes",
+      "if": {
+        "properties": {
+          "gate": {
+            "const": "G11"
+          }
+        },
+        "required": [
+          "gate"
+        ]
+      },
+      "else": {
+        "properties": {
+          "status": {
+            "not": {
+              "const": "PARTIAL"
+            }
+          },
+          "backends": {
+            "properties": {
+              "claude": {
+                "properties": {
+                  "status": {
+                    "not": {
+                      "const": "PARTIAL"
+                    }
+                  }
+                }
+              },
+              "codex": {
+                "properties": {
+                  "status": {
+                    "not": {
+                      "const": "PARTIAL"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "per-backend gates record both backends",
+      "if": {
+        "properties": {
+          "gate": {
+            "enum": [
+              "G9",
+              "G11",
+              "PRODUCTION-CONFORMANCE"
+            ]
+          }
+        },
+        "required": [
+          "gate"
+        ]
+      },
+      "then": {
+        "required": [
+          "backends"
+        ],
+        "properties": {
+          "backends": {
+            "required": [
+              "claude",
+              "codex"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "description": "G0 provenance records the pins it observes and establishes",
+      "if": {
+        "properties": {
+          "gate": {
+            "const": "G0"
+          }
+        },
+        "required": [
+          "gate"
+        ]
+      },
+      "then": {
+        "properties": {
+          "provenance": {
+            "$ref": "#/$defs/g0Provenance"
+          }
+        }
+      }
+    },
+    {
+      "description": "G6 provenance records the pins it establishes and the post-G6 digest",
+      "if": {
+        "properties": {
+          "gate": {
+            "const": "G6"
+          }
+        },
+        "required": [
+          "gate"
+        ]
+      },
+      "then": {
+        "properties": {
+          "provenance": {
+            "$ref": "#/$defs/g6Provenance"
+          }
+        }
+      }
+    },
+    {
+      "description": "every other gate document records the digest in force when it ran",
+      "if": {
+        "properties": {
+          "gate": {
+            "enum": [
+              "G0",
+              "G6"
+            ]
+          }
+        },
+        "required": [
+          "gate"
+        ]
+      },
+      "else": {
+        "properties": {
+          "provenance": {
+            "$ref": "#/$defs/digestProvenance"
+          }
+        }
+      }
+    },
+    {
+      "description": "a G0 PASS has recorded every G0 pin",
+      "if": {
+        "properties": {
+          "gate": {
+            "const": "G0"
+          },
+          "status": {
+            "const": "PASS"
+          }
+        },
+        "required": [
+          "gate",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "provenance": {
+            "properties": {
+              "pins": {
+                "properties": {
+                  "docker_agent": {
+                    "type": "string"
+                  },
+                  "docker_agent_config_version": {
+                    "type": "integer"
+                  },
+                  "sbx": {
+                    "type": "string"
+                  },
+                  "claude_code": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "a G6 PASS has recorded the artifact SHA-256 and both sandbox bases",
+      "if": {
+        "properties": {
+          "gate": {
+            "const": "G6"
+          },
+          "status": {
+            "const": "PASS"
+          }
+        },
+        "required": [
+          "gate",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "provenance": {
+            "properties": {
+              "pins": {
+                "properties": {
+                  "docker_agent_artifact_sha256": {
+                    "type": "string"
+                  },
+                  "sandbox_bases": {
+                    "properties": {
+                      "claude": {
+                        "properties": {
+                          "base": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "codex": {
+                        "properties": {
+                          "base": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

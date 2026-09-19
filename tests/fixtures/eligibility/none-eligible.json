@@ -1,0 +1,63 @@
+{
+  "generated_at": "1970-01-01T00:00:00Z",
+  "pinned_versions": {
+    "docker_agent": "v1.136.0",
+    "docker_agent_config_version": 15,
+    "docker_agent_artifact_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "sbx": "0.0.0-synthetic",
+    "claude_code": "0.0.0-synthetic",
+    "sandbox_bases": {
+      "claude": {
+        "base": "synthetic.invalid/claude-base",
+        "version": "0.0.0-synthetic"
+      },
+      "codex": {
+        "base": "synthetic.invalid/codex-base",
+        "version": "0.0.0-synthetic"
+      }
+    }
+  },
+  "runtime_versions_digest": "sha256:58dbe0282013d8b149959f088a12c188a462e0dc882e5bedd9aa3f83932c9a38",
+  "common_gates": {
+    "G0": "PASS",
+    "G4": "FAIL",
+    "G5": "PASS",
+    "G6": "PASS",
+    "G7": "PASS",
+    "G8": "PASS",
+    "G10": "PASS"
+  },
+  "network_policy_fingerprint": null,
+  "backends": {
+    "claude": {
+      "available": true,
+      "trusted_eligible": false,
+      "untrusted_eligible": false,
+      "credential_mechanism": "sbx-host-oauth",
+      "gate_status": {
+        "G1a": "PASS",
+        "G1b": "PASS",
+        "G1c": "PASS",
+        "G1d": "PASS",
+        "G9": "FAIL",
+        "G11": "PASS"
+      },
+      "production_conformance": "NOT-RUN",
+      "fallbacks_applied": []
+    },
+    "codex": {
+      "available": true,
+      "trusted_eligible": false,
+      "untrusted_eligible": false,
+      "credential_mechanism": "proxy-managed",
+      "gate_status": {
+        "G3": "PASS",
+        "G2": "PASS",
+        "G9": "FAIL",
+        "G11": "PASS"
+      },
+      "production_conformance": "NOT-RUN",
+      "fallbacks_applied": []
+    }
+  }
+}

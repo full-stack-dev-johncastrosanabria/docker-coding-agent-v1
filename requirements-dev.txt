@@ -1,0 +1,14 @@
+# Development and test dependencies ONLY.
+#
+# jsonschema is used exclusively by the test suite to validate the Draft 2020-12
+# contracts in specs/001-bounded-coding-agent/contracts/ (completion report,
+# approval grant, fixture) and the gate/eligibility schemas under gates/.
+#
+# It is NOT a runtime dependency. The runtime (launcher and in-VM policy gate
+# under src/dca/) stays Python-stdlib-only and must never import jsonschema.
+# The report finalizer enforces the D-FIN rules in code; the tests cross-check
+# that code against these schemas.
+#
+# Install into a separate development virtual environment:
+#   python3 -m venv <dev-venv> && <dev-venv>/bin/pip install -r requirements-dev.txt
+jsonschema==4.26.0

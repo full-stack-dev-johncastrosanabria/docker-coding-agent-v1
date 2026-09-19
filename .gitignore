@@ -6,3 +6,9 @@
 .DS_Store
 # Spec Kit integration cache (local)
 .specify/integrations/.cache/
+# Local benchmark and gate work directories
+benchmark/work/
+gates/**/work/
+# Python bytecode
+__pycache__/
+*.py[cod]

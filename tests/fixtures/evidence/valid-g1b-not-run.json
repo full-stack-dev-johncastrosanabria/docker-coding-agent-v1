@@ -1,0 +1,15 @@
+{
+  "gate": "G1b",
+  "status": "NOT-RUN",
+  "run_at": "1970-01-01T00:00:00Z",
+  "versions": {
+    "sbx": "0.0.0-synthetic"
+  },
+  "provenance": {
+    "runtime_versions_digest": "sha256:58dbe0282013d8b149959f088a12c188a462e0dc882e5bedd9aa3f83932c9a38"
+  },
+  "criteria": [],
+  "fallback_applied": null,
+  "not_run_reason": "SYNTHETIC: backend unavailable: G1a FAIL",
+  "notes": "SYNTHETIC test fixture: not gate evidence and not a gate result"
+}
