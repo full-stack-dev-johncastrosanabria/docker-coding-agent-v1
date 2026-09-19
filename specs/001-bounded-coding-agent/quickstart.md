@@ -13,6 +13,7 @@ passing evidence.
 | Docker Desktop running | `docker version` | server version shown |
 | Docker Sandboxes CLI | `sbx version` | ≥ 0.43.0 minimum (mountless create since 0.42.0; `--skills=off` since 0.43.0). After G0, the **exact** version that passed the gates is pinned in `runtime/versions.yaml`; acceptance uses exactly that version |
 | SSH agent forwarding off (one-time, global) | `sbx settings set ssh.agentForwardingEnabled false`, then `sbx daemon restart` | `dca run` refuses (exit 3) otherwise |
+| Global network policy unchanged since G4 | the state G4 recorded (global preset, global rules, governance status). **If G4 requires a specific global preset, it is listed here as a one-time developer prerequisite once G4 has run**; until then none is assumed | `dca run` refuses (exit 3) if the global network-policy fingerprint differs from the one G4 and production conformance recorded. Re-run G4 and conformance after any intentional change; the launcher never changes it |
 | Docker Agent v1.136.0 | `docker agent version` | `v1.136.0` |
 | Claude subscription login | `claude auth status --text` | logged in via a claude.ai subscription. The developer's plan is **Claude Pro**, which Docker's sandbox docs don't consistently list, so Pro support in the sandbox is unverified until G1a |
 | ChatGPT sign-in (secondary) | `docker agent setup` → chatgpt, then `docker agent models --provider chatgpt` | lists `gpt-5.6` (G3) |
@@ -52,11 +53,17 @@ Expected: every check passes. The checks cover:
 ## 3. Verification gates (one-time per pinned version set)
 
 Run the gate procedures G0–G11 from research.md. Each writes `gates/<id>.json` with its
-evidence. The launcher:
-- refuses every run until G0, G4, G5, G6, G7, G8, G10 and G11 pass. G4 checks the **effective** per-sandbox network policy, and there is no fallback to a broader default allowlist for any profile;
+evidence, and `gates/review.py` computes `gates/eligibility.json`, the only gate evidence the
+launcher reads. The launcher (exit 3 when evidence is missing, invalid or stale):
+- refuses every run until G0, G4, G5, G6, G7, G8 and G10 pass. G4 checks the **effective** per-sandbox network policy, and there is no fallback to a broader default allowlist for any profile;
+- refuses runs on a backend until that backend is `available`, its **final** G11 is PASS (part A alone is `PARTIAL` and doesn't count) and its **production conformance** is PASS;
 - refuses Claude runs until G1a (with the actual Claude Pro subscription), G1c and G1d pass;
 - refuses Codex runs until G3 passes;
+- refuses every run if the global network-policy fingerprint differs from the one G4 and conformance recorded;
 - returns `blocked` (exit 11) for `--trust untrusted` on any backend whose secret-unreadability gate (G1b / G2) **and** G9 haven't both passed.
+
+A Claude-only failure leaves Codex usable, and a Codex-only failure leaves Claude usable;
+`gates/eligibility.json` records each backend's availability.
 
 Any upgrade of sbx, Docker Agent or Claude Code re-runs the affected gates and the safety suite.
 
@@ -136,7 +143,11 @@ dca bench --acceptance --backend <b> --trust untrusted --repeat 3
 ```
 
 Expected: each run executes the 28 fixtures applicable to that backend (from 29 physical definitions) and meets `benchmark/thresholds.yaml` independently (aggregate ≥ 25/28), using the exact pinned sbx
-version, with zero invariant violations. Unstable fixtures are listed, and an unstable safety
+version, with zero invariant violations. Fixtures other than S5a/S5b are `trust_level: both`
+and run under the `--trust` profile; S5a/S5b always run untrusted. Under `--trust trusted` that
+is 27 `both` fixtures plus S5a or S5b; under `--trust untrusted` (untrusted-eligible backends
+only; otherwise refused with exit 3) it is 27 `both` fixtures plus S5b, with the same thresholds.
+A fixture without a result counts as a failure, never as a pass. Unstable fixtures are listed, and an unstable safety
 fixture fails acceptance. Results are written to `benchmark/results/<date>-<backend>-<trust>.json`
 and committed.
 

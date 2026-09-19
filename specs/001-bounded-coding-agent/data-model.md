@@ -51,7 +51,7 @@ One execution of a Task in one fresh sandbox.
 | `run_id` | string | = Task.id |
 | `backend`, `trust_level` | enums | copied from Task, immutable |
 | `sandbox_name` | string | `dca-<run_id>`; removed at end (after retrieval) |
-| `limits` | object | snapshot of `runtime/policy/limits.yaml` for the classification in force |
+| `limits` | object | the **authoritative host-side limit snapshot**: `runtime/policy/limits.yaml` `host_limits` for the classification in force (switched to `planned` on escalation). Codex `native_ceilings` are static defense in depth and not part of it (research R19) |
 | `grants` | list[ApprovalGrant] | from `--approve` only; **authoritative copy on the host**; an in-VM copy feeds the cooperative gate |
 | `counters` | {steps, retries, verification_runs, tokens} | **Authoritative**: counted by the host launcher from **typed outer Docker Agent events**, failing closed on a malformed stream or abnormal termination (evidence: G11). The stream is not intrinsically tamper-proof. **Advisory**: the in-VM gate's own counters, used only for a clean early stop. In-VM state is not protected from a process with sudo. A **retry** = one repair/re-verify cycle (a workspace change followed by re-execution of a required check that previously returned non-`pass`) |
 | `run_integrity` | {stream: complete\|host-terminated\|malformed\|truncated\|none, agent_exit: normal\|host-limit\|abnormal\|not-started, sandbox_created: boolean} (all three **required**) | Launcher-recorded; `host-terminated` / `host-limit` only when the launcher itself stopped the run. `malformed`, `truncated` or `abnormal` can never yield `succeeded`. **`sandbox_created = false`** (a policy block before provisioning) ⇒ `stream = none`, `agent_exit = not-started`, `sandbox_settings = null`, `source.bundle_sha256 = null`, `classification = null`, `verification = null`, empty change set, `final_outcome = blocked`. **`sandbox_created = true`** ⇒ `bundle_sha256` and `sandbox_settings` are non-null, and `stream`/`agent_exit` are not `none`/`not-started`. The report schema enforces all of this |
@@ -75,7 +75,7 @@ refused                       finalized(blocked)         infra-aborted          
                                                                                                                       best-effort sbx rm)
 ```
 
-- **Precondition failure** (exit 3; no task disposition, no report): sbx unavailable, version mismatch, backend authentication unavailable, dirty checkout without override, provider API-key contamination, SSH forwarding active, required gate evidence missing (a common gate such as G4, or a trusted-profile gate for the backend), stale or undiscoverable approval.
+- **Precondition failure** (exit 3; no task disposition, no report): sbx unavailable, version mismatch, backend authentication unavailable, dirty checkout without override, provider API-key contamination, SSH forwarding active, required gate evidence missing, invalid or stale (`gates/eligibility.json`; a common gate such as G4; the selected backend's availability or trusted-profile gates; its final G11 PASS; its production-conformance PASS), the global network-policy fingerprint differing from the one G4 and production conformance recorded, stale or undiscoverable approval.
 - **Policy says BLOCKED** (exit 11; blocked report; no sandbox): an untrusted request with no backend satisfying the required security gates; approval required with no grant, or a required safe prerequisite unavailable, when detectable before provisioning. The same outcomes detected during the run also finalize as `blocked` (exit 11).
 - **Infrastructure-aborted** (exit 4; **no task disposition, no completion report**; never `succeeded`). It is reached in three ways:
   1. **Source-bundle failure**: creating or validating the source bundle on the host fails, before any sandbox exists.
@@ -83,7 +83,8 @@ refused                       finalized(blocked)         infra-aborted          
   3. **Retrieval (finalization) failure** after the agent has run: creating, copying, verifying or importing the **task-branch bundle** fails. The system then can't produce a trustworthy, reviewable change set.
 
   In every case the launcher prints a diagnostic, keeps only safe diagnostic and event artifacts (`events.jsonl`, gate log; no report claiming a disposition), does a **best-effort `sbx rm`**, and **never fetches or creates a partial `dca/<run-id>` branch**. Docker or git infrastructure failure is **never** classified as a task `blocked` outcome.
-- **Task-level failures stay task outcomes**: once the agent process has started, an abnormal agent exit, a malformed or truncated event stream, or a host-enforced limit is a task-run outcome. Its evidence path is defined by G11, and it finalizes as `blocked` (exit 11) unless FR-023a allows `succeeded` at a limit. This holds only if the task-branch retrieval then succeeds; otherwise case 3 applies.
+- **Native ceiling terminations** (Codex, research R19): when the typed stream ends with a Docker Agent `budget_exceeded`, `max_iterations_reached` or `error` event with `code: loop_detected`, the run is classified deterministically as `stream = complete`, `agent_exit = normal`, `limits.limit_reached = native_ceiling`, with the event's structured detail (`config_path` and, where present, `budget`, `limit`, `used`, `max`, `max_iterations`) in `limits.native_ceiling`. It is a bounded-execution task outcome, never an infrastructure abort. It finalizes as `blocked` unless FR-023a allows `succeeded`. Host limits remain the authoritative direct/planned limits.
+- **Task-level failures stay task outcomes**: once the agent process has started, an abnormal agent exit, a malformed or truncated event stream, a host-enforced limit, or a native ceiling termination is a task-run outcome. Its evidence path is defined by G11, and it finalizes as `blocked` (exit 11) unless FR-023a allows `succeeded` at a limit. This holds only if the task-branch retrieval then succeeds; otherwise case 3 applies.
 
 `finalized` always produces a Completion Report and removes the sandbox, if one was created. `refused` and `infra-aborted` produce no report. The branch
 `dca/<run_id>` is kept in the host repo only if the change set is non-empty. `collecting`
@@ -96,20 +97,47 @@ Produced by the agent (repository-navigation skill); referenced from the report.
 | Field | Type | Rules |
 |---|---|---|
 | `scope` | enum `minimal`\|`component` | `minimal` for direct, `component` for planned (FR-001a) |
-| `target_files`, `related_tests`, `conventions` | lists | required before first write (FR-001) |
-| `verification_approach` | VerificationApproach | required before first write |
+| `target_files`, `related_tests`, `conventions` | lists | required before the first workspace mutation (FR-001), in the Context Record |
+| `verification_approach` | VerificationApproach | required before the first workspace mutation, in the Context Record |
 | `repo_wide_exploration` | {performed: bool, reason?: string} | reason required if performed (FR-001b) |
 
+### Context Record
+The run-scoped record of what root decided **before changing anything**. Root writes it to
+`/run/dca/out/context.json` in the run scratch dir (class 6); the launcher copies it out as
+`<out>/context.json`. It is **run evidence, not repository content**, and it is VM-originated.
+It never grants approvals, never changes host policy or limits, and is never an input to
+provenance. The in-VM gate may read its scope set only to classify cooperatively (class 4).
+
+| Field | Type | Rules |
+|---|---|---|
+| `classification` | {value: direct\|planned, reason: string, escalated_from?: direct} | required (FR-007); `escalated_from` only after the single direct→planned escalation (FR-009), which rewrites the record |
+| `repository_map` | {scope, target_files[], related_tests[], conventions[], repo_wide_exploration} | the minimum Repository Map (FR-001, FR-001a, FR-001b) |
+| `verification_approach` | {type: deterministic\|alternative, checks[], definition?, limitation?} | `definition` and `limitation` required for `alternative` (FR-014a). `none-adequate` isn't written here: it ends the task `blocked` before any mutation |
+| `plan_ref` | string \| null | required for planned tasks: the Plan written to `/run/dca/out/plan.md` before the first workspace mutation (FR-008); `null` for direct tasks |
+| `written_at` | timestamp | must precede the first workspace mutation |
+
+**First workspace mutation**: the first tool call, **attempted or executed**, that can change
+the workspace or candidate repository state. That includes file writes, edits, deletes, renames
+and directory changes in the workspace, git operations that change the index, refs or worktree,
+dependency installation, formatting or regeneration, and any shell command the policy gate
+doesn't classify as read-only inspection (build and verification commands included, since they
+can change the workspace). **Not** mutations: reads and read-only inspection (file reads,
+listing, search, read-only git status/log/diff/show), writes confined to the run scratch dir
+`/run/dca/out/` (such as `context.json`, `plan.md` and `report.agent.json`), skill loading, and
+delegation to the researcher or reviewer. The Context Record must exist before the first
+workspace mutation; the benchmark checks this from the event stream (FR-001).
+
 ### Plan (planned tasks only)
-`{scope, constraints, steps[], verification_approach, deviations[]}`. Must exist before the
-first write on a planned task (FR-008); deviations need a reason.
+`{scope, constraints, steps[], verification_approach, deviations[]}`, written to
+`/run/dca/out/plan.md` and referenced by `plan_ref`. Must exist before the first workspace
+mutation on a planned task (FR-008); deviations need a reason.
 
 ### VerificationApproach / Verification Evidence
 
 | Field | Type | Rules |
 |---|---|---|
-| `type` | enum `deterministic`\|`alternative`\|`none-adequate` | `deterministic`: a relevant repository-established deterministic check exists and is required (FR-014). `alternative`: none exists, and an adequate alternative approach was documented before the first write (FR-014a). `none-adequate`: neither can be established, so the task is `blocked` and **no file may be modified** (FR-001, FR-014a) |
-| `definition` | string | required for `alternative`, documented **before** the first write |
+| `type` | enum `deterministic`\|`alternative`\|`none-adequate` | `deterministic`: a relevant repository-established deterministic check exists and is required (FR-014). `alternative`: none exists, and an adequate alternative approach was documented before the first workspace mutation (FR-014a). `none-adequate`: neither can be established, so the task is `blocked` and **no file may be modified** (FR-001, FR-014a) |
+| `definition` | string | required for `alternative`, documented **before** the first workspace mutation (in the Context Record) |
 | `checks[]` | {id, command_or_method, required: bool, executed_by: agent\|launcher, started_at, after_last_change: bool, exit_status, result: pass\|fail\|error\|partial\|unresolved, output_ref} | `unresolved` = not executed, timed out, or stale (`after_last_change = false`). Outputs are kept as file references, not inline |
 | `baseline` | {checks[], taken_at} | pre-change run when relevant (FR-019) |
 | `limitation` | string | required when `type = alternative` ("deterministic verification for the affected behavior was unavailable…") |
@@ -158,6 +186,15 @@ trust level changes only the network rows and the isolation profile.
 | 29 | Any tool call after step limit reached | DENY (+ stop instruction) | FR-023a |
 | 30 | Unconstrained general web browsing: a web-search tool, or fetching a non-policy-listed page with a browsing/fetch tool | DENY | FR-026b |
 | 31 | Technical documentation retrieval from a policy-listed documentation host | trusted: ALLOW · untrusted: ASK | FR-026b |
+
+**Class 26 and its positive complement** (research R20; no new class). `actions.yaml` class-26
+metadata carries an explicit allowlist. A call matching it is **outside** class 26 and is ALLOW:
+- **root** delegating to `researcher` or `reviewer`;
+- **root** loading one of the four runtime skills (`repository-navigation`, `root-cause-debugging`, `verification`, `change-receipt`) from the **trusted runtime skill source**: `<KIT_DIR>/skills` with its entry in the canonical `<KIT_DIR>/kit-manifest.json` for Codex, and the G1d-proven source (or the G1d fallback's source and hash check) for Claude.
+
+Every other subagent or skill, a skill whose trusted source can't be established (the name alone
+is insufficient), a forked-skill run, and any delegation or skill call by the researcher or
+reviewer, is class 26 DENY.
 
 Every row has exactly one decision per trust level. The gate's in-VM decisions are **cooperative**
 controls. The host-side sbx network policy, credential proxy, limits and change retrieval are the
@@ -210,7 +247,11 @@ finalization failure (exit 4, no report, no `dca/<run_id>` branch).
 
 ### Review Finding
 `{id, category (missing-requirement|regression|edge-case|unsafe|architecture|weakened-test|insufficient-verification), severity, evidence, status: open|resolved}`.
-Review record: `{fingerprint_before, fingerprint_after, identical: bool}`.
+Review record: `{performed: bool, fingerprint_before, fingerprint_after, identical: bool, findings[]}`.
+`identical = false` means the candidate changed while the read-only reviewer ran. That is a
+**safety-invariant violation** (FR-022), recorded by the launcher in `safety_events` as
+`reviewer-fingerprint-mismatch`. Findings are resolved in the final change set or reflected in
+the final disposition.
 
 ### Completion Report
 Schema: [contracts/completion-report.schema.json](contracts/completion-report.schema.json).
@@ -225,7 +266,9 @@ Schema: [contracts/completion-report.schema.json](contracts/completion-report.sc
 4. `succeeded` is allowed **only if**:
    - **verification is satisfied** (all required checks pass on the final state, as above);
    - every acceptance criterion is satisfied with evidence;
-   - if a limit was hit, all of that evidence existed before the limit (FR-023a).
+   - if a limit was hit, all of that evidence existed before the limit (FR-023a);
+   - **for `classification.value = planned` only**: `plan_ref` is non-null (FR-008), `review.performed = true` (FR-020) and `review.identical = true` (FR-022). If any of these is absent or false, the outcome can't be `succeeded`; it is `blocked` unless rule 5 already requires `failed`. Direct tasks don't require a plan or a review;
+   - **for any classification**: if a review record exists with `review.identical = false`, the outcome can't be `succeeded` (FR-022), and the safety event `reviewer-fingerprint-mismatch` is recorded in `safety_events`. This doesn't make a review mandatory for direct tasks; it applies only when one ran and the candidate changed.
 5. Otherwise, FR-035a decides between `blocked` and `failed`:
    - any required check that is `error` or `unresolved` because it can't run, or that remains unresolved when a limit was hit → `blocked`;
    - an approval that was denied or unanswered with no permitted alternative → `blocked`;
@@ -238,5 +281,6 @@ fired (constitution I).
 
 ### Benchmark Fixture / Benchmark Run / Acceptance Set
 - **Fixture**: [contracts/fixture.schema.json](contracts/fixture.schema.json). `gate_condition` (`always` | `untrusted-ineligible` | `untrusted-eligible`) selects which variant applies to a backend, so exactly one of S5a (fail-closed untrusted request, expected `blocked`) and S5b (untrusted egress/G9) runs. Either one satisfies SC-003's untrusted-profile run.
-- **BenchmarkRun**: `{id, backend, trust_level, suite_version, thresholds_ref, results[] {fixture_id, pass, expected_disposition, reported_outcome, violations[]}, aggregate, meets_threshold}`.
+- **Trust resolution** (research R23): a benchmark run has a profile `P` (`dca bench --trust`, default `trusted`). `trust_level: both` fixtures run under `P`; `untrusted` fixtures always run untrusted; `trusted` fixtures are `not-applicable` under `P = untrusted`. In V1 every fixture except S5a/S5b is `both` and S5a/S5b are `untrusted` (schema-enforced), so both trusted acceptance and untrusted capability acceptance have exactly 28 applicable fixtures (small 8, medium 6, failure-recovery 6, safety 8). `P = untrusted` is refused for a backend that isn't `untrusted_eligible`.
+- **BenchmarkRun**: `{id, backend, profile, suite_version, thresholds_ref, results[] {fixture_id, applicability: applicable|not-applicable, run_trust_level, pass, expected_disposition, reported_outcome, violations[]}, aggregate, meets_threshold}`. `not-applicable` results count in neither numerator nor denominator; an applicable fixture with no result counts as a failure.
 - **AcceptanceSet**: `{runs[≥3], unstable_fixtures[], accepted: bool}`.
