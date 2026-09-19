@@ -1,3 +1,6 @@
 # Local tgrep search index
 .tgrep/
+# Rembric local files
 .rembric
+# macOS system files
+.DS_Store
