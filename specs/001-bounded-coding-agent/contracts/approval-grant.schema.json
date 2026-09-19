@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docker-coding-agent-v1/contracts/approval-grant.schema.json",
+  "title": "Run-scoped approval grants",
+  "description": "Written only by the host launcher, and only in response to `dca run --approve <request-id>`, the single trusted approval channel in V1 (FR-027a), after verifying provenance against the authoritative host copy of the originating report. V1 accepts no manually authored grant files as input. Valid only for the NEW run named in run_id (FR-027b). Never covers DENY classes. The host copy is authoritative; the in-VM copy (/run/dca/grants.json) only feeds the cooperative gate and is never read back as evidence. Every provenance value is computed from host-side data (host report file, host git, CLI input); repository content and in-VM state cannot produce it.",
+  "type": "object",
+  "required": [
+    "run_id",
+    "granted_by",
+    "grants"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "the NEW run these launcher-generated grants belong to"
+    },
+    "granted_by": {
+      "const": "developer-cli",
+      "description": "only the launcher CLI channel is a trusted approval channel in V1"
+    },
+    "grants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "action_class",
+          "scope",
+          "provenance"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "pattern": "^apr-run-[0-9TZ-]+-[0-9a-f]{6}-[0-9]+$",
+            "description": "id from the originating report's approvals list"
+          },
+          "action_class": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 31,
+            "not": {
+              "enum": [
+                2,
+                5,
+                16,
+                19,
+                22,
+                23,
+                25,
+                26,
+                27,
+                29,
+                30
+              ]
+            },
+            "description": "must equal the originating request's class; DENY classes (data-model Action Classes) are never grantable"
+          },
+          "scope": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "exact"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "exact": {
+                    "type": "string",
+                    "description": "normalized action + target; must equal the originating request's normalized_target"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "equivalence_class"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "equivalence_class": {
+                    "type": "object",
+                    "required": [
+                      "action_type",
+                      "targets"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "action_type": {
+                        "type": "string"
+                      },
+                      "targets": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "description": "must equal the originating request's declared equivalence class"
+                  }
+                }
+              }
+            ]
+          },
+          "network_destinations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "named hosts the launcher adds to this run's host-side sbx policy (untrusted network grants)"
+          },
+          "provenance": {
+            "type": "object",
+            "description": "binds the grant to the request that produced it; verified by the launcher before the grant is created (data-model ApprovalGrant). Any mismatch = stale approval, launcher exits 3.",
+            "required": [
+              "origin_run_id",
+              "origin_report_digest",
+              "task_fingerprint",
+              "source_commit",
+              "origin_backend",
+              "origin_trust_level"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "origin_run_id": {
+                "type": "string",
+                "pattern": "^run-[0-9TZ-]+-[0-9a-f]{6}$"
+              },
+              "origin_report_digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "description": "digest of the host copy of the originating report.json"
+              },
+              "task_fingerprint": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "description": "must equal both the originating report's and the new run's task_fingerprint"
+              },
+              "source_commit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40,64}$",
+                "description": "must equal both the originating and the new run's source commit"
+              },
+              "origin_backend": {
+                "enum": [
+                  "claude",
+                  "codex"
+                ],
+                "description": "must equal the new run's backend"
+              },
+              "origin_trust_level": {
+                "enum": [
+                  "trusted",
+                  "untrusted"
+                ],
+                "description": "must equal the new run's trust level"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

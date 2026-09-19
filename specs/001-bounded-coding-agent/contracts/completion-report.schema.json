@@ -1,0 +1,1039 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docker-coding-agent-v1/contracts/completion-report.schema.json",
+  "title": "Completion Report",
+  "description": "FR-035/FR-035a completion report. Fields marked launcher-authored are computed by the host launcher from host-side evidence, never trusted from the agent. See data-model.md 'Final outcome rule' (research D-FIN).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "backend",
+    "trust_level",
+    "task_fingerprint",
+    "source",
+    "sandbox_settings",
+    "run_integrity",
+    "classification",
+    "final_outcome",
+    "agent_outcome",
+    "outcome_overrides",
+    "primary_reason",
+    "human_action_required",
+    "acceptance_criteria",
+    "change_set",
+    "verification",
+    "approvals",
+    "limits",
+    "cost_enforced",
+    "risks",
+    "blockers",
+    "versions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.2"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run-[0-9TZ-]+-[0-9a-f]{6}$"
+    },
+    "backend": {
+      "enum": [
+        "claude",
+        "codex"
+      ],
+      "description": "launcher-authored"
+    },
+    "trust_level": {
+      "enum": [
+        "trusted",
+        "untrusted"
+      ],
+      "description": "launcher-authored"
+    },
+    "task_fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "launcher-authored via the single task_fingerprint() helper (data-model 'Task fingerprint algorithm'): UTF-8; CRLF->LF only; keys prompt/acceptance_criteria/verification_commands; array order preserved; sorted keys, separators (',',':'), ensure_ascii=false; SHA-256 of the serialized bytes"
+    },
+    "run_integrity": {
+      "type": "object",
+      "description": "launcher-authored from the host-parsed typed outer Docker Agent events (G11). host-terminated/host-limit only when the launcher itself stopped the run. sandbox_created=false only for a valid request blocked by policy before provisioning (exit 11); infrastructure failures before a usable sandbox exists produce no report (exit 4).",
+      "required": [
+        "stream",
+        "agent_exit",
+        "sandbox_created"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stream": {
+          "enum": [
+            "complete",
+            "host-terminated",
+            "malformed",
+            "truncated",
+            "none"
+          ]
+        },
+        "agent_exit": {
+          "enum": [
+            "normal",
+            "host-limit",
+            "abnormal",
+            "not-started"
+          ]
+        },
+        "sandbox_created": {
+          "type": "boolean"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "description": "launcher-authored: sanitized committed-source delivery (research R11)",
+      "required": [
+        "ref",
+        "commit",
+        "bundle_sha256",
+        "uncommitted_ignored"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": "string",
+          "pattern": "^refs/heads/[^\\s~^:?*\\[\\\\]+$",
+          "description": "fully qualified local branch ref (refs/heads/*) the source bundle was created from; HEAD is recorded as the local branch it is attached to. Tags, raw SHAs, revision expressions, remote-tracking refs, ambiguous names and detached HEAD are refused at preflight (exit 3); tags and arbitrary commits are V1.1 candidates"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40,64}$",
+          "description": "exact commit SHA the branch ref pointed to at preflight (equal to the bundle's ref head for that branch); equals change_set.base_commit"
+        },
+        "bundle_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "null only when the run was blocked before provisioning (no bundle created)"
+        },
+        "uncommitted_ignored": {
+          "type": "boolean",
+          "description": "true only when --ignore-uncommitted was used on a dirty checkout"
+        },
+        "dirty_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "path names only, never contents"
+        }
+      }
+    },
+    "sandbox_settings": {
+      "description": "launcher-authored; null only when no sandbox was created (blocked before provisioning)",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "mountless",
+            "shared_skills",
+            "ssh_agent_forwarding",
+            "network_policy_digest"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "mountless": {
+              "const": true
+            },
+            "shared_skills": {
+              "const": "off"
+            },
+            "ssh_agent_forwarding": {
+              "const": false
+            },
+            "network_policy_digest": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "classification": {
+      "description": "null only when no agent ran (blocked before provisioning)",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "value",
+            "reason"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "value": {
+              "enum": [
+                "direct",
+                "planned"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "escalated_from": {
+              "enum": [
+                "direct"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "agent_outcome": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "blocked",
+        "missing"
+      ]
+    },
+    "final_outcome": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "blocked"
+      ],
+      "description": "launcher-authored per FR-035a and the data-model final outcome rule"
+    },
+    "outcome_overrides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "rule"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "primary_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "required non-empty when final_outcome is failed or blocked"
+    },
+    "human_action_required": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "text",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "satisfied",
+              "unsatisfied",
+              "unknown"
+            ]
+          },
+          "evidence_ref": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "repository_map": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "enum": [
+            "minimal",
+            "component"
+          ]
+        },
+        "repo_wide_exploration": {
+          "type": "object",
+          "required": [
+            "performed"
+          ],
+          "properties": {
+            "performed": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "plan_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "change_set": {
+      "type": "object",
+      "description": "launcher-authored from the retrieved bundle",
+      "required": [
+        "branch",
+        "base_commit",
+        "files"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base_commit": {
+          "type": "string"
+        },
+        "head_commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "status"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "added",
+                  "modified",
+                  "deleted",
+                  "renamed"
+                ]
+              }
+            }
+          }
+        },
+        "justified_changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "kind",
+              "justification"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "new-dependency",
+                  "public-contract",
+                  "architecture",
+                  "test-contract-change"
+                ]
+              },
+              "justification": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "verification": {
+      "description": "null only when no agent ran (blocked before provisioning)",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "checks"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "enum": [
+                "deterministic",
+                "alternative",
+                "none-adequate"
+              ],
+              "description": "deterministic: relevant repository-established check exists and is required; alternative: FR-014a approach documented before first write; none-adequate: no adequate approach, task blocked, no files modified"
+            },
+            "alternative_definition": {
+              "type": "string"
+            },
+            "limitation": {
+              "type": "string"
+            },
+            "baseline": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/check"
+              }
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/check"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "review": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "performed": {
+          "type": "boolean"
+        },
+        "fingerprint_before": {
+          "type": "string"
+        },
+        "fingerprint_after": {
+          "type": "string"
+        },
+        "identical": {
+          "type": "boolean"
+        },
+        "evidence_origin": {
+          "const": "vm",
+          "description": "fingerprints are computed inside the VM (cooperative evidence)"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "category",
+              "evidence",
+              "status"
+            ],
+            "properties": {
+              "category": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "open",
+                  "resolved"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "approvals": {
+      "type": "array",
+      "description": "launcher-authored: requests from the gate log, reconciled against the host-authoritative grants (FR-027d)",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "action_class",
+          "action",
+          "target",
+          "normalized_target",
+          "reason",
+          "risk",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "action_class": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 31
+          },
+          "action": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "normalized_target": {
+            "type": "string",
+            "description": "launcher-normalized; compared during grant provenance checks"
+          },
+          "equivalence_class": {
+            "type": "object",
+            "required": [
+              "action_type",
+              "targets"
+            ],
+            "properties": {
+              "action_type": {
+                "type": "string"
+              },
+              "targets": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "reason": {
+            "type": "string"
+          },
+          "risk": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "requested",
+              "granted",
+              "denied",
+              "unanswered"
+            ]
+          },
+          "granted_by_origin": {
+            "type": "string",
+            "description": "for status granted: the origin request id whose verified provenance produced the grant"
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "description": "launcher-authored; 'used' comes from host-side counting of the event stream",
+      "required": [
+        "configured",
+        "used",
+        "limit_reached"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "configured": {
+          "type": "object"
+        },
+        "used": {
+          "type": "object"
+        },
+        "limit_reached": {
+          "enum": [
+            null,
+            "retries",
+            "wall_clock",
+            "steps",
+            "tokens"
+          ]
+        }
+      }
+    },
+    "cost_enforced": {
+      "type": "boolean"
+    },
+    "token_usage": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "safety_events": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "launcher-authored: prohibited-class denials, fingerprint mismatch, canary hits, non-empty change set under none-adequate"
+    },
+    "versions": {
+      "type": "object",
+      "required": [
+        "docker_agent"
+      ],
+      "properties": {
+        "docker_agent": {
+          "type": "string"
+        },
+        "claude_code": {
+          "type": "string"
+        },
+        "sbx": {
+          "type": "string"
+        },
+        "drift": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "required": [
+        "id",
+        "command_or_method",
+        "required",
+        "executed_by",
+        "after_last_change",
+        "result"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "command_or_method": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "executed_by": {
+          "enum": [
+            "agent",
+            "launcher"
+          ],
+          "description": "launcher = final re-execution on the final task-branch state (authoritative for deterministic checks)"
+        },
+        "after_last_change": {
+          "type": "boolean",
+          "description": "false means the evidence is stale"
+        },
+        "result": {
+          "enum": [
+            "pass",
+            "fail",
+            "error",
+            "partial",
+            "unresolved"
+          ]
+        },
+        "exit_status": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "output_ref": {
+          "type": "string"
+        }
+      }
+    },
+    "failingRequiredCheck": {
+      "type": "object",
+      "required": [
+        "required"
+      ],
+      "properties": {
+        "required": {
+          "const": true
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "result"
+          ],
+          "properties": {
+            "result": {
+              "not": {
+                "const": "pass"
+              }
+            }
+          }
+        },
+        {
+          "required": [
+            "after_last_change"
+          ],
+          "properties": {
+            "after_last_change": {
+              "const": false
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "final_outcome": {
+            "enum": [
+              "failed",
+              "blocked"
+            ]
+          }
+        },
+        "required": [
+          "final_outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "primary_reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "final_outcome": {
+            "const": "blocked"
+          }
+        },
+        "required": [
+          "final_outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "human_action_required": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "verification": {
+            "properties": {
+              "type": {
+                "const": "alternative"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "verification"
+        ]
+      },
+      "then": {
+        "properties": {
+          "verification": {
+            "required": [
+              "alternative_definition",
+              "limitation"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "description": "none-adequate verification => blocked with an empty change set (FR-001, FR-014a)",
+      "if": {
+        "properties": {
+          "verification": {
+            "properties": {
+              "type": {
+                "const": "none-adequate"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "verification"
+        ]
+      },
+      "then": {
+        "properties": {
+          "final_outcome": {
+            "const": "blocked"
+          },
+          "change_set": {
+            "properties": {
+              "files": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "succeeded requires: a well-formed run (no malformed/truncated stream, no abnormal agent exit), adequate verification type, at least one required check, every required check pass on the final state (not stale), and every acceptance criterion satisfied (FR-016, D-FIN). A host-triggered limit does not by itself forbid succeeded (FR-023a); the launcher checks that the evidence predates the limit.",
+      "if": {
+        "properties": {
+          "final_outcome": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "final_outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "run_integrity": {
+            "properties": {
+              "stream": {
+                "enum": [
+                  "complete",
+                  "host-terminated"
+                ]
+              },
+              "agent_exit": {
+                "enum": [
+                  "normal",
+                  "host-limit"
+                ]
+              }
+            }
+          },
+          "verification": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "deterministic",
+                  "alternative"
+                ]
+              },
+              "checks": {
+                "contains": {
+                  "type": "object",
+                  "required": [
+                    "required"
+                  ],
+                  "properties": {
+                    "required": {
+                      "const": true
+                    }
+                  }
+                },
+                "not": {
+                  "contains": {
+                    "$ref": "#/$defs/failingRequiredCheck"
+                  }
+                }
+              }
+            },
+            "type": "object"
+          },
+          "acceptance_criteria": {
+            "minItems": 1,
+            "not": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "not": {
+                      "const": "satisfied"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "classification": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "description": "sandbox_created=false (policy-blocked before provisioning): no sandbox, no stream, no agent, no bundle, no classification/verification, empty change set, blocked",
+      "if": {
+        "properties": {
+          "run_integrity": {
+            "properties": {
+              "sandbox_created": {
+                "const": false
+              }
+            }
+          }
+        },
+        "required": [
+          "run_integrity"
+        ]
+      },
+      "then": {
+        "properties": {
+          "final_outcome": {
+            "const": "blocked"
+          },
+          "sandbox_settings": {
+            "type": "null"
+          },
+          "classification": {
+            "type": "null"
+          },
+          "verification": {
+            "type": "null"
+          },
+          "source": {
+            "properties": {
+              "bundle_sha256": {
+                "type": "null"
+              }
+            }
+          },
+          "run_integrity": {
+            "properties": {
+              "stream": {
+                "const": "none"
+              },
+              "agent_exit": {
+                "const": "not-started"
+              }
+            }
+          },
+          "change_set": {
+            "properties": {
+              "files": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "sandbox_created=true: bundle delivered and sandbox settings recorded; classification/verification may be null only if the agent produced no valid report (then final_outcome is blocked)",
+      "if": {
+        "properties": {
+          "run_integrity": {
+            "properties": {
+              "sandbox_created": {
+                "const": true
+              }
+            }
+          }
+        },
+        "required": [
+          "run_integrity"
+        ]
+      },
+      "then": {
+        "properties": {
+          "sandbox_settings": {
+            "type": "object"
+          },
+          "source": {
+            "properties": {
+              "bundle_sha256": {
+                "type": "string"
+              }
+            }
+          },
+          "run_integrity": {
+            "properties": {
+              "stream": {
+                "not": {
+                  "const": "none"
+                }
+              },
+              "agent_exit": {
+                "not": {
+                  "const": "not-started"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "null classification or verification only when not provisioned or when the run is blocked",
+      "if": {
+        "anyOf": [
+          {
+            "properties": {
+              "classification": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "classification"
+            ]
+          },
+          {
+            "properties": {
+              "verification": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "verification"
+            ]
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "final_outcome": {
+            "const": "blocked"
+          }
+        }
+      }
+    }
+  ]
+}
