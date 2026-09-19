@@ -4,3 +4,5 @@
 .rembric
 # macOS system files
 .DS_Store
+# Spec Kit integration cache (local)
+.specify/integrations/.cache/
