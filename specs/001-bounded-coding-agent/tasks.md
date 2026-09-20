@@ -169,12 +169,13 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **FAIL** → fallback: a custom sbx template instead of a kit (research G6). Re-run; if that fails too, stop.
 
   Precondition: G0 PASS, so the global network policy is initialized (`deny-all` bootstrap when G0 found it uninitialized). Sandbox creation is non-interactive and never answers the preset prompt. Depends: T008. Evidence: `gates/G6.json`; the artifact pin in `runtime/versions.yaml`.
-- [ ] T010 **Gate G7** SSH-agent isolation (verification only; G0 already configured it).
-  - **Procedure** (`gates/G7/run.sh`): with every `sbx` call run with `SSH_AUTH_SOCK` removed, create a mountless sandbox. Inside: `SSH_AUTH_SOCK` is unset, `ssh-add -l` reports no agent, and no forwarded agent socket exists. Negative (read-only probes of `sbx settings`): the preflight detector reports a refusal when `ssh.agentForwardingEnabled=true` or when a fixed `ssh.agentSocketPath` would forward. It uses recorded outputs and **doesn't change global settings**.
+- [x] T010 **Gate G7** SSH-agent isolation (verification only; G0 already configured it). **Done: PASS** (`gates/G7.json`).
+  - **Procedure** (`gates/G7/run.sh`): with every `sbx` call run with `SSH_AUTH_SOCK` removed, create a mountless sandbox from the pinned `sandbox_bases.claude` base (G6 records `base` and `version`; the gate checks both). Inside, the invariant is **no usable forwarded SSH-agent endpoint exists and no host SSH agent is reachable**: `SSH_AGENT_PID` is unset; `SSH_AUTH_SOCK` is unset **or** an inert dangling path (it neither exists nor is a Unix socket); `ssh-add` cannot connect to an agent (an agent answering "no identities" is a **reachable** agent and fails); and no candidate forwarded agent socket exists. The sandbox runtime sets `SSH_AUTH_SOCK` to the fixed in-VM path where its relay socket appears when forwarding is enabled, so a dangling value is expected and is accepted only with all of that corroborating evidence. Negative (read-only probes of `sbx settings`): the preflight detector reports a refusal when `ssh.agentForwardingEnabled=true`, and also when a fixed `ssh.agentSocketPath` is configured, which V1 refuses as a deliberately strict baseline rather than assuming it is inert. It uses recorded outputs and **doesn't change global settings**.
   - **PASS**: no agent is reachable, and the detector refuses both negative states.
   - **FAIL**: runs are refused until fixed; stop.
+  - **Residual (not a G7 blocker)**: the workload has sudo in the VM and `/run` is writable, so it could create its own socket at the relay path and impersonate an agent to other in-VM processes. No host SSH key material is exposed, so this is recorded for the threat model (T090) and G8, and doesn't change G7.
 
-  Depends: T008. Evidence: `gates/G7.json`. (R14, FR-029b)
+  Depends: T009 (the gate verifies the `sandbox_bases.claude` base and version that G6 pinned). Evidence: `gates/G7.json`. (R14, FR-029b)
 - [ ] T011 [P] **Gate G8** Shared-skills isolation.
   - **Procedure** (`gates/G8/run.sh`): create a sandbox with `--skills=off` plus the G6 kit. Inside: the mount table has no shared skills store, and the skill directories contain **exactly** the kit-installed probe skills.
   - **PASS**: no shared-store mount, and only kit skills present.

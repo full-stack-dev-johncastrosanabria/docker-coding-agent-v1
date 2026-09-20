@@ -1,0 +1,20 @@
+{
+  "forwarding": {
+    "default": true,
+    "description": "Allow clients to forward an SSH agent into sandboxes. Existing forwarders require a daemon restart after changes.",
+    "key": "ssh.agentForwardingEnabled",
+    "requires_restart": true,
+    "source": "override",
+    "type": "bool",
+    "value": false
+  },
+  "socket_path": {
+    "default": "",
+    "description": "Optional fixed host SSH agent socket path. Empty uses each client's current SSH_AUTH_SOCK. Existing forwarders require a daemon restart after changes.",
+    "key": "ssh.agentSocketPath",
+    "requires_restart": true,
+    "source": "override",
+    "type": "string",
+    "value": "/private/tmp/recorded-negative/agent.sock"
+  }
+}

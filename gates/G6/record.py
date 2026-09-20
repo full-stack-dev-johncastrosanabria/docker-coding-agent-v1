@@ -25,6 +25,20 @@ WORK = os.path.join(ROOT, "gates", "G6", "work")
 VERSIONS = os.path.join(ROOT, "runtime", "versions.yaml")
 EVIDENCE = os.path.join(ROOT, "gates", "G6.json")
 
+def _load_module(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# The post-G0 state checks and the base-identity rules are shared by every gate after G0
+# (gates/preflight.py); G6 keeps these names so its evidence and tests stay stable.
+preflight_module = _load_module("dca_preflight", os.path.join(ROOT, "gates", "preflight.py"))
+BOOTSTRAP_RULE = preflight_module.BOOTSTRAP_RULE
+bootstrap_rule_matches = preflight_module.bootstrap_rule_matches
+template_identity_matches = preflight_module.template_identity_matches
+
 DOCKER_AGENT_VERSION = "v1.136.0"
 SSH_KEY = "ssh.agentForwardingEnabled"
 BACKENDS = (("claude", "dca-g6-claude"), ("codex", "dca-g6-codex"))
@@ -38,21 +52,6 @@ ARTIFACT_URL = (
 #   release-asset-digest       the digest the official release metadata publishes for the asset
 #   recorded-reproducibility-pin  only the hash this gate computed
 ARTIFACT_VERIFICATION = "release-asset-digest"
-# The G0 bootstrap rule, exactly as sbx v0.43.0 reports it. Every field must match: a
-# sandbox-scoped, organization-layer, inactive or differently identified deny is not it, and it
-# must be the *only* network rule, since G6.0c claims the network state is still the post-G0
-# baseline. Filesystem rules are a separate resource type and are ignored here.
-BOOTSTRAP_RULE = {
-    "id": "default-deny-all",
-    "scope": "global",
-    "applies_to": "all",
-    "resource_type": "network",
-    "decision": "deny",
-    "resources": ["**"],
-    "origin": "local",
-    "layer": "local",
-    "status": "active",
-}
 # `sbx ls --json` carries no base image (observed: name, id, agent, status, last_used_at), so
 # the base comes from the RESOLVE SETUP block sbx prints on create, and its exact version from
 # the registry digest that tag pointed at when the gate ran.
@@ -142,33 +141,6 @@ def base_identifier(obs, sandbox, work=None):
     return image, digest, cached
 
 
-def template_identity_matches(cached, image, digest):
-    """True when the cached template is this exact repository and tag and its image id
-    prefixes the full registry digest captured at gate time.
-
-    The short image id is not a digest on its own. The identity is the combination: the
-    sbx-resolved reference, the cached repository/tag/id, and the full registry digest.
-    """
-    repository, _, tag = (image or "").rpartition(":")
-    identifier = (cached or {}).get("id") if isinstance(cached, dict) else None
-    return (
-        bool(repository)
-        and bool(tag)
-        and isinstance(cached, dict)
-        and cached.get("tag") == tag
-        and cached.get("repository") in (repository, f"docker.io/{repository}")
-        and isinstance(identifier, str)
-        and len(identifier) >= 12
-        and isinstance(digest, str)
-        and digest.startswith(f"sha256:{identifier}")
-    )
-
-
-def bootstrap_rule_matches(rule):
-    """True only for the exact G0 bootstrap rule, field by field (anti-drift, not G4's proof)."""
-    return isinstance(rule, dict) and all(rule.get(k) == v for k, v in BOOTSTRAP_RULE.items())
-
-
 def release_asset(work):
     """The docker-agent release asset from the official GitHub release metadata, or None."""
     release = read_json(work, "release.json")
@@ -179,23 +151,8 @@ def release_asset(work):
 
 
 def template_image(work, repository, tag):
-    """The cached sbx template with this exact repository and tag, or None.
-
-    A tag alone doesn't identify a template: the repository must match the reference sbx
-    resolved as well (`sbx template ls --json` reports it fully qualified, for example
-    docker.io/docker/sandbox-templates for docker/sandbox-templates).
-    """
-    templates = read_json(work, "templates.json")
-    if not isinstance(templates, dict) or not isinstance(templates.get("images"), list):
-        return None
-    for image in templates["images"]:
-        if (
-            isinstance(image, dict)
-            and image.get("tag") == tag
-            and image.get("repository") in (repository, f"docker.io/{repository}")
-        ):
-            return image
-    return None
+    """The cached sbx template with this exact repository and tag, or None (shared rule)."""
+    return preflight_module.template_image(read_json(work, "templates.json"), repository, tag)
 
 
 def preflight(obs, work):
