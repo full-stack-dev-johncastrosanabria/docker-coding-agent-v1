@@ -1,0 +1,139 @@
+{
+  "schema_version": "1",
+  "description": "Draft control-plane host inventory per backend (tasks.md T014). It exists so G4 (T015) can tell a documented or provider host apart from a host the sandboxed backend process actually requires at runtime. Nothing here is a proven allowance: G4 decides the effective per-sandbox policy, and only a host recorded here with sandbox_required=true is a candidate for it. No credential, token or header value is ever recorded in this file.",
+  "vocabulary": {
+    "purpose": {
+      "runtime-control-plane": "the sandboxed backend process itself contacts this host to run a task; evidenced by a kit declaration or a discovery log, never by documentation alone",
+      "host-oauth-login": "the interactive sign-in flow uses this host; it runs on the developer's host, so it is not sandbox-required by default",
+      "refresh": "the sandboxed process must refresh a credential against this host; only ever reached through the explicit T014/T015 revision path with an evidence_ref to the gate that proved it",
+      "discovery": "the host was observed while building this inventory (here: declared by a built-in agent kit) but its role is NOT established as any of the above; never sandbox-required by default"
+    },
+    "source": {
+      "kit": "read from the effective sandbox-scoped rules a built-in agent kit adds, via `sbx policy ls <sandbox>` on a kit-only sandbox that holds no repository code",
+      "docs": "official provider documentation, or the pinned provider artifact this project ships",
+      "discovery": "observed in `sbx policy log` during a dedicated discovery run; not used, because sources 1 and 2 established a runtime-control-plane host for both backends"
+    },
+    "profiles": "the sandbox trust profiles in which the sandbox itself must reach the host. Empty exactly when sandbox_required is false: a host the sandbox does not need is required by no profile."
+  },
+  "rules": [
+    "sandbox_required=true only for purpose runtime-control-plane or refresh, and only on kit-declaration or discovery-log evidence about the sandboxed process.",
+    "A host that appears only in provider documentation is not automatically sandbox_required.",
+    "host-oauth-login and discovery hosts are sandbox_required=false by default.",
+    "profiles is non-empty exactly when sandbox_required is true, and is the smallest justified subset of [trusted, untrusted].",
+    "path is documentation metadata only. Network enforcement is host-level, so a path never narrows an allowance.",
+    "Promoting an entry (for example auth.openai.com or platform.claude.com to refresh) requires gate evidence, carries its evidence_ref, and re-runs the affected G4 checks. Untrusted access is never broadened by a promotion."
+  ],
+  "backends": {
+    "claude": {
+      "notes": "The built-in sbx `claude` agent kit adds one sandbox-scoped network allow rule listing all seven kit hosts below. A kit allowance is not a runtime requirement: only api.anthropic.com carries the backend's task traffic. The other six are login, documentation, installer, MCP and browser-bridge hosts, and G4 must treat them as must-deny destinations that a kit rule would otherwise allow (research.md G4 check 2 and 3).",
+      "hosts": [
+        {
+          "host": "api.anthropic.com",
+          "port": 443,
+          "purpose": "runtime-control-plane",
+          "sandbox_required": true,
+          "profiles": ["trusted", "untrusted"],
+          "source": "kit",
+          "evidence_ref": "gates/inventory/work/policy-claude.json rule kit:dca-inv-claude (sandbox-scoped network allow observed on a kit-only sandbox); corroborated by https://code.claude.com/docs/en/network-config (fetched 2026-09-20)",
+          "note": "Anthropic documents it as \"Claude API requests, including the WebFetch domain safety check, feature flag fetches, and telemetry event logging\". This is the host Claude Code sends task traffic to, so the sandboxed CLI (research.md E3) requires it in every profile."
+        },
+        {
+          "host": "platform.claude.com",
+          "port": 443,
+          "purpose": "host-oauth-login",
+          "sandbox_required": false,
+          "profiles": [],
+          "source": "kit",
+          "evidence_ref": "gates/inventory/work/policy-claude.json rule kit:dca-inv-claude; https://code.claude.com/docs/en/network-config (fetched 2026-09-20)",
+          "note": "Documented as \"Anthropic Console account authentication. OAuth token exchange, refresh, and revocation also go to this host for claude.ai accounts\". It is therefore the Claude refresh-promotion candidate, exactly as auth.openai.com is for Codex, and stays sandbox_required=false until G1a/G1b prove the sandboxed process must refresh against it. Docker documents the Claude session token as staying on the host (research.md E8), which points the other way."
+        },
+        {
+          "host": "claude.com",
+          "port": 443,
+          "purpose": "host-oauth-login",
+          "sandbox_required": false,
+          "profiles": [],
+          "source": "kit",
+          "evidence_ref": "gates/inventory/work/policy-claude.json rule kit:dca-inv-claude; https://code.claude.com/docs/en/network-config (fetched 2026-09-20)",
+          "note": "Documented as the page claude.ai account sign-in opens in the browser before redirecting to claude.ai; it also serves pre-approved WebFetch documentation lookups, which V1 does not use. The browser runs on the developer's host, not in the sandbox."
+        },
+        {
+          "host": "claude.ai",
+          "port": 443,
+          "purpose": "host-oauth-login",
+          "sandbox_required": false,
+          "profiles": [],
+          "source": "docs",
+          "evidence_ref": "https://code.claude.com/docs/en/network-config (fetched 2026-09-20): \"claude.ai account authentication\"",
+          "note": "Documented as an authentication host but absent from the kit rule, so nothing indicates the sandbox needs it. Recorded so G4 can check it as a must-deny destination rather than meet it as a surprise."
+        },
+        {
+          "host": "code.claude.com",
+          "port": 443,
+          "purpose": "discovery",
+          "sandbox_required": false,
+          "profiles": [],
+          "source": "kit",
+          "evidence_ref": "gates/inventory/work/policy-claude.json rule kit:dca-inv-claude; https://code.claude.com/docs/en/network-config (fetched 2026-09-20)",
+          "note": "Documented as \"Claude Code documentation lookups by the built-in claude-code-guide agent and pre-approved WebFetch requests. Blocking this host only affects documentation lookups.\" V1 uses neither, and unconstrained web browsing is out of scope, so no runtime requirement is established."
+        },
+        {
+          "host": "downloads.claude.ai",
+          "port": 443,
+          "purpose": "discovery",
+          "sandbox_required": false,
+          "profiles": [],
+          "source": "kit",
+          "evidence_ref": "gates/inventory/work/policy-claude.json rule kit:dca-inv-claude; https://code.claude.com/docs/en/network-config (fetched 2026-09-20)",
+          "note": "Documented as \"Plugin executable downloads; native installer, native auto-updater, and update version checks\". V1 pins its Claude Code version (runtime/versions.yaml) and installs nothing at runtime, so in-sandbox updating is something to deny, not to allow."
+        },
+        {
+          "host": "mcp-proxy.anthropic.com",
+          "port": 443,
+          "purpose": "discovery",
+          "sandbox_required": false,
+          "profiles": [],
+          "source": "kit",
+          "evidence_ref": "gates/inventory/work/policy-claude.json rule kit:dca-inv-claude; https://code.claude.com/docs/en/network-config (fetched 2026-09-20)",
+          "note": "Documented as the proxy for MCP connectors from claude.ai. MCP is excluded from V1, and the managed settings disable it (research.md R-managed settings, allowManagedMcpServersOnly with an empty allowlist), so this is a must-deny destination."
+        },
+        {
+          "host": "bridge.claudeusercontent.com",
+          "port": 443,
+          "purpose": "discovery",
+          "sandbox_required": false,
+          "profiles": [],
+          "source": "kit",
+          "evidence_ref": "gates/inventory/work/policy-claude.json rule kit:dca-inv-claude; https://code.claude.com/docs/en/network-config (fetched 2026-09-20)",
+          "note": "Documented as the \"Claude in Chrome extension WebSocket bridge\". Browser automation is excluded from V1, so this is a must-deny destination."
+        }
+      ]
+    },
+    "codex": {
+      "notes": "The built-in sbx `docker-agent` agent kit adds NO network rule at all: a kit-only docker-agent sandbox carries the two global filesystem rules and nothing else. Source 1 therefore yields nothing for Codex, and both entries come from source 2 - the pinned docker-agent artifact this project ships, corroborated by research.md E9. Because nothing is declared for it, G4 must add chatgpt.com explicitly for the codex profile rather than inherit it.",
+      "hosts": [
+        {
+          "host": "chatgpt.com",
+          "port": 443,
+          "path": "/backend-api/codex",
+          "purpose": "runtime-control-plane",
+          "sandbox_required": true,
+          "profiles": ["trusted", "untrusted"],
+          "source": "docs",
+          "evidence_ref": "the pinned docker-agent artifact (runtime/versions.yaml docker_agent_artifact.sha256 a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623) contains the literal \"https://chatgpt.com/backend-api/codex\"; research.md E9 (pkg/chatgpt/chatgpt.go @ v1.136.0)",
+          "note": "The backend endpoint the chatgpt provider posts to, so the docker-agent process running in the sandbox requires it in every profile. The path is documentation metadata only: enforcement is host-level, and allowing chatgpt.com allows every path on it."
+        },
+        {
+          "host": "auth.openai.com",
+          "port": 443,
+          "purpose": "host-oauth-login",
+          "sandbox_required": false,
+          "profiles": [],
+          "source": "docs",
+          "evidence_ref": "the pinned docker-agent artifact (sha256 a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623) contains the literal \"https://auth.openai.com\"; research.md E9 (Codex-CLI OAuth, PKCE)",
+          "note": "The host-side OAuth/login host. It is NOT sandbox-required merely because the OAuth flow uses it, and G4 checks it as a must-deny destination (research.md R13). It becomes a refresh host for the trusted token-file profile only if G2/G3 evidence proves the provider must refresh inside the VM; that promotion carries its evidence_ref and re-runs the affected G4 checks."
+        }
+      ]
+    }
+  }
+}

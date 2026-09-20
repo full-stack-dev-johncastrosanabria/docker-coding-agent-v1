@@ -1,0 +1,107 @@
+{
+  "schema_version": "1",
+  "status": "draft",
+  "approved": false,
+  "description": "Draft candidates for the trusted-profile network allowlist (tasks.md T014, research.md R12: package registries, read-only source-control fetch hosts, documentation hosts). Every entry is a CANDIDATE and nothing here is an allowed destination. No candidate is approved because it is useful or conventional: G4 (T015) determines the effective allowed set, and runtime/policy/network.yaml is generated from that evidence, not from this file. The untrusted profile is never widened by anything here - it gets the backend's sandbox-required control plane only, plus per-run grants for named hosts.",
+  "applies_to_profiles": ["trusted"],
+  "categories": {
+    "package-registry": "a registry a repository's declared dependencies are installed from. Installing an already-declared dependency is a permitted action for a trusted repository; introducing a new one is approval-required (spec FR-027).",
+    "source-control-fetch": "a host a repository fetches source from read-only, for example a git submodule or a vendored dependency.",
+    "documentation": "a technical documentation host the task may need to consult."
+  },
+  "caveats": [
+    "Host-level policy cannot express \"read-only\": a source-control host allowed for fetch is the same host a push would use. The control that actually holds is FR-029b - no source-control credential is available in the VM, so an unauthenticated push cannot succeed. Any source-control candidate must be approved on that basis, and G4 must record it, or the category must be dropped.",
+    "Allowing a registry host permits every package on it, so a registry allowance does not bound which dependency is installed. That bound is the action policy (FR-027), not the network policy.",
+    "Every candidate below is listed by R12 category membership. Category membership is not evidence that any V1 task needs the host, and none of these has been observed being required."
+  ],
+  "candidates": [
+    {
+      "host": "registry.npmjs.org",
+      "port": 443,
+      "category": "package-registry",
+      "approved": false,
+      "evidence_ref": "research.md R12 / plan.md (trusted: runtime/policy/network.yaml declared package registries); independently documented as a Claude Code install-path host at https://code.claude.com/docs/en/network-config (fetched 2026-09-20)",
+      "rationale": "The registry for npm and bun projects. Named in Anthropic's own endpoint table for npm installs of the CLI, though V1 installs the CLI from the pinned sandbox base rather than at runtime."
+    },
+    {
+      "host": "pypi.org",
+      "port": 443,
+      "category": "package-registry",
+      "approved": false,
+      "evidence_ref": "research.md R12 / plan.md (declared package registries)",
+      "rationale": "The index for Python projects. Category membership only; no V1 task has been observed to require it."
+    },
+    {
+      "host": "files.pythonhosted.org",
+      "port": 443,
+      "category": "package-registry",
+      "approved": false,
+      "evidence_ref": "research.md R12 / plan.md (declared package registries)",
+      "rationale": "Where pypi.org serves the actual distribution files, so it is useless to allow one without the other. Category membership only."
+    },
+    {
+      "host": "proxy.golang.org",
+      "port": 443,
+      "category": "package-registry",
+      "approved": false,
+      "evidence_ref": "research.md R12 / plan.md (declared package registries)",
+      "rationale": "The default Go module proxy. Category membership only."
+    },
+    {
+      "host": "crates.io",
+      "port": 443,
+      "category": "package-registry",
+      "approved": false,
+      "evidence_ref": "research.md R12 / plan.md (declared package registries)",
+      "rationale": "The Rust registry index. Category membership only."
+    },
+    {
+      "host": "static.crates.io",
+      "port": 443,
+      "category": "package-registry",
+      "approved": false,
+      "evidence_ref": "research.md R12 / plan.md (declared package registries)",
+      "rationale": "Where crates.io serves crate archives. Category membership only."
+    },
+    {
+      "host": "github.com",
+      "port": 443,
+      "category": "source-control-fetch",
+      "approved": false,
+      "evidence_ref": "research.md R12 / plan.md (read-only source-control fetch hosts)",
+      "rationale": "Where a git submodule or vendored dependency is commonly fetched from. Subject to the read-only caveat above: the allowance cannot be limited to fetch at host granularity, so it rests entirely on no source-control credential being present in the VM (FR-029b)."
+    },
+    {
+      "host": "codeload.github.com",
+      "port": 443,
+      "category": "source-control-fetch",
+      "approved": false,
+      "evidence_ref": "research.md R12 / plan.md (read-only source-control fetch hosts)",
+      "rationale": "Where GitHub serves repository archives for a fetch. Same read-only caveat."
+    },
+    {
+      "host": "objects.githubusercontent.com",
+      "port": 443,
+      "category": "source-control-fetch",
+      "approved": false,
+      "evidence_ref": "research.md R12 / plan.md (read-only source-control fetch hosts)",
+      "rationale": "Where GitHub redirects release and LFS object downloads. Same read-only caveat; note that V1 does not support LFS repositories (research.md R11 open risk)."
+    },
+    {
+      "host": "code.claude.com",
+      "port": 443,
+      "category": "documentation",
+      "approved": false,
+      "evidence_ref": "research.md R12 / plan.md (documentation hosts); https://code.claude.com/docs/en/network-config (fetched 2026-09-20)",
+      "rationale": "Claude Code documentation. Also appears in the Claude control-plane inventory as a discovery host, where it is NOT sandbox-required: approving it here would allow it for trusted runs, which is a separate decision G4 must make deliberately rather than inherit from the kit rule."
+    },
+    {
+      "host": "docs.claude.com",
+      "port": 443,
+      "category": "documentation",
+      "approved": false,
+      "evidence_ref": "research.md R12 / plan.md (documentation hosts); mirrors code.claude.com, fetched 2026-09-20",
+      "rationale": "The same Claude documentation under its other hostname. Category membership only."
+    }
+  ]
+}
