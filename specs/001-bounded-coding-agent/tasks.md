@@ -183,15 +183,21 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
   Depends: T009. Evidence: `gates/G8.json`. (R17, E7)
 - [ ] T012 **Gate G10** Sanitized source delivery.
-  - **Procedure** (`gates/G10/run.sh`, host fixture repo under `gates/G10/work/`):
-    - plant an ignored `.env` canary, an untracked canary, an uncommitted edit, and a second branch;
-    - bundle the **local branch ref** only (`git bundle create … refs/heads/<branch>`, verify, head == branch commit);
-    - create a mountless sandbox, `sbx cp` the bundle in, and clone it in the VM.
-    - Assert: no `/run/sandbox/source`; no host path mounts; both canaries absent from the VM (canary IDs searched, values never logged); only the selected branch's history present.
-  - **PASS**: all assertions hold.
+  G10 proves **two** properties, in two phases, and neither may be weakened to satisfy the other: the dirty-tree preflight fails closed, and the committed state is delivered sanitized under an explicit override.
+  - **Fixture** (`gates/G10/run.sh`, host fixture repo under `gates/G10/work/`): a repository on a selected branch with a committed baseline, plus
+    - an ignored `.env` canary (matched by the fixture's `.gitignore`);
+    - an untracked **non-ignored** canary;
+    - an uncommitted edit to a tracked file, carrying its own canary;
+    - a **second branch** whose tip is a commit **unique to it** (not an ancestor of the selected branch) carrying a branch-only canary.
+  - **Phase A — dirty-tree refusal (fail closed)**: with no override, the gate observes the host checkout and proves that the uncommitted tracked edit and the untracked non-ignored canary are detected, that the run is refused **before any sandbox is created**, that no source bundle is delivered, and that the refused path leaves no sandbox behind. **Ignored files alone never trigger the refusal**: a control in which only the ignored `.env` canary is present is not refused. This is gate-local evidence of the launcher invariant (launcher-cli precondition 2); the launcher itself is T064 and is **not** implemented here.
+  - **Phase B — explicit override, committed-state delivery**: the gate records that it is exercising the approved `--ignore-uncommitted` equivalent, then bundles **only** the fully-qualified selected ref (`git bundle create … refs/heads/<selected>`), runs `git bundle verify`, and confirms the bundle head equals the selected branch commit. It creates a mountless sandbox with `--skills=off` from the pinned base, `sbx cp`s the verified bundle in, and clones it in the VM.
+    - Assert in the VM: no `/run/sandbox/source`; no host workspace or path mount; the ignored `.env` canary, the untracked canary and the uncommitted-edit canary are all **absent** (canary IDs searched, values never logged); the clone holds the selected committed branch state only.
+    - **Second-branch proof** (by identity, not by wording, since branches may share ancestors): the second branch's ref is absent from the delivered history, its **unique commit SHA** is neither present nor reachable there, and its branch-only canary is absent.
+  - **Source-ref scope** (R11, unchanged): V1 source identity stays a local branch name, `refs/heads/<branch>`, or `HEAD` while attached to a local branch. G10 neither accepts nor exercises tags, raw SHAs, revision expressions, remote-tracking refs, ambiguous names or a detached `HEAD`, and it does not implement the launcher's ref parser (T064). Its purpose is to prove the delivery architecture.
+  - **PASS**: both phases hold — the refusal in Phase A, and every delivery assertion plus the second-branch proof in Phase B.
   - **FAIL**: runs are refused; stop.
 
-  Depends: T008. Evidence: `gates/G10.json`. (R11, FR-030)
+  Depends: T009 (Phase B creates a sandbox from the `sandbox_bases` pin that G6 recorded). Evidence: `gates/G10.json`. (R11, FR-030)
 - [ ] T013 **Gate G5** Bundle round-trip, retrieval and disposal.
   - **Procedure** (`gates/G5/run.sh`), continuing from G10:
     - commit on `dca/<run-id>` in the VM;
