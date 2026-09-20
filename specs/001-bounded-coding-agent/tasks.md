@@ -176,7 +176,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **Residual (not a G7 blocker)**: the workload has sudo in the VM and `/run` is writable, so it could create its own socket at the relay path and impersonate an agent to other in-VM processes. No host SSH key material is exposed, so this is recorded for the threat model (T090) and doesn't change G7 or widen G8, which covers shared-skills isolation.
 
   Depends: T009 (the gate verifies the `sandbox_bases.claude` base and version that G6 pinned). Evidence: `gates/G7.json`. (R14, FR-029b)
-- [ ] T011 [P] **Gate G8** Shared-skills isolation.
+- [x] T011 [P] **Gate G8** Shared-skills isolation. **Done: PASS** (`gates/G8.json`).
   - **Procedure** (`gates/G8/run.sh`): create a sandbox with `--skills=off` plus the G6 kit. Inside: the mount table has no shared skills store, and the skill directories contain **exactly** the kit-installed probe skills.
   - **PASS**: no shared-store mount, and only kit skills present.
   - **FAIL**: runs are refused; stop.
