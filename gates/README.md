@@ -14,7 +14,7 @@ Nothing in this directory records a gate result until the gate has actually been
 
 | Order | Task | Gate | Purpose |
 |---|---|---|---|
-| 1 | T008 | G0 | Environment, exact pin, one-time global SSH configuration |
+| 1 | T008 | G0 | Environment, exact pin, one-time global SSH configuration, bootstrap network preset when uninitialized |
 | 2 | T009 | G6 | Kit mechanics, Python version and artifact pin |
 | 3 | T010 | G7 | SSH-agent isolation |
 | 4 | T011 | G8 | Shared-skills isolation |
@@ -69,9 +69,24 @@ Every gate runs serially in this order, except that G8 (T011), G1d (T018) and G3
 ## No-secrets rule (copied verbatim from tasks.md, global constraints)
 
 - **Gate evidence** never contains secret values, tokens, authorization headers, sensitive response bodies, or file contents that could hold credentials. It records only booleans, status codes, byte lengths, pattern IDs, paths and hashes.
-- **Global sandbox settings** (`ssh.agentForwardingEnabled`, the global network preset) are changed **only** by the developer, as recorded one-time actions in gates. **The launcher never mutates global sandbox settings.**
+- **Global sandbox settings** (`ssh.agentForwardingEnabled`, the global network preset) may change **only during an explicitly developer-authorized gate execution**, as recorded one-time actions. The gate procedure performs the commands, so nothing has to be typed by hand, but it is only ever started by the developer: **G0 is never launched autonomously**. **The launcher and normal agent runs never mutate global sandbox settings.** Every such change records its before and after state, and the gate stops before the change unless all of its prerequisites hold.
 
 `evidence.schema.json` enforces this structurally: every object is closed (`additionalProperties: false`) and map keys that look like secrets (token, secret, password, credential, authorization, cookie, api key, bearer) are rejected.
+
+## Global state G0 may change
+
+G0 is the only gate that changes global sbx state, and only these two things:
+
+1. `ssh.agentForwardingEnabled` → `false`, followed by `sbx daemon restart` (R14). PASS requires the re-read value to be `false` **and** `sbx diagnose --json` to report the daemon healthy after the restart: the stored value alone doesn't prove the change took effect. G7 is the later in-sandbox proof that no SSH agent is reachable.
+2. The **bootstrap network preset**, only when `sbx policy ls --json` reports the global policy uninitialized in exactly the representation observed from the candidate sbx (exit code, empty stdout and the full stderr text, matched byte for byte rather than by substring, because this is what authorizes the mutation). sbx requires a preset before the first sandbox runs and, non-interactively, it must be set with `sbx policy init` ([Local policy](https://docs.docker.com/ai/sandboxes/security/policy/)); G6 creates sandboxes before G4 runs. G0 then initializes `deny-all` (Locked Down: no baseline allow rules, though a kit or an explicit rule can still add per-sandbox allowances) and records `previous_state`, `bootstrap_preset` and the reason. Never `allow-all`, never `balanced`. An existing preset or governance state is recorded and left unchanged, and governance is recorded as `unknown/not observable` unless the CLI reports it.
+
+The two changes are strictly ordered and each is guarded: preconditions → SSH change → proof it took effect → policy bootstrap. A failure at any guard stops the run before the next global change, so a failed SSH step can never be followed by `sbx policy init`.
+
+**G4 remains authoritative** for the effective policy, the must-deny proofs and the `network_policy_fingerprint`; a `deny-all` bootstrap is a starting point, never evidence that the network policy passed. The launcher never initializes or mutates global settings.
+
+`sbx ls --json` is accepted only in the observed `{"sandboxes": [...]}` shape, and, since the observed list was empty, any listed sandbox blocks the change until a per-entry status field is empirically observed.
+
+Until G0 passes, the installed sbx version is the **observed candidate**, not the V1 pin: `runtime/versions.yaml` records `sbx.exact` and `claude_code.exact` only on a PASS. G0 decides each criterion from the JSON surfaces plus the exit status of the deterministic commands; `sbx diagnose` is the exception, since it exits non-zero when any check fails, including ones outside G0's decision set, so only its named checks (`Daemon`, `Version match`, `Authentication` — names observed in the candidate version) decide.
 
 ## Evidence provenance
 

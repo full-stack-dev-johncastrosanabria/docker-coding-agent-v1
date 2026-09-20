@@ -1,6 +1,6 @@
 {
   "claude_code": {
-    "exact": null,
+    "exact": "2.1.278",
     "tested": "2.1.277"
   },
   "docker_agent": "v1.136.0",
@@ -22,7 +22,7 @@
     }
   },
   "sbx": {
-    "exact": null,
+    "exact": "v0.43.0",
     "minimum": "0.43.0"
   }
 }
