@@ -116,7 +116,8 @@ dca launcher
  │         host timer enforces wall-clock (stop + remove sandbox)   tool calls ▶ dca-gate (cooperative)*
  ├─ final re-execution of required deterministic checks (in VM, on final state)
  ├─ sbx cp task-branch bundle ◀────────────────────────────────── git bundle create dca/<run-id>
- ├─ git bundle verify → fetch as dca/<run-id> (no checkout, no merge)
+ ├─ quarantine validation: bundle verify → exact SHA/ref → object-level unpack
+ ├─ only then: fetch as dca/<run-id> (no checkout, no merge)
  └─ finalize report from host evidence → sbx rm
 ```
 
@@ -155,7 +156,7 @@ before it can execute (§E, research R20). Codex runs also receive
 - **Sanitized committed source (R11)**. Neither clone mode nor direct mode is used. Clone mode mounts the entire checkout read-only at `/run/sandbox/source`, including ignored files such as `.env`, which would violate FR-030. The launcher bundles only `--ref`'s committed history and copies it into a **mountless** VM. Untracked and ignored files, stash, other branches, `.git/config` and hooks never enter the VM.
 - **Dirty checkout: fail closed.** Uncommitted or untracked non-ignored changes stop the run (exit 3) unless `--ignore-uncommitted` is given, which is recorded with the dirty path names.
 - **Source ref**: `--ref` must be a **local branch**: a branch name, `refs/heads/<branch>`, or `HEAD` while attached to a local branch. A tag, a raw SHA (which `git bundle` refuses, E16), a revision expression, a remote-tracking ref, an ambiguous name or a detached `HEAD` → exit 3. The launcher records the `refs/heads/*` ref and its exact commit SHA, and bundles from the branch ref. There are no temporary host refs. Tags and arbitrary commits are V1.1 candidates, because an annotated tag ref points to a tag object rather than the peeled commit.
-- **Change retrieval**: a task-branch bundle comes out via `sbx cp`, is checked with `git bundle verify`, and **only then** is fetched as `dca/<run-id>`, with no checkout or merge. The host working tree is never touched. A retrieval failure is exit 4 (no report, no partial branch).
+- **Change retrieval**: a task-branch bundle comes out via `sbx cp` into a quarantine directory outside `.git`. Because it crossed the VM trust boundary it is untrusted until the **whole** quarantine validation passes — `git bundle verify`, exact advertised SHA and ref identity, and **object-level integrity validation** in an isolated repository — and **only then** is it fetched as `dca/<run-id>`, with no checkout or merge. Header verification alone is not the boundary: G5 showed a truncated bundle passing `git bundle verify` on the observed Git version. The developer repository is untouched until validation succeeds. The host working tree is never touched. A retrieval failure is exit 4 (no report, no partial branch).
 - **Fresh VM per run**, removed after retrieval, so approvals, caches and state never carry between runs.
 - **SSH agent forwarding disabled**: `sbx` runs without `SSH_AUTH_SOCK`, preflight requires `ssh.agentForwardingEnabled=false`, and G7 proves no agent is reachable in the VM.
 - **Shared skills disabled**: `--skills=off`; G8 proves the shared skills store isn't mounted and that only kit-installed skills are present (with the G6 probe kit at that point). That exactly the four runtime skills ship is proven on the final assets by the production kit (T056) and production conformance (T062).
@@ -358,7 +359,7 @@ proofs). No `evals/` directory: Docker Agent evals are not used (R21/R22).
 | IV. Preserve Intent & Architecture | **PASS** | Only the intended committed state is delivered. A dirty checkout fails closed unless overridden. Changed-file scope is enforced by gate ASK and by oracles. |
 | V. Context Discipline | **PASS** | Instructions under 150 lines; on-demand skills; research subagent; bounded tool output (Codex). |
 | VI. Independent Verification | **PASS** | Fresh-context read-only reviewer, launcher re-verification on the final state, and host-side evidence for the report. |
-| VII. Reversible Change | **PASS** | Change set only as a bundle checked with `git bundle verify` and fetched to `dca/<run-id>` (round-trip pending G5); host tree untouched; destructive classes ASK or DENY. |
+| VII. Reversible Change | **PASS** | Change set only as a bundle that passes the full quarantine validation (verify, exact SHA/ref identity, object-level integrity) before it is fetched to `dca/<run-id>` (round-trip proven by G5); host tree untouched; destructive classes ASK or DENY. |
 | VIII. Explicit Durable State | **PASS** | Spec, plan, research, policy, thresholds and gate evidence are version-controlled; reports are durable run records. |
 | IX. Secrets & Trust Boundaries | **PASS (scope-limited)** | No API keys; no host credential or checkout mounts; ignored-file secrets never delivered; SSH agent absent; repository content treated as data; secret unreadability and capability non-usability both required for untrusted runs. Nothing is waived: untrusted runs are blocked until proven. |
 | X. Benchmark-Driven Evolution | **PASS** | 28-fixture suite; thresholds committed before acceptance; every component traced to a normative requirement. |

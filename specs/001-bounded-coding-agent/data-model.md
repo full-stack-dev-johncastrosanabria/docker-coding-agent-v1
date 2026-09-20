@@ -236,14 +236,18 @@ Rules:
 
 ### Change Set
 Commits on the in-VM task branch `dca/<run_id>`. The branch is exported as a git bundle, copied
-out with `sbx cp` into a host quarantine directory, checked with `git bundle verify`, and fetched
-into the host repository as the branch `dca/<run_id>` only. There is no checkout and no merge,
+out with `sbx cp` into a host quarantine directory outside `.git`, validated there in full —
+`git bundle verify`, exact advertised identity (one head, SHA equal to the candidate commit, ref
+exactly `refs/heads/dca/<run_id>`), and object-level integrity validation in an isolated
+repository — and only then fetched into the host repository as the branch `dca/<run_id>` only. There is no checkout and no merge,
 and the host working tree is never touched. Fields in the report: `branch`, `base_commit`,
 `head_commit`, `files[] {path, status}`. The launcher computes these itself from the retrieved
 bundle; it does not trust the agent's list. `base_commit` equals `source.commit`. Importing is
-all-or-nothing: the host ref is created only after `git bundle verify` succeeds and the fetch
-completes. Any failure in export, copy, verification or import is an infrastructure
-finalization failure (exit 4, no report, no `dca/<run_id>` branch).
+all-or-nothing: the host ref is created only after the complete quarantine validation succeeds
+and the fetch completes. `git bundle verify` alone is not sufficient — G5 observed a truncated
+bundle passing it — so object-level validation is part of that gate. Any failure in export,
+copy, any validation stage, or import is an infrastructure finalization failure (exit 4, no
+report, no `dca/<run_id>` branch).
 
 ### Review Finding
 `{id, category (missing-requirement|regression|edge-case|unsafe|architecture|weakened-test|insufficient-verification), severity, evidence, status: open|resolved}`.

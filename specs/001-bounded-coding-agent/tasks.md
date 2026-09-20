@@ -198,13 +198,13 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **FAIL**: runs are refused; stop.
 
   Depends: T009 (Phase B creates a sandbox from the `sandbox_bases` pin that G6 recorded). Evidence: `gates/G10.json`. (R11, FR-030)
-- [ ] T013 **Gate G5** Bundle round-trip, retrieval and disposal.
+- [x] T013 **Gate G5** Bundle round-trip, retrieval and disposal. **Done: PASS** (`gates/G5.json`).
   - **Procedure** (`gates/G5/run.sh`), continuing from G10:
     - commit on `dca/<run-id>` in the VM;
-    - `git bundle create` from that ref, `sbx cp` to a host quarantine dir, `git bundle verify`, fetch as `dca/<run-id>` only;
+    - `git bundle create` from that ref, `sbx cp` to a host quarantine dir outside `.git`, then the full quarantine validation — `git bundle verify`, exact advertised SHA and ref identity, and object-level integrity validation in an isolated repository — and only then fetch as `dca/<run-id>`;
     - the host working tree and all other refs are byte-identical;
     - `sbx rm` leaves no VM.
-    - Negatives: a corrupted bundle fails verification and creates **no** `dca/<run-id>` ref; a copy failure leaves no partial ref.
+    - Negatives: a corrupted or truncated returned bundle fails **quarantine validation**, including its object-level integrity stage, and creates **no** `dca/<run-id>` ref; a copy failure leaves no partial ref. Header verification alone is not the boundary: `git bundle verify` accepted a truncated bundle on the observed Git version.
   - **PASS**: round-trip works and both negatives are clean.
   - **FAIL**: redesign delivery or retrieval; stop.
 
@@ -451,7 +451,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
     - `source.ref` is `refs/heads/*` and `source.commit` is the branch commit.
   - **Dirty checkout**: refused (exit 3) without the override; `--ignore-uncommitted` records names only; ignored files never trigger it.
   - **Bundle integrity**: created from the branch ref; `git bundle verify` passes; bundle head == `source.commit`; a creation or validation failure → `InfraAbort` (exit 4).
-  - **Retrieval integrity**: a corrupted or truncated bundle is rejected, and no `dca/<run-id>` is created.
+  - **Retrieval integrity** (the returned, untrusted direction): a corrupted or truncated quarantine bundle is rejected before any host import, and no `dca/<run-id>` is created. The test includes a bundle that **passes `git bundle verify` but fails object-level validation**, so an implementation that only runs `git bundle verify` on a returned bundle **fails this test**. Rejection must happen in the quarantine, before any import, returned-object write or ref write to the developer repository.
   - **No temporary host refs**.
 
   Depends: T002. Evidence: fails before T038, passes after.
@@ -734,7 +734,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 - [ ] T069 **Impl (gated: G11)** Implement execution and host limits in `src/dca/launcher.py` (B), including the Codex command builder that always adds `--safety strict` and an explicit `DOCKER_AGENT_KIT_DIR=<KIT_DIR>`. The launcher builds that value from the trusted staged-kit path, never from repository content or the inherited environment, and exposes no option to override it. Expose the Phase 3 execution primitives as internal functions that T073's gate harness can call, with no public bypass. Depends: T068, T020. Evidence: T068 passes.
 - [ ] T070 **Test** Write `tests/integration/test_launcher_finalization.py` for **C: retrieval, finalization and cleanup**. Cover:
   - the launcher's final re-execution of required deterministic checks on the final state;
-  - task-branch bundle export → `sbx cp` → `git bundle verify` → fetch as `dca/<run-id>`;
+  - task-branch bundle export → `sbx cp` into a quarantine directory outside `.git` → `git bundle verify` → exact advertised candidate identity (one head; SHA == candidate commit; ref == `refs/heads/dca/<run-id>`) → object-level quarantine validation → only then fetch exactly `dca/<run-id>`. A corrupted or truncated returned bundle that header verification accepts but object-level validation rejects is an explicit case: it aborts (exit 4) with no partial ref;
   - **exit-4 path (c)**: any export, copy, verify or import failure → no report, no partial branch, only safe artifacts (`events.jsonl`, gate log) kept;
   - report finalization with validation and `report.md`;
   - `sbx rm` always attempted.
