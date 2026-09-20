@@ -1,0 +1,87 @@
+{
+  "gate": "G10",
+  "status": "PASS",
+  "run_at": "2026-09-20T16:12:18Z",
+  "versions": {
+    "sbx": "v0.43.0"
+  },
+  "provenance": {
+    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+  },
+  "criteria": [
+    {
+      "id": "G10.0a",
+      "description": "sbx client and server still match the pinned exact version and the server is running",
+      "result": "PASS",
+      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 state running"
+    },
+    {
+      "id": "G10.0b",
+      "description": "the accepted SSH baseline is unchanged and sbx calls drop the host agent socket",
+      "result": "PASS",
+      "evidence_ref": "detector refusals none, host SSH_AUTH_SOCK as seen by sbx removed"
+    },
+    {
+      "id": "G10.0c",
+      "description": "global network policy is still exactly the post-G0 bootstrap baseline",
+      "result": "PASS",
+      "evidence_ref": "1 network rule(s) ['default-deny-all']"
+    },
+    {
+      "id": "G10.0d",
+      "description": "the run starts from zero sandboxes, so the Phase A comparison is unambiguous",
+      "result": "PASS",
+      "evidence_ref": "baseline listing: []"
+    },
+    {
+      "id": "G10.a1",
+      "description": "the dirty-tree decision refuses (exit 3) on tracked or untracked dirt and allows (exit 0) otherwise",
+      "result": "PASS",
+      "evidence_ref": "tracked_only: refuse/exit 3 (tracked 1, untracked 0), untracked_only: refuse/exit 3 (tracked 0, untracked 1), both: refuse/exit 3 (tracked 1, untracked 1), ignored_only: allow/exit 0 (tracked 0, untracked 0), clean: allow/exit 0 (tracked 0, untracked 0); failures none"
+    },
+    {
+      "id": "G10.a2",
+      "description": "every refused case created no bundle and no sandbox, and left the listing unchanged",
+      "result": "PASS",
+      "evidence_ref": "tracked_only: bundle no, listing []; untracked_only: bundle no, listing []; both: bundle no, listing []; baseline []; failures none"
+    },
+    {
+      "id": "G10.a3",
+      "description": "ignored files alone never refuse a run (control: only the ignored canary present)",
+      "result": "PASS",
+      "evidence_ref": "ignored-only decision allow/exit 0, canary present yes and ignored by the fixture yes; failures none"
+    },
+    {
+      "id": "G10.b1",
+      "description": "Phase B starts dirty under the explicit override, and exactly the selected ref is bundled",
+      "result": "PASS",
+      "evidence_ref": "override: gate-local --ignore-uncommitted equivalent, explicitly exercised; starting state tracked 1 / untracked 1 / ignored mentioned 0; ref refs/heads/dca-g10-selected at 4a87099606fadf76b9afec72fc9b342347004752; verify exit 0; advertised heads 1: '4a87099606fadf76b9afec72fc9b342347004752 refs/heads/dca-g10-selected'; failures none"
+    },
+    {
+      "id": "G10.b2",
+      "description": "mountless sandbox with --skills=off from the exact pinned Claude base",
+      "result": "PASS",
+      "evidence_ref": "create exit 0, sbx cp exit 0, sbx resolved docker/sandbox-templates:claude-code-docker (pin docker/sandbox-templates:claude-code-docker), cached template docker.io/docker/sandbox-templates tag claude-code-docker image id 94670d5b2a24 prefixing sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2, workspace 'none · no workspace bind mount'"
+    },
+    {
+      "id": "G10.b3",
+      "description": "the VM holds only the selected committed state: no host mount, no dirty canary",
+      "result": "PASS",
+      "evidence_ref": "/run/sandbox/source exists no, workspace mounts 0 of 18 (host-backed: /etc/resolv.conf /etc/hosts), canary hits env 0 / untracked 0 / dirty-edit 0 / baseline 1, delivered head 4a87099606fadf76b9afec72fc9b342347004752; failures none"
+    },
+    {
+      "id": "G10.b4",
+      "description": "the second branch is absent by identity: no ref, no unique commit object, no canary",
+      "result": "PASS",
+      "evidence_ref": "unique commit 8684779750cfe442049df4be79f784a3373f7ad2 present in VM no (git cat-file -e), second-branch refs 0, in git rev-list --all 0, branch-only canary hits 0, delivered refs 'refs/heads/dca/g10-run refs/remotes/origin/dca-g10-selected'; second branch is an ancestor of selected: no; failures none"
+    },
+    {
+      "id": "G10.c1",
+      "description": "the G10 sandbox was removed by name and none remains",
+      "result": "PASS",
+      "evidence_ref": "sbx rm --force dca-g10-source exit 0 (sandbox created: yes), listing after cleanup []"
+    }
+  ],
+  "fallback_applied": null,
+  "notes": "Two independent properties, neither weakened for the other. Phase A: with no override the dirty tree refuses before any bundle or sandbox exists, and a control shows ignored files alone never refuse. Phase B: under the explicitly recorded gate-local --ignore-uncommitted equivalent, only refs/heads/dca-g10-selected is bundled, verified and delivered by sbx cp into one mountless --skills=off sandbox from the pinned Claude base. The second branch is proven absent by identity (no ref, git cat-file -e on its unique commit fails, not in git rev-list --all, canary absent), not by wording. Phase A mirrors launcher-cli precondition 2 with a gate-local observation; the launcher and its ref parser are T064. Canary values are never recorded: the evidence carries IDs and match counts only. The sandbox is removed by name; sbx rm --all and sbx reset are never used."
+}

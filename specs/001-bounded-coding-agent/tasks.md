@@ -182,7 +182,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **FAIL**: runs are refused; stop.
 
   Depends: T009. Evidence: `gates/G8.json`. (R17, E7)
-- [ ] T012 **Gate G10** Sanitized source delivery.
+- [x] T012 **Gate G10** Sanitized source delivery. **Done: PASS** (`gates/G10.json`).
   G10 proves **two** properties, in two phases, and neither may be weakened to satisfy the other: the dirty-tree preflight fails closed, and the committed state is delivered sanitized under an explicit override.
   - **Fixture** (`gates/G10/run.sh`, host fixture repo under `gates/G10/work/`): a repository on a selected branch with a committed baseline, plus
     - an ignored `.env` canary (matched by the fixture's `.gitignore`);
