@@ -73,10 +73,75 @@
       "type": "object",
       "description": "The environment this evidence proves (tasks.md, Global constraints: gate-evidence provenance). G0: the pins it observes and establishes. G6: the pins it establishes and the runtime_versions_digest of the post-G6 runtime/versions.yaml. Every other gate document: the runtime_versions_digest of the runtime/versions.yaml in force when it ran. Digest: 'sha256:' + hex SHA-256 of json.dumps(obj, sort_keys=True, separators=(',', ':'), ensure_ascii=False) encoded as UTF-8."
     },
+    "inventory_inputs": {
+      "type": "object",
+      "description": "G4 (tasks.md T015): the identity of the committed T014 artifacts this gate derived its matrix from - the T014 gate evidence, the control-plane host inventory and the trusted-allowlist draft. Each value is 'sha256:' + the SHA-256 of the file's exact bytes. G4 additionally requires all three to be git-tracked and clean when it starts. Host names are never hard-coded, so an intentional T014 revision remains possible: it re-runs T014, re-commits the inputs and re-runs G4, which rewrites these digests. What it prevents is an edit after the reviewed T014 state silently producing a different allow set.",
+      "additionalProperties": false,
+      "required": [
+        "inventory_evidence_sha256",
+        "control_plane_hosts_sha256",
+        "trusted_allowlist_draft_sha256"
+      ],
+      "properties": {
+        "inventory_evidence_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "control_plane_hosts_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "trusted_allowlist_draft_sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
     "criteria": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/criterion"
+      }
+    },
+    "network_policy_fingerprint": {
+      "$ref": "#/$defs/digest",
+      "description": "G4 (tasks.md T015): the digest of the global network-policy state the proof relied on. Canonicalization, in full, so launcher preflight and the T062 production re-check can recompute it: 'sha256:' + hex SHA-256 of json.dumps(obj, sort_keys=True, separators=(',', ':'), ensure_ascii=False) encoded as UTF-8, where obj is {\"global_network_rules\": [...], \"governance\": {\"active\": <boolean>}}. global_network_rules contains one object per rule of `sbx policy ls --json` whose scope is \"global\" and whose resource_type starts with \"network\", each carrying exactly the fields id, name, scope, applies_to, resource_type, decision, resources, origin, layer, status, editable - resources sorted ascending - and the list itself sorted by each object's canonical JSON. Sandbox-scoped rules and run-scoped grants are excluded by construction, so they never move the digest. governance.active is the typed boolean read from `sbx policy check network <probe> --json`; an unread or non-boolean governance status yields no fingerprint at all rather than one hashed over a placeholder. The policy must be read with no sandbox-scoped network rule present, because the pinned sbx stops enumerating the global default-deny rule once one exists. It is read as a typed field: T024 propagates it into gates/eligibility.json and launcher preflight recompares it, so it is never parsed out of notes or evidence_ref prose."
+    },
+    "proven_network_allowset": {
+      "type": "object",
+      "description": "G4 (tasks.md T015): the destinations G4 actually proved permitted, per backend and profile. This is T051's input for generating runtime/policy/network.yaml and the set T061 checks membership against; both consume THIS typed field and never parse it out of notes prose. It is written only when G4 passes, so a set nothing verified can never reach a production policy.",
+      "additionalProperties": false,
+      "required": [
+        "claude",
+        "codex"
+      ],
+      "properties": {
+        "claude": {
+          "$ref": "#/$defs/profileAllowSet"
+        },
+        "codex": {
+          "$ref": "#/$defs/profileAllowSet"
+        }
+      }
+    },
+    "prerequisite_restoration": {
+      "type": "object",
+      "description": "G4 (tasks.md T015): present only when THIS run consumed a one-time, developer-authorized restoration of the documented post-G0 global network-policy baseline. It is run-bound: the run recorded the durable record's digest, the digest still matches the bytes on disk, and the baseline the run started from is the one the restoration produced. A later run that starts from an already-valid baseline omits the field even though gates/G4/prereq/restoration.json still exists, so a restoration claim is never inherited.",
+      "additionalProperties": false,
+      "required": [
+        "digest",
+        "consumed_by_this_run",
+        "baseline_fingerprint"
+      ],
+      "properties": {
+        "digest": {
+          "$ref": "#/$defs/digest",
+          "description": "SHA-256 of the durable restoration record's exact bytes"
+        },
+        "consumed_by_this_run": {
+          "const": true
+        },
+        "baseline_fingerprint": {
+          "$ref": "#/$defs/digest",
+          "description": "the fingerprint of the baseline this run started from"
+        }
       }
     },
     "fallback_applied": {
@@ -321,6 +386,31 @@
       "properties": {
         "runtime_versions_digest": {
           "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "hostList": {
+      "type": "array",
+      "description": "bare lowercase hostnames, sorted ascending and unique",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+      }
+    },
+    "profileAllowSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trusted",
+        "untrusted"
+      ],
+      "properties": {
+        "trusted": {
+          "$ref": "#/$defs/hostList"
+        },
+        "untrusted": {
+          "$ref": "#/$defs/hostList"
         }
       }
     }
@@ -580,6 +670,90 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    {
+      "description": "G4 and production conformance record the machine-readable global network-policy fingerprint when they pass (T015, T062), so the gate review never parses it out of prose",
+      "if": {
+        "properties": {
+          "gate": {
+            "enum": [
+              "G4",
+              "PRODUCTION-CONFORMANCE"
+            ]
+          },
+          "status": {
+            "const": "PASS"
+          }
+        },
+        "required": [
+          "gate",
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "network_policy_fingerprint"
+        ]
+      }
+    },
+    {
+      "description": "only G4 can carry a prerequisite-restoration binding; no other gate restores the global network-policy baseline",
+      "if": {
+        "required": [
+          "prerequisite_restoration"
+        ]
+      },
+      "then": {
+        "properties": {
+          "gate": {
+            "const": "G4"
+          }
+        }
+      }
+    },
+    {
+      "description": "a G4 PASS records the proven allow set as a typed field, and only a PASS may carry one",
+      "if": {
+        "properties": {
+          "gate": {
+            "const": "G4"
+          },
+          "status": {
+            "const": "PASS"
+          }
+        },
+        "required": [
+          "gate",
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "proven_network_allowset"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "proven_network_allowset"
+          ]
+        }
+      }
+    },
+    {
+      "description": "only G4 binds itself to the committed T014 inventory artifacts",
+      "if": {
+        "required": [
+          "inventory_inputs"
+        ]
+      },
+      "then": {
+        "properties": {
+          "gate": {
+            "const": "G4"
           }
         }
       }

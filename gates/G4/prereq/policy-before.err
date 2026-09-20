@@ -1,0 +1,4 @@
+ERROR: global network policy has not been initialized
+
+Initialize it with:
+  sbx policy init <allow-all|balanced|deny-all>

@@ -1,0 +1,1 @@
+Global network policy initialized to "deny-all".

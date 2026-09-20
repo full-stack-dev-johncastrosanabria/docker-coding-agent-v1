@@ -23,6 +23,15 @@ ELIGIBILITY_FIXTURES = ROOT / "tests" / "fixtures" / "eligibility"
 SYNTHETIC_VERSIONS = ELIGIBILITY_FIXTURES / "versions.synthetic.yaml"
 EVIDENCE_FIXTURES = ROOT / "tests" / "fixtures" / "evidence"
 
+# Stands in for the digest G4 records; never a real fingerprint of any global policy state.
+SYNTHETIC_FINGERPRINT = "sha256:" + "5a" * 32
+
+# Stands in for the set G4 proves; never a real allowance for any backend.
+SYNTHETIC_ALLOWSET = {
+    "claude": {"trusted": ["synthetic.invalid"], "untrusted": ["synthetic.invalid"]},
+    "codex": {"trusted": ["synthetic.invalid"], "untrusted": ["synthetic.invalid"]},
+}
+
 VALID_ELIGIBILITY = (
     "all-eligible",
     "trusted-only",
@@ -106,6 +115,13 @@ class GateContractSchemas(unittest.TestCase):
             }
             if status == "NOT-RUN":
                 ev["not_run_reason"] = "SYNTHETIC"
+            if status == "PASS" and gate in ("G4", "PRODUCTION-CONFORMANCE"):
+                # T015: a G4 PASS records the global network-policy fingerprint as a typed field,
+                # and T062 re-records the same one, so T024 never parses it out of prose.
+                ev["network_policy_fingerprint"] = SYNTHETIC_FINGERPRINT
+            if status == "PASS" and gate == "G4":
+                # T015/T051: the proven allow set is typed and written only on a PASS.
+                ev["proven_network_allowset"] = SYNTHETIC_ALLOWSET
             if backends is not None:
                 ev["backends"] = {
                     name: {"status": s, **({"not_run_reason": "SYNTHETIC"} if s == "NOT-RUN" else {})}
@@ -390,6 +406,81 @@ class GateContractSchemas(unittest.TestCase):
             for gate, evidence in evidence_by_id.items():
                 with self.subTest(fixture=name, gate=gate):
                     self.assertEqual([e.message for e in self.evidence.iter_errors(evidence)], [])
+
+    def test_the_network_policy_fingerprint_is_required_of_a_g4_or_conformance_pass(self):
+        # T015/T062: T024 propagates G4's fingerprint, so it is a typed field the contract
+        # demands, never prose a reader has to parse back out of notes or evidence_ref.
+        evidence_by_id = self.evidence_set(self.fixture("all-eligible"), self.synthetic_versions)
+        for gate in ("G4", "PRODUCTION-CONFORMANCE"):
+            passing = evidence_by_id[gate]
+            with self.subTest(gate=gate, case="pass carries it"):
+                self.assertEqual(passing["status"], "PASS")
+                self.assertEqual(passing["network_policy_fingerprint"], SYNTHETIC_FINGERPRINT)
+                self.assertEqual([e.message for e in self.evidence.iter_errors(passing)], [])
+            with self.subTest(gate=gate, case="pass without it is invalid"):
+                without = {k: v for k, v in passing.items() if k != "network_policy_fingerprint"}
+                self.assertIn(
+                    "'network_policy_fingerprint' is a required property",
+                    [e.message for e in self.evidence.iter_errors(without)],
+                )
+            for bad in ("sha256:" + "5A" * 32, "5a" * 32, "sha256:beef", "", None):
+                with self.subTest(gate=gate, case=f"malformed {bad!r}"):
+                    malformed = dict(passing, network_policy_fingerprint=bad)
+                    self.assertNotEqual([e.message for e in self.evidence.iter_errors(malformed)], [])
+
+    def test_the_proven_allowset_is_typed_pass_only_and_g4_only(self):
+        # T051 and T061 consume this field directly, so a set nothing verified must never appear,
+        # and it must never have to be parsed back out of a prose sentence.
+        evidence_by_id = self.evidence_set(self.fixture("all-eligible"), self.synthetic_versions)
+        passing = evidence_by_id["G4"]
+        self.assertEqual(passing["status"], "PASS")
+        self.assertEqual(passing["proven_network_allowset"], SYNTHETIC_ALLOWSET)
+        self.assertEqual([e.message for e in self.evidence.iter_errors(passing)], [])
+
+        without = {k: v for k, v in passing.items() if k != "proven_network_allowset"}
+        self.assertIn("'proven_network_allowset' is a required property",
+                      [e.message for e in self.evidence.iter_errors(without)])
+
+        for status in ("FAIL", "NOT-RUN"):
+            doc = dict(passing, status=status)
+            if status == "NOT-RUN":
+                doc["not_run_reason"] = "SYNTHETIC"
+            with self.subTest(status=status):
+                self.assertNotEqual([e.message for e in self.evidence.iter_errors(doc)], [])
+
+        with self.subTest(case="another gate may not carry one"):
+            self.assertNotEqual(
+                [e.message for e in self.evidence.iter_errors(dict(passing, gate="G5"))], [])
+
+    def test_only_g4_binds_itself_to_the_committed_t014_inputs(self):
+        evidence_by_id = self.evidence_set(self.fixture("all-eligible"), self.synthetic_versions)
+        bound = dict(evidence_by_id["G4"], inventory_inputs={
+            "inventory_evidence_sha256": SYNTHETIC_FINGERPRINT,
+            "control_plane_hosts_sha256": SYNTHETIC_FINGERPRINT,
+            "trusted_allowlist_draft_sha256": SYNTHETIC_FINGERPRINT,
+        })
+        self.assertEqual([e.message for e in self.evidence.iter_errors(bound)], [])
+        self.assertNotEqual(
+            [e.message for e in self.evidence.iter_errors(dict(bound, gate="G5"))], [])
+        for bad in ({"inventory_evidence_sha256": SYNTHETIC_FINGERPRINT},
+                    {**bound["inventory_inputs"], "extra": SYNTHETIC_FINGERPRINT},
+                    {**bound["inventory_inputs"], "control_plane_hosts_sha256": "nope"}):
+            with self.subTest(bad=bad):
+                self.assertNotEqual(
+                    [e.message for e in self.evidence.iter_errors(
+                        dict(bound, inventory_inputs=bad))], [])
+
+    def test_a_failing_gate_is_not_asked_for_a_fingerprint_it_never_proved(self):
+        # Fail-closed means a FAIL records no fingerprint, not that a FAIL must invent one.
+        evidence_by_id = self.evidence_set(self.fixture("all-eligible"), self.synthetic_versions)
+        for status in ("FAIL", "NOT-RUN"):
+            doc = dict(evidence_by_id["G4"], status=status)
+            doc.pop("network_policy_fingerprint")
+            doc.pop("proven_network_allowset")   # a FAIL proves no allow set either
+            if status == "NOT-RUN":
+                doc["not_run_reason"] = "SYNTHETIC"
+            with self.subTest(status=status):
+                self.assertEqual([e.message for e in self.evidence.iter_errors(doc)], [])
 
     def test_unchanged_evidence_and_pins_are_accepted(self):
         for name in VALID_ELIGIBILITY:

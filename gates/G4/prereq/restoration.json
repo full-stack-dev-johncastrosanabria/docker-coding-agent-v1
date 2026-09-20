@@ -1,0 +1,63 @@
+{
+  "what": "Prerequisite restoration of the documented post-G0 global network-policy baseline, performed once by the developer with explicit authorization before the G4 rerun. It is NOT a new G0 proof and gates/G0.json is neither modified nor re-run.",
+  "why": "The sandboxd VM restarted after the earlier G4 run, and the global network policy returned to the uninitialized state G0 originally found (gates/G0.json, criterion G0.8: previous_state=uninitialized, bootstrap_preset=deny-all). With no global preset, `sbx policy ls --json` exits 1 and G4's own preflight criterion G4.0c fails closed, so no G4 run of any profile can proceed.",
+  "preconditions_verified": {
+    "sandboxes_before": [],
+    "sbx_ls_exit": 0,
+    "global_network_policy_before": "uninitialized",
+    "sbx_policy_ls_exit_before": 1,
+    "sbx_policy_ls_stdout_bytes_before": 0,
+    "sbx_policy_ls_stderr_before": "ERROR: global network policy has not been initialized"
+  },
+  "action": {
+    "command": "sbx policy init deny-all",
+    "ssh_auth_sock": "removed from the environment (research R14)",
+    "exit": 0,
+    "stdout": "Global network policy initialized to \"deny-all\".",
+    "commands_explicitly_not_run": [
+      "sbx reset",
+      "sbx rm --all",
+      "sbx policy rm",
+      "sbx policy reset",
+      "sbx policy allow/deny without --sandbox",
+      "sbx settings set (no SSH or other global setting was touched)"
+    ]
+  },
+  "verification": {
+    "sbx_policy_ls_exit_after": 0,
+    "global_network_rules_after": [
+      "default-deny-all"
+    ],
+    "matches_documented_bootstrap_rule_field_by_field": true,
+    "bootstrap_rule": {
+      "id": "default-deny-all",
+      "scope": "global",
+      "applies_to": "all",
+      "resource_type": "network",
+      "decision": "deny",
+      "resources": [
+        "**"
+      ],
+      "origin": "local",
+      "layer": "local",
+      "status": "active"
+    },
+    "governance_active_after": false,
+    "network_policy_fingerprint_after": "sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697",
+    "network_policy_fingerprint_expected": "sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697",
+    "fingerprint_canonical_input": "{\"global_network_rules\":[{\"applies_to\":\"all\",\"decision\":\"deny\",\"editable\":false,\"id\":\"default-deny-all\",\"layer\":\"local\",\"name\":\"default-deny-all\",\"origin\":\"local\",\"resource_type\":\"network\",\"resources\":[\"**\"],\"scope\":\"global\",\"status\":\"active\"}],\"governance\":{\"active\":false}}",
+    "note": "The bootstrap rule sbx writes for the deny-all preset is fully deterministic - a fixed id and resources [\"**\"] - so the restored global state is byte-identical to the one the earlier G4 run observed. That was verified at restoration time under the canonicalization then in force, which reproduced its digest exactly (recorded below as superseded). The corrected canonicalization hashes the same captured observation and yields the value above; the state did not change, the algorithm did. Had the restored state itself differed in any way, the rerun would have been stopped and reported FAIL rather than the expectation being adapted.",
+    "superseded_fingerprint_old_canonicalization": "sha256:c4e86da3758023ea09596606898bfb1928bb20fd53f57c78fbf32e08a105569a",
+    "fingerprint_canonicalization": "Recomputed with the corrected canonicalization, which carries the complete semantic shape of every global network rule (id, name, scope, applies_to, resource_type, decision, resources sorted, origin, layer, status, editable) and the typed governance {\"active\": <boolean>}. The earlier digest recorded here came from a narrower input in which a change to applies_to or resource_type did not move the value; it is kept above only so the change of algorithm is visible. The OBSERVED state is unchanged - the same captured policy-after.json and governance.json produce both - so nothing about the restoration itself was re-interpreted.",
+    "restored_state_matches_prior_g4_baseline": true
+  },
+  "raw_evidence": {
+    "ls-before.json": "sbx ls --json, before the restoration",
+    "policy-before.json": "sbx policy ls --json stdout, before (empty)",
+    "policy-before.err": "sbx policy ls --json stderr, before (the uninitialized error)",
+    "policy-init.txt": "sbx policy init deny-all output",
+    "policy-after.json": "sbx policy ls --json, after",
+    "governance.json": "sbx policy check network example.invalid:443 --json, after"
+  },
+  "run_binding": "This record is consumed ONCE, by the first G4 run that observes it: that run records its digest and writes gates/G4/prereq/consumed-by.txt, and record.py accepts the claim only if the digest still matches these bytes and the baseline the run started from is the one this restoration produced. Later G4 runs record no restoration even though this file remains."
+}
