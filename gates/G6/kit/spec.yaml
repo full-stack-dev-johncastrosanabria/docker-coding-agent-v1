@@ -1,0 +1,28 @@
+# Gate G6 probe kit (tasks.md T009): the minimum needed to prove kit mechanics on both V1
+# sandbox bases. It is NOT the production kit (T056): it installs probes, not runtime assets.
+#
+# Mixin kit, schemaVersion 2 (docs.docker.com/ai/sandboxes/customize/kit-reference/). No
+# `requires.agent`, so the same kit applies to the claude base and the docker-agent base.
+# It declares no `permissions.network`: every file it installs is staged into the kit on the
+# host, so the sandbox needs no egress at all under the G0 deny-all bootstrap policy.
+schemaVersion: "2"
+kind: mixin
+name: dca-g6-probe
+version: "0.1.0"
+displayName: docker-coding-agent-v1 G6 probe
+description: Installs the pinned docker-agent artifact and probe files to verify kit mechanics.
+setup:
+  install:
+    - description: install the pinned docker-agent artifact and the G6 probes
+      user: "0"
+      command: |
+        set -eu
+        install -d -m 0755 /opt/dca /opt/dca/bin /opt/dca/skills \
+            /opt/dca/skills/dca-probe-one /opt/dca/skills/dca-probe-two /etc/claude-code
+        install -m 0755 /home/agent/dca-kit/docker-agent /opt/dca/bin/docker-agent
+        install -m 0644 /home/agent/dca-kit/kit-probe.txt /opt/dca/kit-probe.txt
+        install -m 0644 /home/agent/dca-kit/kit-manifest.json /opt/dca/kit-manifest.json
+        install -m 0644 /home/agent/dca-kit/managed-settings.json /etc/claude-code/managed-settings.json
+        install -m 0644 /home/agent/dca-kit/skill-one.md /opt/dca/skills/dca-probe-one/SKILL.md
+        install -m 0644 /home/agent/dca-kit/skill-two.md /opt/dca/skills/dca-probe-two/SKILL.md
+        rm -rf /home/agent/dca-kit

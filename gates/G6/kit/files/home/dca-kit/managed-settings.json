@@ -1,0 +1,4 @@
+{
+  "_comment": "G6 probe managed-settings file. G1c and G1d prove the real enforcement.",
+  "permissions": {"deny": []}
+}

@@ -43,7 +43,12 @@ class RuntimeVersions(unittest.TestCase):
         self.assertEqual(set(artifact), {"url", "sha256", "verification"})
         if artifact["sha256"] is not None:
             self.assertRegex(artifact["sha256"], r"^[0-9a-f]{64}$")
-        self.assertIn(artifact["verification"], (None, "publisher-checksum", "recorded-reproducibility-pin"))
+        self.assertIn(
+            artifact["verification"],
+            # Weakest last: a publisher signature or attestation over the artifact; the digest
+            # the official release metadata publishes for the asset; only a self-computed hash.
+            (None, "publisher-signature", "release-asset-digest", "recorded-reproducibility-pin"),
+        )
         for pin in (v["claude_code"]["exact"], v["sbx"]["exact"]):
             self.assertTrue(pin is None or (isinstance(pin, str) and pin))
         self.assertEqual(set(v["sandbox_bases"]), {"claude", "codex"})

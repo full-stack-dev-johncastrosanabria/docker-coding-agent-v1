@@ -1,0 +1,5 @@
+{
+  "kit": "dca-g6-probe",
+  "purpose": "gate G6 kit-mechanics probe (tasks.md T009); not the production kit",
+  "skills": ["dca-probe-one", "dca-probe-two"]
+}

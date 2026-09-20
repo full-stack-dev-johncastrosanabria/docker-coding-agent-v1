@@ -158,7 +158,12 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **Assert**:
     - installed files and versions;
     - **`/usr/bin/python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'` exits 0**;
-    - the docker-agent artifact's SHA-256. If Docker publishes an official checksum or signature, verify against it and record `verification: publisher-checksum`. Otherwise record the SHA-256 of the exact artifact that passed as `verification: recorded-reproducibility-pin`, **not** as a publisher-signature claim.
+    - the docker-agent artifact's SHA-256, recorded with how strongly it is backed, strongest first:
+      - `publisher-signature`: a Docker signature or attestation over the artifact, verified (for example `gh attestation verify`);
+      - `release-asset-digest`: the digest the official release metadata publishes for that asset (GitHub Releases API `assets[].digest`), verified together with the asset URL and size against the downloaded bytes. Release-hosting integrity, **not** a publisher signature;
+      - `recorded-reproducibility-pin`: only the SHA-256 this gate computed, when neither of the above exists.
+
+      The gate fetches the metadata and compares it; it never hard-codes the expected values, and it never describes a release-asset digest as a signature or attestation.
   - Write `docker_agent_artifact` into `runtime/versions.yaml`, and write the exact base identifiers and versions that (a) and (b) used, as resolved by the installed `sbx`, into `sandbox_bases.claude` and `sandbox_bases.codex` (canonical form). Record those pins and the `runtime_versions_digest` of the post-G6 file as `provenance` in `gates/G6.json`.
   - **PASS**: both VMs have the pinned binaries/files and Python ≥ 3.11; no install came from a non-allowlisted source.
   - **FAIL** → fallback: a custom sbx template instead of a kit (research G6). Re-run; if that fails too, stop.

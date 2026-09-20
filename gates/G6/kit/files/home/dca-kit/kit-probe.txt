@@ -1,0 +1,1 @@
+G6 probe file installed by the dca-g6-probe kit under the trusted kit root (/opt/dca).
