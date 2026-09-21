@@ -286,6 +286,17 @@ def decide(draft, limit_evidence_predates=None):
             not in safety:
         safety.append(REVIEWER_MISMATCH)
 
+    # 0. Never provisioned. This comes before the missing-report rule on purpose: when no sandbox
+    # was created, "the agent produced no valid report" is trivially true and tells the developer
+    # nothing, while the launcher's own reason - which gate is missing, which prerequisite is
+    # unavailable - is the only thing they can act on.
+    if integrity["stream"] == "none" or integrity["sandbox_created"] is False:
+        return settle(BLOCKED, draft.get("primary_reason")
+                      or "the run was blocked before a sandbox was created",
+                      draft.get("human_action_required")
+                      or "resolve the policy block reported below, then re-run",
+                      "D-FIN.2 no sandbox was created")
+
     # 1. No usable agent report.
     if agent_outcome == MISSING:
         return settle(BLOCKED, "the agent produced no valid completion report",
@@ -301,13 +312,6 @@ def decide(draft, limit_evidence_predates=None):
         return settle(BLOCKED, "the agent terminated abnormally",
                       "the run cannot be trusted; re-run the task",
                       "D-FIN.2 run integrity")
-    if integrity["stream"] == "none":
-        return settle(BLOCKED, draft.get("primary_reason")
-                      or "the run was blocked before a sandbox was created",
-                      draft.get("human_action_required")
-                      or "resolve the policy block reported below, then re-run",
-                      "D-FIN.2 no sandbox was created")
-
     # 3. none-adequate verification.
     if isinstance(verification, dict) and verification.get("type") == "none-adequate":
         if draft["change_set"].get("files"):

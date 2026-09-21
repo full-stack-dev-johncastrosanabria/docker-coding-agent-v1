@@ -733,3 +733,117 @@ def _exit_classification(exit_status):
 def analyze_file(path, **kwargs):
     with open(path, encoding="utf-8", errors="replace") as handle:
         return analyze(handle.read(), **kwargs)
+
+
+# --- incremental accounting for host-side limit enforcement -------------------------------------
+
+
+class StreamAccountant:
+    """Counters maintained line by line while the agent is still running (tasks.md T069).
+
+    `analyze()` is the authority for the REPORT: it classifies the whole stream fail-closed once
+    the process has ended. This class exists for the other job - deciding, mid-run, that a host
+    limit has been reached and the run must be stopped now. It therefore reads each line as it
+    arrives and keeps only what a limit is computed from.
+
+    It deliberately shares `ToolCallRecord`, `_account_retries` and the token rule with `analyze()`
+    rather than re-deriving them. Two independent implementations of "how many steps have there
+    been" would eventually disagree, and the disagreement would show up as a run stopped at the
+    wrong moment or not stopped at all.
+
+    A line it cannot read is NOT a counting error: a malformed stream is a classification the final
+    `analyze()` makes with the whole picture. Here it only means this line adds nothing.
+    """
+
+    def __init__(self, verification_commands=(), scratch_dir=SCRATCH_DIR):
+        self.verification_commands = [c for c in (verification_commands or [])
+                                      if isinstance(c, str) and c.strip()]
+        self.scratch_dir = scratch_dir
+        self.tool_calls = []
+        self.steps = 0
+        self.retries = 0
+        self.verification_runs = 0
+        self.tokens = 0
+        self.first_mutation = None
+        self.context_record_at = None
+        self._sessions = {}
+
+    def feed(self, line):
+        """Read one raw stream line. Returns True when it changed a counter."""
+        line = line.strip()
+        if not line:
+            return False
+        try:
+            event = json.loads(line)
+        except ValueError:
+            return False
+        if not isinstance(event, dict):
+            return False
+        kind = event.get("type")
+        if kind == TOOL_CALL_EVENT and not _valid_tool_call(event):
+            record = ToolCallRecord(len(self.tool_calls), event, True, self.scratch_dir)
+            self.tool_calls.append(record)
+            self.steps += 1
+            if self.context_record_at is None and record.writes(CONTEXT_RECORD, self.scratch_dir):
+                self.context_record_at = record.order
+            if self.first_mutation is None and record.mutation:
+                self.first_mutation = record.order
+            self._recount_retries()
+            return True
+        if kind in ATTEMPT_EVENTS and kind != TOOL_CALL_EVENT:
+            call = event.get("tool_call")
+            if isinstance(call, dict):
+                record = ToolCallRecord(len(self.tool_calls), event, False, self.scratch_dir)
+                self.tool_calls.append(record)
+                if self.first_mutation is None and record.mutation:
+                    self.first_mutation = record.order
+            return True
+        if kind == "tool_call_response":
+            identifier = event.get("tool_call_id")
+            response = event.get("response")
+            for record in reversed(self.tool_calls):
+                if record.id == identifier:
+                    record.response = response if isinstance(response, str) else None
+                    break
+            self._recount_retries()
+            return True
+        if kind == "token_usage":
+            usage = event.get("usage")
+            if not isinstance(usage, dict):
+                return False
+            key = (event.get("agent_name"), event.get("session_id"))
+            current = self._sessions.setdefault(key, {"input": 0, "output": 0})
+            for field, name in (("input_tokens", "input"), ("output_tokens", "output")):
+                value = usage.get(field)
+                if isinstance(value, int) and not isinstance(value, bool):
+                    current[name] = max(current[name], value)
+            self.tokens = sum(item["input"] + item["output"] for item in self._sessions.values())
+            return True
+        return False
+
+    def _recount_retries(self):
+        if not self.verification_commands:
+            return
+        snapshot = RunAnalysis()
+        snapshot.tool_calls = self.tool_calls
+        _account_retries(snapshot, self.verification_commands)
+        self.retries = snapshot.retries
+        self.verification_runs = snapshot.verification_runs
+
+    def counters(self):
+        return {"steps": self.steps, "retries": self.retries,
+                "verification_runs": self.verification_runs, "tokens": self.tokens}
+
+    def limit_reached(self, configured):
+        """The FIRST host limit this run has reached, or None. Order is fixed for determinism.
+
+        `steps` is checked before `retries` and `tokens` so that two runs with the same stream
+        always record the same reason; a "whichever we noticed first" rule would make the recorded
+        limit depend on line arrival timing.
+        """
+        for reason, value in (("steps", self.steps), ("retries", self.retries),
+                              ("tokens", self.tokens)):
+            ceiling = (configured or {}).get(reason)
+            if isinstance(ceiling, int) and ceiling > 0 and value >= ceiling:
+                return reason
+        return None

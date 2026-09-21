@@ -472,7 +472,7 @@ class TestSchemaEnforcement(ReportCase):
         _load("dca_jsonschema", ROOT / "src" / "dca" / "jsonschema.py")
         jsonschema = sys.modules["dca_jsonschema"]
         with self.assertRaises(jsonschema.UnsupportedKeyword):
-            jsonschema.validate({"a": 1}, {"propertyNames": {"type": "string"}})
+            jsonschema.validate({"a": 1}, {"dependentRequired": {"a": ["b"]}})
 
     def test_96_a_hand_edited_report_that_over_claims_fails_the_schema(self):
         built = self.build(agent=agent_report(checks=[check(result="fail")]))

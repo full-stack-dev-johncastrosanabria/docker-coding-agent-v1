@@ -105,6 +105,21 @@ def require_repository(repo):
         raise PreconditionError(f"{repo} is not a git repository working tree")
 
 
+def require_repository_root(repo):
+    """`--repo` must be the repository ROOT, not a directory inside one.
+
+    Without this, `--repo <some/subdir>` would silently deliver the whole enclosing repository:
+    git resolves any path inside a worktree, so "is this a repository?" is not the same question
+    as "is this THE repository the developer named?".
+    """
+    require_repository(repo)
+    code, out, _ = _git(repo, "rev-parse", "--show-toplevel")
+    if code != 0 or os.path.realpath(out.strip()) != os.path.realpath(str(repo)):
+        raise PreconditionError(
+            f"{repo} is not the root of a git repository (its repository root is "
+            f"{out.strip() or 'unknown'})")
+
+
 def _ref_exists(repo, full_ref):
     code, _, _ = _git(repo, "show-ref", "--verify", "--quiet", full_ref)
     return code == 0

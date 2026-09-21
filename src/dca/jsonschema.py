@@ -12,7 +12,8 @@ unknown keyword is a loud failure of the validator, not a quiet pass for the doc
 
 Supported: $ref (local `#/$defs/...`), $defs, type, const, enum, pattern, minLength, maxLength,
 minimum, maximum, required, properties, additionalProperties, items, contains, minItems, maxItems,
-allOf, anyOf, oneOf, not, if/then/else. Annotation-only keywords ($schema, $id, title,
+patternProperties, propertyNames, uniqueItems, allOf, anyOf, oneOf, not, if/then/else.
+Annotation-only keywords ($schema, $id, title,
 description, examples, default, deprecated, $comment) are ignored by design.
 """
 
@@ -27,6 +28,7 @@ SUPPORTED = frozenset({
     "$ref", "type", "const", "enum", "pattern", "minLength", "maxLength", "required",
     "properties", "additionalProperties", "items", "contains", "minItems", "maxItems",
     "minimum", "maximum", "allOf", "anyOf", "oneOf", "not", "if", "then", "else",
+    "patternProperties", "propertyNames", "uniqueItems",
 })
 
 TYPES = {
@@ -115,10 +117,29 @@ def _errors(value, schema, root, path):
         for name, subschema in properties.items():
             if name in value:
                 yield from _errors(value[name], subschema, root, f"{path}.{name}")
+        pattern_properties = schema.get("patternProperties", {})
+        for expression, subschema in pattern_properties.items():
+            for name, item in value.items():
+                if re.search(expression, name):
+                    yield from _errors(item, subschema, root, f"{path}.{name}")
+        if "propertyNames" in schema:
+            for name in value:
+                for problem in _errors(name, schema["propertyNames"], root, f"{path}.{name}"):
+                    yield f"{problem} (property name)"
         if schema.get("additionalProperties") is False:
             for name in value:
-                if name not in properties:
-                    yield f"{path}: property {name!r} is not allowed"
+                if name in properties:
+                    continue
+                if any(re.search(expression, name) for expression in pattern_properties):
+                    continue
+                yield f"{path}: property {name!r} is not allowed"
+        elif isinstance(schema.get("additionalProperties"), dict):
+            for name, item in value.items():
+                if name in properties:
+                    continue
+                if any(re.search(expression, name) for expression in pattern_properties):
+                    continue
+                yield from _errors(item, schema["additionalProperties"], root, f"{path}.{name}")
 
     if isinstance(value, list):
         if "items" in schema:
@@ -128,6 +149,13 @@ def _errors(value, schema, root, path):
             yield f"{path}: needs at least {schema['minItems']} items"
         if "maxItems" in schema and len(value) > schema["maxItems"]:
             yield f"{path}: allows at most {schema['maxItems']} items"
+        if schema.get("uniqueItems") is True:
+            seen = []
+            for item in value:
+                if item in seen:
+                    yield f"{path}: items must be unique, {item!r} repeats"
+                    break
+                seen.append(item)
         if "contains" in schema:
             if not any(not list(_errors(item, schema["contains"], root, path)) for item in value):
                 yield f"{path}: no item satisfies the required 'contains' constraint"

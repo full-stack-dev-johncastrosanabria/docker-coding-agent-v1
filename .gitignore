@@ -14,3 +14,4 @@ __pycache__/
 *.py[cod]
 # Throwaway repositories created by unit tests
 tests/**/work/
+tests/integration/work/
