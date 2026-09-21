@@ -1,0 +1,25 @@
+# gates/G9/agent-codex.yaml - Gate G9 positive-control agent, Codex backend (tasks.md T023).
+#
+# The positive control exercises the SAME endpoint and request family the workload probes - the
+# ChatGPT Codex backend responses API on chatgpt.com - through the legitimate authenticated path,
+# so a completion here proves the capability is reachable and mediated rather than simply absent.
+#
+# Model gpt-5.5, which accepted G3 proved the backend actually accepts for a ChatGPT-account
+# sign-in; gpt-5.6 is listed by the provider and rejected by the backend. No toolset is declared:
+# the control only has to prove the control-plane call succeeds.
+#
+# `safety: strict` here is only the session default, so every invocation also passes
+# `--safety strict` on the command line.
+version: 15
+
+metadata:
+  description: Gate G9 positive control - Codex control-plane capability
+  version: "0.1.0"
+
+agents:
+  root:
+    description: >
+      Positive control for gate G9. It answers one trivial prompt, which is only possible from an
+      authenticated result on the Codex backend endpoint the workload probes.
+    model: chatgpt/gpt-5.5
+    safety: strict

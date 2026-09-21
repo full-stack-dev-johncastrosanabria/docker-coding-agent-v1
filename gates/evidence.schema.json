@@ -597,6 +597,59 @@
           "items": {
             "$ref": "#/$defs/criterion"
           }
+        },
+        "failure_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "capability_reproduced",
+            "ambiguous_provider_response",
+            "positive_control_failed",
+            "incomplete_probe",
+            null
+          ],
+          "description": "why the backend FAILED. 'capability_reproduced' means a workload variant actually produced the authenticated mediation signal. 'ambiguous_provider_response' means it did NOT, and the provider's answers could not separate an authenticated caller from an unauthenticated one."
+        },
+        "ambiguity_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "rate_limited",
+            "transport_failure",
+            "indistinguishable_response",
+            "redirect",
+            "server_error",
+            null
+          ],
+          "description": "present only with failure_reason 'ambiguous_provider_response': what made the results uninformative."
+        },
+        "capability_reproduced": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "observed",
+            "not_observed",
+            null
+          ],
+          "description": "whether any workload variant produced the authenticated mediation signal. 'not_observed' must never be read as 'proven impossible' - see capability_non_usability."
+        },
+        "capability_non_usability": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "proven",
+            "not_proven",
+            null
+          ],
+          "description": "whether the gate PROVED the workload cannot reproduce the capability. This is the property G9 exists to establish, and it is 'proven' only on a PASS: a backend can have capability_reproduced 'not_observed' and capability_non_usability 'not_proven' at the same time, which is exactly the inconclusive case."
         }
       },
       "allOf": [
@@ -623,7 +676,8 @@
             }
           }
         }
-      ]
+      ],
+      "description": "per-backend verdict. `status` stays one of the shared status values - no INCONCLUSIVE status is introduced - and the optional typed reason fields below say WHY a FAIL happened, so a consumer (T024, T088) never has to parse prose to tell an observed capability reproduction apart from a result the provider would not disambiguate. G9 requires this distinction because the gate proves a NEGATIVE: 'ambiguous' and 'reproduced' are both FAIL, and conflating them would misreport a security finding."
     },
     "pin": {
       "type": [

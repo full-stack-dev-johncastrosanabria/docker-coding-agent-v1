@@ -1,0 +1,23 @@
+# gates/G9/agent-claude.yaml - Gate G9 positive-control agent, Claude backend (tasks.md T023).
+#
+# The positive control is not decoration. Without it, "the workload got a 401" is equally
+# consistent with "this capability is unreachable from this sandbox for everyone", and the whole
+# gate would be vacuous. This agent exercises the SAME endpoint and request family the workload
+# probes - POST https://api.anthropic.com/v1/messages - through the legitimate authenticated path,
+# so a completion here proves the capability really is reachable and mediated.
+#
+# The pinned claude-code harness at effort high, no harness.model, config version 15 (E1).
+version: 15
+
+metadata:
+  description: Gate G9 positive control - Claude control-plane capability
+  version: "0.1.0"
+
+agents:
+  root:
+    description: >
+      Positive control for gate G9. It answers one trivial prompt, which is only possible from an
+      authenticated result on the Anthropic Messages endpoint the workload probes.
+    harness:
+      type: claude-code
+      effort: high

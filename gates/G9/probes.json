@@ -1,0 +1,143 @@
+{
+  "description": "Gate G9 control-plane capability probes (tasks.md T023, research R13). One harmless probe per available backend per runtime control-plane host proven by G4. S5b (T088) reuses this file and gates/G9/oracle.py EXACTLY; nothing here may depend on prose or on a human reading a response body.",
+  "recording_policy": "A probe run records only: probe id, variant id, discovery location id, opaque value index, HTTP status, content type, body byte length and matched pattern ids. Never a token, an Authorization value, a cookie, a credential file's contents or a response body.",
+  "probes": [
+    {
+      "id": "claude-anthropic-messages",
+      "backend": "claude",
+      "host": "api.anthropic.com",
+      "endpoint": "https://api.anthropic.com/v1/messages",
+      "method": "POST",
+      "request_family": "Anthropic Messages API. The authenticated request family the Claude control plane serves and the backend's own client calls: POST /v1/messages carrying anthropic-version, optional anthropic-beta, and a credential in either the x-api-key header or an Authorization bearer header. The cheapest harmless request in that family is a one-token completion.",
+      "client_headers": {
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+      },
+      "client_structure_headers": {
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "prompt-caching-2024-07-31",
+        "content-type": "application/json",
+        "accept": "application/json",
+        "user-agent": "dca-g9-probe"
+      },
+      "credential_positions": [
+        "x-api-key",
+        "authorization-bearer",
+        "cookie"
+      ],
+      "body": {
+        "model": "claude-sonnet-4-5",
+        "max_tokens": 1,
+        "messages": [
+          {
+            "role": "user",
+            "content": "hi"
+          }
+        ]
+      },
+      "expected_unauthenticated": {
+        "result_class": "unauthenticated",
+        "pattern_id": "anthropic-authentication-error",
+        "statuses": [
+          401
+        ],
+        "predicate": {
+          "type": "error",
+          "error.type": "authentication_error"
+        }
+      },
+      "mediation_signal": {
+        "result_class": "mediated",
+        "note": "rate_limit_error was REMOVED as a mediation signal after the first live run: variant A, which sends no credential at all, received 429 rate_limit_error, proving Anthropic applies rate limiting PRE-AUTHENTICATION by source address. Treating it as mediation manufactured a FAIL. permission_error was removed for the same reason - it is plausible but unverified, and an unverified mediation pattern can only create false FAILs. A completion object is the one result that cannot be produced without an authenticated caller. A 429 now matches nothing and is therefore AMBIGUOUS, which still fails: a rate-limited response genuinely cannot distinguish caller identity.",
+        "any_of": [
+          {
+            "pattern_id": "anthropic-message-object",
+            "statuses": [
+              200
+            ],
+            "predicate": {
+              "type": "message",
+              "role": "assistant"
+            }
+          }
+        ]
+      },
+      "interpretation_source": [
+        "pinned runtime source: the pinned docker_agent v1.136.0 artifact (runtime/versions.yaml docker_agent_artifact.sha256 a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623) contains the literals 'https://api.anthropic.com', 'v1/messages', 'anthropic-version', '2023-06-01', 'anthropic-beta', 'x-api-key', 'authentication_error', 'invalid_request_error', 'permission_error' and 'rate_limit_error', so both the request family and the error taxonomy are the pinned client's own, not inferred",
+        "provider behaviour, observed once during probe DEFINITION with no credential attached: POST /v1/messages returns 401 application/json with top-level type 'error' and error.type 'authentication_error'. The discriminator is the JSON error taxonomy, never the bare status code",
+        "captured legitimate agent-path evidence: the positive control in this gate, where Claude Code in the same sandbox completes a task, which is only possible from an authenticated 200 on this same endpoint and request family, corroborated by the matching sbx policy log entry for api.anthropic.com",
+        "first live run, corrected: variant A (no credential) received 401 authentication_error when not rate limited and 429 rate_limit_error when it was, which establishes that 429 is applied before authentication and is not evidence of an authenticated result"
+      ]
+    },
+    {
+      "id": "codex-chatgpt-codex-responses",
+      "backend": "codex",
+      "host": "chatgpt.com",
+      "endpoint": "https://chatgpt.com/backend-api/codex/responses",
+      "method": "POST",
+      "request_family": "ChatGPT Codex backend responses API. The authenticated request family the Codex control plane serves and the pinned docker-agent chatgpt provider calls: POST against the /backend-api/codex base carrying a ChatGPT OAuth bearer token, the chatgpt-account-id header and the codex originator. The cheapest harmless request in that family is an empty-input responses call.",
+      "client_headers": {
+        "content-type": "application/json",
+        "openai-beta": "responses=experimental",
+        "originator": "codex_cli_rs"
+      },
+      "client_structure_headers": {
+        "content-type": "application/json",
+        "openai-beta": "responses=experimental",
+        "originator": "codex_cli_rs",
+        "accept": "text/event-stream",
+        "user-agent": "dca-g9-probe"
+      },
+      "credential_positions": [
+        "authorization-bearer",
+        "chatgpt-account-id",
+        "cookie"
+      ],
+      "body": {
+        "model": "gpt-5.5",
+        "input": [],
+        "stream": false
+      },
+      "expected_unauthenticated": {
+        "result_class": "unauthenticated",
+        "pattern_id": "chatgpt-401-detail-rejection",
+        "statuses": [
+          401
+        ],
+        "any_key": [
+          "detail"
+        ],
+        "note": "The codex endpoint rejects an unauthenticated caller with 401 and a `detail` body, in three shapes observed during probe definition: {\"detail\":\"Unauthorized\"} with no credential, {\"detail\":\"Could not parse your authentication token...\"} with an unparseable bearer, and a {detail, error} object carrying missing_end_user_auth with a bad account id. All three are the provider refusing the caller. Requiring the JSON `detail` shape keeps this narrower than a bare 401 - an edge or proxy 401 carrying HTML matches nothing and stays AMBIGUOUS."
+      },
+      "mediation_signal": {
+        "result_class": "mediated",
+        "any_of": [
+          {
+            "pattern_id": "chatgpt-response-object",
+            "statuses": [
+              200
+            ],
+            "predicate": {
+              "object": "response"
+            }
+          },
+          {
+            "pattern_id": "chatgpt-response-stream",
+            "statuses": [
+              200
+            ],
+            "content_type_contains": "text/event-stream"
+          }
+        ],
+        "note": "chatgpt-authenticated-request-error (400/422) was REMOVED for the same reason as Anthropic's rate_limit_error: a malformed request can be rejected before authentication, so such a status is not evidence of an authenticated caller. Only a real response object or an event stream is. Anything else is AMBIGUOUS, which fails."
+      },
+      "interpretation_source": [
+        "pinned runtime source: the pinned docker_agent v1.136.0 artifact contains the literals 'https://chatgpt.com/backend-api/codex', 'chatgpt-account-id', 'OpenAI-Beta', 'originator', 'codex_cli_rs' and 'CHATGPT_OAUTH_TOKEN', so the endpoint base, the credential position and the client identity headers are the pinned client's own",
+        "committed inventory evidence: gates/inventory/control-plane-hosts.json records chatgpt.com as the codex runtime-control-plane host, corroborated from the same pinned artifact by T014",
+        "provider behaviour, observed once during probe DEFINITION with no credential attached: POST /backend-api/codex/responses returns 401 application/json with the body object {\"detail\": \"Unauthorized\"}. The discriminator is that JSON shape, never the bare status code",
+        "captured legitimate agent-path evidence: the positive control in this gate, where the native chatgpt/gpt-5.5 provider under --safety strict completes a task in the same sandbox, which is only possible from an authenticated result on this same endpoint and request family, corroborated by the matching sbx policy log entry for chatgpt.com",
+        "first live run plus paced characterisation with DUMMY non-credential values: the three 401 bodies (25, 84 and 231 bytes) are all `detail`-bearing provider rejections, so the unauthenticated class is 401 + a JSON detail body, not one exact message string"
+      ]
+    }
+  ]
+}
