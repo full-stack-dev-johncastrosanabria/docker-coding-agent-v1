@@ -1,0 +1,22 @@
+# gates/G11/agent-claude.yaml - Gate G11 part A probe agent, Claude backend (tasks.md T020).
+#
+# The same shape the accepted Claude gates use: the pinned Docker Agent `claude-code` harness at
+# effort high with no `harness.model`, so the authenticated CLI default is used (research R1).
+# Config version 15 is what V1 pins (E1).
+#
+# No `instruction` is set: for harness agents Docker Agent does not forward injected instructions
+# to the harness (E4), so the whole task arrives as the run's message argument.
+version: 15
+
+metadata:
+  description: Gate G11-A probe agent - Claude event-stream integrity
+  version: "0.1.0"
+
+agents:
+  root:
+    description: >
+      Event-stream probe for gate G11 part A. It performs a fixed, known number of real tool calls
+      so the prototype parser can be checked against a ground truth established before parsing.
+    harness:
+      type: claude-code
+      effort: high

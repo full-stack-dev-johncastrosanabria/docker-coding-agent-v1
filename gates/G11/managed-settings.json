@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(touch /tmp/dca-g11-*)",
+      "Bash(cat /tmp/dca-g11-spoof.txt)"
+    ]
+  }
+}

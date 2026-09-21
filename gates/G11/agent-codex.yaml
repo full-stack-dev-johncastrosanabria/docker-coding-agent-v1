@@ -1,0 +1,39 @@
+# gates/G11/agent-codex.yaml - Gate G11 part A probe agent, Codex backend (tasks.md T020).
+#
+# The native Docker Agent chatgpt provider at gpt-5.5 - the model accepted G3 proved the backend
+# actually accepts for a ChatGPT-account sign-in, NOT the gpt-5.6 the provider lists and the
+# backend rejects. Config version 15 is what V1 pins (E1).
+#
+# One `filesystem` toolset, because that is the toolset G3 already proved produces real typed
+# tool_call events on this backend; G11-A needs genuine tool calls, not a new toolset to debug.
+#
+# `safety: strict` here is only the session default, so every invocation also passes
+# `--safety strict` on the command line and the evidence records that it did.
+version: 15
+
+metadata:
+  description: Gate G11-A probe agent - Codex event-stream integrity
+  version: "0.1.0"
+
+agents:
+  root:
+    description: >
+      Event-stream probe for gate G11 part A. It performs a fixed, known number of real file tool
+      calls so the prototype parser can be checked against a ground truth established before
+      parsing.
+    model: chatgpt/gpt-5.5
+    safety: strict
+    toolsets:
+      - type: filesystem
+    # Under `--safety strict` the native pipeline is fail-closed: G3 proved a tool call with no
+    # hook decision is REJECTED, so a strict agent with no hook dispatches zero tool calls and
+    # criterion 1 cannot be evaluated at all. This is G3 case A's proven explicit allow, and
+    # `on_error: block` keeps a hook that cannot execute denying rather than admitting the call.
+    hooks:
+      pre_tool_use:
+        - matcher: "*"
+          hooks:
+            - type: command
+              name: dca-g11-allow
+              command: /tmp/dca-g11-hook
+              on_error: block

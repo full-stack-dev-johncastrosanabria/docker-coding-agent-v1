@@ -1,0 +1,153 @@
+{
+  "gate": "G11",
+  "status": "PARTIAL",
+  "run_at": "2026-09-21T04:07:30Z",
+  "versions": {
+    "sbx": "v0.43.0"
+  },
+  "provenance": {
+    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+  },
+  "criteria": [
+    {
+      "id": "G11.0a",
+      "description": "sbx client and server still match the pinned exact version and the server is running",
+      "result": "PASS",
+      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 running"
+    },
+    {
+      "id": "G11.0b",
+      "description": "the SSH-agent baseline still refuses nothing, and SSH_AUTH_SOCK is removed from every sbx call",
+      "result": "PASS",
+      "evidence_ref": "refusals none, SSH_AUTH_SOCK in the sbx environment: removed"
+    },
+    {
+      "id": "G11.0c",
+      "description": "the global network policy is exactly the G0 bootstrap deny-all rule, which this gate evaluates rather than trusts",
+      "result": "PASS",
+      "evidence_ref": "1 network rule(s): ['default-deny-all']"
+    },
+    {
+      "id": "G11.0d",
+      "description": "no sandbox exists before this gate creates one, so the fingerprint is read from a clean global state and nothing unrelated is running alongside it",
+      "result": "PASS",
+      "evidence_ref": "sbx ls --json: []"
+    },
+    {
+      "id": "G11.0e",
+      "description": "the live global network-policy fingerprint still equals the one the accepted G4 evidence recorded, and that evidence is a current PASS: this gate proves its property under the policy G4 actually verified, not a drifted one",
+      "result": "PASS",
+      "evidence_ref": "network_policy_fingerprint sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697, matching accepted G4"
+    },
+    {
+      "id": "G11.fingerprint",
+      "description": "the global network-policy fingerprint is unchanged and the governance status is observed as a typed boolean before and after: this gate added no global rule and changed no global setting",
+      "result": "PASS",
+      "evidence_ref": "fingerprint sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697 -> sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697; governance.active False -> False"
+    },
+    {
+      "id": "G11.clean",
+      "description": "every sandbox this gate created was removed by name, none remains, and the global network baseline is intact afterwards",
+      "result": "PASS",
+      "evidence_ref": "removals [('dca-g11-claude', '0'), ('dca-g11-codex', '0')], remaining [], global network rules after: ['default-deny-all']"
+    }
+  ],
+  "backends": {
+    "claude": {
+      "status": "PASS",
+      "criteria": [
+        {
+          "id": "G11.base",
+          "description": "every sandbox in this gate came from the exact pinned sandbox_bases.claude base: the reference sbx resolved, the cached template's repository, tag and image id, and the pinned digest all agree; no base was discovered or substituted",
+          "result": "PASS",
+          "evidence_ref": "pinned docker/sandbox-templates:claude-code-docker sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2; sbx resolved docker/sandbox-templates:claude-code-docker; cached template docker.io/docker/sandbox-templates:claude-code-docker id 94670d5b2a24"
+        },
+        {
+          "id": "G11.policy",
+          "description": "every sandbox ran under the accepted G4 claude/trusted network policy: the allow set is the one G4 proved, and the built-in kit's non-permitted hosts are neutralized by explicit sandbox-scoped denies",
+          "result": "PASS",
+          "evidence_ref": "12 allow (api.anthropic.com, registry.npmjs.org, pypi.org, files.pythonhosted.org, proxy.golang.org, crates.io, static.crates.io, github.com, codeload.github.com, objects.githubusercontent.com, code.claude.com, docs.claude.com); 5 explicit deny (bridge.claudeusercontent.com, claude.com, downloads.claude.ai, mcp-proxy.anthropic.com, platform.claude.com)"
+        },
+        {
+          "id": "G11.invocation.claude",
+          "description": "every run on this backend was non-interactive against the pinned docker-agent",
+          "result": "PASS",
+          "evidence_ref": "stdin not a TTY, pinned docker-agent v1.136.0"
+        },
+        {
+          "id": "G11.c1.claude",
+          "description": "criterion 1: 3 genuine tool calls produce exactly 3 countable outer tool_call events - not N-1, not N+1, and no id counted twice. The ground truth is the markers the calls left in the VM filesystem, read before anything was parsed",
+          "result": "PASS",
+          "evidence_ref": "3 markers in the VM, parser counted 3 tool_call events over 3 distinct ids, stream complete"
+        },
+        {
+          "id": "G11.c2.claude",
+          "description": "criterion 2: a genuine tool call printed lines that imitate real Docker Agent events. The imitation is present in the capture as tool OUTPUT, the genuine call is counted once, and the imitation adds exactly zero outer events - tool output is payload and can never become an event",
+          "result": "PASS",
+          "evidence_ref": "the imitation is present in the capture and added 0 outer events; the genuine call was counted once (1)"
+        },
+        {
+          "id": "G11.c3.claude",
+          "description": "criterion 3: host-simulated malformed and truncated streams, derived deterministically from this backend's real capture, are classified fail-closed. Nothing is repaired, and a valid prefix followed by a damaged or missing tail is never accepted as success",
+          "result": "PASS",
+          "evidence_ref": "malformed -> malformed, truncated -> truncated; neither is a successful stream"
+        },
+        {
+          "id": "G11.c4.claude",
+          "description": "criterion 4: Docker Agent was killed abruptly mid-run from the host-side procedure. The run is classified abnormal and can never read as success - the process outcome is decisive and a stream that happens to look finished cannot overrule it. This is abnormal TERMINATION, not the host limit enforcement T073 adds",
+          "result": "PASS",
+          "evidence_ref": "agent_exit=137 -> abnormal: the agent exited 137 (killed by signal 9), and its stream was truncated; the partial stream classified truncated"
+        }
+      ]
+    },
+    "codex": {
+      "status": "PASS",
+      "criteria": [
+        {
+          "id": "G11.base",
+          "description": "every sandbox in this gate came from the exact pinned sandbox_bases.codex base: the reference sbx resolved, the cached template's repository, tag and image id, and the pinned digest all agree; no base was discovered or substituted",
+          "result": "PASS",
+          "evidence_ref": "pinned docker/sandbox-templates:docker-agent-docker sha256:6a1b26c279bb74321e8cf9599e8d19732a3354814a6ca446a5251702c58ea90b; sbx resolved docker/sandbox-templates:docker-agent-docker; cached template docker.io/docker/sandbox-templates:docker-agent-docker id 6a1b26c279bb"
+        },
+        {
+          "id": "G11.policy",
+          "description": "every sandbox ran under the accepted G4 codex/trusted network policy: the allow set is the one G4 proved, and nothing was added for this gate's convenience",
+          "result": "PASS",
+          "evidence_ref": "12 allow (chatgpt.com, registry.npmjs.org, pypi.org, files.pythonhosted.org, proxy.golang.org, crates.io, static.crates.io, github.com, codeload.github.com, objects.githubusercontent.com, code.claude.com, docs.claude.com); no explicit deny"
+        },
+        {
+          "id": "G11.invocation.codex",
+          "description": "every run on this backend was non-interactive against the pinned docker-agent, with --safety strict on the command line rather than relying on a config default",
+          "result": "PASS",
+          "evidence_ref": "stdin not a TTY, pinned docker-agent v1.136.0, --safety strict on every invocation"
+        },
+        {
+          "id": "G11.c1.codex",
+          "description": "criterion 1: 3 genuine tool calls produce exactly 3 countable outer tool_call events - not N-1, not N+1, and no id counted twice. The ground truth is the markers the calls left in the VM filesystem, read before anything was parsed",
+          "result": "PASS",
+          "evidence_ref": "3 markers in the VM, parser counted 3 tool_call events over 3 distinct ids, stream complete"
+        },
+        {
+          "id": "G11.c2.codex",
+          "description": "criterion 2: a genuine tool call printed lines that imitate real Docker Agent events. The imitation is present in the capture as tool OUTPUT, the genuine call is counted once, and the imitation adds exactly zero outer events - tool output is payload and can never become an event",
+          "result": "PASS",
+          "evidence_ref": "the imitation is present in the capture and added 0 outer events; the genuine call was counted once (1)"
+        },
+        {
+          "id": "G11.c3.codex",
+          "description": "criterion 3: host-simulated malformed and truncated streams, derived deterministically from this backend's real capture, are classified fail-closed. Nothing is repaired, and a valid prefix followed by a damaged or missing tail is never accepted as success",
+          "result": "PASS",
+          "evidence_ref": "malformed -> malformed, truncated -> truncated; neither is a successful stream"
+        },
+        {
+          "id": "G11.c4.codex",
+          "description": "criterion 4: Docker Agent was killed abruptly mid-run from the host-side procedure. The run is classified abnormal and can never read as success - the process outcome is decisive and a stream that happens to look finished cannot overrule it. This is abnormal TERMINATION, not the host limit enforcement T073 adds",
+          "result": "PASS",
+          "evidence_ref": "agent_exit=137 -> abnormal: the agent exited 137 (killed by signal 9), and its stream was truncated; the partial stream classified truncated"
+        }
+      ]
+    }
+  },
+  "notes": "G11 PART A only (tasks.md T020): event-stream integrity for every available backend. The gate status is PARTIAL by construction and stays PARTIAL until T073 proves criteria 5 host step-limit enforcement, 6 retry-cycle enforcement, 7 wall-clock / host limit stop semantics, 8 FR-023a success-at-limit behavior; nothing here reports on them, and no host-side limit is implemented or claimed. The prototype parser is gates/G11/probe_parser.py, which T040 will build src/dca/events.py from; it is gate-local and deliberately supports only the pinned docker_agent v1.136.0. A tool call is counted from the typed outer event 'tool_call' and never from text that looks like one. That matters because partial_tool_call, tool_call_response, hook_blocked and tool_call_confirmation all carry a tool_call object with the SAME key set as a real tool_call event, so only the type string separates them: partial_tool_call repeats the id of the call it is streaming, and G3's approval cases recorded 0 tool_call with 1 tool_call_response each because a hook denied the call - counting either would count attempts and deltas as dispatched calls. The recognized set is the 19 outer types the pinned runtime was actually OBSERVED emitting across this repository's real captures; it is not guessed from documentation and not read out of the binary, whose Go string table is grouped by length and interleaves unrelated constants. An unrecognized type fails closed rather than being tolerated. Criterion 1's ground truth is the markers the tool calls left in the VM filesystem, read before any parsing, so the stream is never checked against itself. Criterion 3 is derived deterministically on the host from each backend's real capture, because mutating stream bytes needs no model run. Captures under gates/G11/captures/<backend>/ are sanitized by redacting credential-shaped STRING VALUES only, leaving every type, key and nesting level where the runtime put it; a textual redaction would rewrite object boundaries and make the capture parse as malformed, which would make the gate a test of its own sanitizer. Each backend used its own exact pinned base and its own accepted G4 cell; Codex additionally ran --safety strict on every invocation and carried only the minimal chatgpt-auth.json the accepted G2 decision selected, never the full ~/.config/cagent. One backend failing part A never fails the other. Every rule this gate added carried --sandbox; the global fingerprint is captured with zero sandboxes before and after; sbx policy init, sbx reset and sbx rm --all are never called; sandboxes were created and removed one at a time by name.",
+  "network_policy_fingerprint": "sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697"
+}
