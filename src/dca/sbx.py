@@ -91,7 +91,27 @@ class Sbx:
         return self._json("policy", "ls", "--json")
 
     def settings(self):
-        return self._json("settings", "ls", "--json")
+        """`{key: value}` for every global sbx setting.
+
+        `sbx settings ls --json` answers with a LIST of setting objects, each carrying `key` and
+        `value` among its metadata. The launcher asks questions by key, so the list is turned into
+        a mapping here - once, next to the command that produces it - rather than in the caller.
+        A shape this does not recognise raises instead of returning an empty mapping: precondition
+        5 must refuse an unreadable SSH setting, never read it as "no agent".
+        """
+        document = self._json("settings", "ls", "--json")
+        if isinstance(document, dict):
+            return document
+        if not isinstance(document, list):
+            raise SbxError([self.binary, "settings", "ls", "--json"], 0,
+                           f"settings is a {type(document).__name__}, not a list of settings")
+        mapping = {}
+        for entry in document:
+            if not isinstance(entry, dict) or "key" not in entry:
+                raise SbxError([self.binary, "settings", "ls", "--json"], 0,
+                               "a settings entry has no key")
+            mapping[entry["key"]] = entry.get("value")
+        return mapping
 
     def templates(self):
         return self._json("template", "ls", "--json")

@@ -113,6 +113,30 @@ class TestSbxKitPayloadPath(unittest.TestCase):
             self.assertIn("/home/agent/dca-kit/opt/dca/bin/docker-agent",
                           (destination / "spec.yaml").read_text())
 
+    def test_00a_the_wrappers_name_the_install_path_not_the_staging_path(self):
+        """The kit is STAGED on the host but RUNS at /opt/dca in the VM.
+
+        A wrapper rendered against the staging directory names a file that does not exist in the
+        sandbox, and because the gate wrapper maps every non-zero status to 2, the gate would then
+        DENY every tool call instead of deciding any of them - a total loss of mediation that no
+        static check of the staged tree would notice.
+        """
+        with tempfile.TemporaryDirectory(prefix="dca-kit-wrapper-") as temporary:
+            destination = Path(temporary) / "kit"
+            artifact = Path(temporary) / "artifact"
+            artifact.write_bytes(b"sentinel")
+            # The pinned binary is not in the repository; its SHA-256 check has its own test.
+            with mock.patch.object(stage_module, "_stage_artifact", return_value=None):
+                stage_module.build_sbx_kit(destination, backends=["claude"], artifact=artifact)
+            payload = destination / "files/home/dca-kit/opt/dca"
+            for name, module in (("dca-gate", "policy_gate.py"),
+                                 ("dca-fingerprint", "fingerprint_hook.py")):
+                with self.subTest(wrapper=name):
+                    body = (payload / "bin" / name).read_text(encoding="utf-8")
+                    self.assertIn(f"/usr/bin/python3 -I /opt/dca/lib/dca/{module}", body)
+                    self.assertNotIn(str(destination), body)
+                    self.assertNotIn(temporary, body)
+
 
 # --- 1. the same actions policy, through the same gate ---------------------------------------
 

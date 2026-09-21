@@ -89,8 +89,14 @@ def main(argv):
 
     if command == "settings":
         record(argv, 0)
-        print(json.dumps(state.get("settings", {"ssh.agentForwardingEnabled": False,
-                                                "ssh.agentSocketPath": ""})))
+        settings = state.get("settings", {"ssh.agentForwardingEnabled": False,
+                                          "ssh.agentSocketPath": ""})
+        # The real `sbx settings ls --json` answers with a LIST of setting objects, not a mapping.
+        # The fake writes the same shape so a test cannot pass on a shape production never sees.
+        if isinstance(settings, dict):
+            settings = [{"key": key, "value": value, "source": "default"}
+                        for key, value in sorted(settings.items())]
+        print(json.dumps(settings))
         return 0
 
     if command == "template":

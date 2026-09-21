@@ -250,6 +250,31 @@ class TestEnvironmentPreconditions(LauncherCase):
         self.write_state()
         self.assertIn("cannot be read as false", self.refusal())
 
+    def test_26a_settings_are_read_from_the_real_list_shape(self):
+        """`sbx settings ls --json` answers with a LIST, and the launcher asks by key.
+
+        The fake used to answer with a mapping, which no build of sbx produces, so precondition 5
+        passed here and raised AttributeError against the real binary. The shape is pinned on both
+        sides now: the fake emits the list, and `Sbx.settings()` is what turns it into a mapping.
+        """
+        self.state["settings"] = [
+            {"key": "ssh.agentForwardingEnabled", "value": True, "type": "bool",
+             "source": "user"},
+            {"key": "ssh.agentSocketPath", "value": "", "type": "string", "source": "default"},
+        ]
+        self.write_state()
+        self.assertIn("ssh.agentForwardingEnabled", self.refusal())
+
+        self.state["settings"] = [
+            {"key": "ssh.agentForwardingEnabled", "value": False, "type": "bool",
+             "source": "default"},
+            {"key": "ssh.agentSocketPath", "value": "", "type": "string", "source": "default"},
+        ]
+        self.write_state()
+        self.assertEqual(self.sbx.settings(),
+                         {"ssh.agentForwardingEnabled": False, "ssh.agentSocketPath": ""})
+        self.make().preconditions()
+
     def test_27_every_sbx_call_drops_ssh_auth_sock(self):
         os.environ["SSH_AUTH_SOCK"] = "/tmp/should-not-reach-the-vm"
         try:

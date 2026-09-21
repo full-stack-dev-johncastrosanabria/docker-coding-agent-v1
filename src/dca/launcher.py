@@ -609,7 +609,9 @@ class Launcher:
             f"sudo install -m 0444 /tmp/dca-run/run.json {RUN_DIR}/run.json\n"
             f"sudo install -m 0444 /tmp/dca-run/grants.json {RUN_DIR}/grants.json\n"
             f"sudo install -m 0444 /tmp/dca-run/task.txt {RUN_DIR}/task.txt\n"
-            "rm -rf /tmp/dca-run\n"))
+            # `sbx cp` delivers root-owned files and /tmp is sticky, so the workload user cannot
+            # unlink its own staging directory. The path is the launcher's, fixed and literal.
+            "sudo rm -rf /tmp/dca-run\n"))
 
     def _task_text(self):
         request = self.request
@@ -664,7 +666,7 @@ class Launcher:
             "git config user.name 'docker coding agent'\n"
             f"test \"$(git rev-parse HEAD)\" = {self.source_commit}\n"
             f"git checkout --quiet -b {_shell_quote(branch)}\n"
-            "rm -f /tmp/dca-src.bundle\n"))
+            "sudo rm -f /tmp/dca-src.bundle\n"))
         status, out, err, _ = self.sbx.execute(self.sandbox, (
             f"/usr/bin/python3 -I {KIT_DIR}/lib/dca/kit_preflight.py {KIT_DIR} "
             f"{'/home/agent/.config/cagent/config.yaml' if self.request.backend == 'codex' else '/dev/null'}"

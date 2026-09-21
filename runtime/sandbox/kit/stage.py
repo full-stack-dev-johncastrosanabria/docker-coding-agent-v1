@@ -201,14 +201,25 @@ def _stage_artifact(kit_dir, artifact):
 
 
 def stage(prefix, python=PRODUCTION_PYTHON, skills_source=None, policy_source=POLICY_SRC,
-          backends=None, artifact=None, eligibility_path=ELIGIBILITY):
-    """Lay out `<prefix>/opt/dca/...`. Returns the kit directory."""
+          backends=None, artifact=None, eligibility_path=ELIGIBILITY, install_prefix=None):
+    """Lay out `<prefix>/opt/dca/...`. Returns the kit directory.
+
+    `prefix` is where the files are WRITTEN. `install_prefix` is where they will RUN, and it is
+    what the wrappers are rendered against. The two differ whenever the kit is built on the host
+    for delivery into a sandbox: `build_sbx_kit` stages under a temporary directory but the
+    payload is installed at `/opt/dca` in the VM, so a wrapper carrying the staging path would
+    name a file that does not exist there - and because the wrapper maps every non-zero status to
+    2, the gate would then DENY every tool call instead of deciding any of them. Tests that stage
+    under a temporary prefix and run the gate from there leave it unset and keep the old meaning.
+    """
     # realpath, not abspath: the gate derives its own kit and run-state paths with
     # os.path.realpath(__file__), so a symlinked prefix would otherwise leave the wrapper pointing
     # at one path while the gate resolved to another and looked for /run/dca somewhere else.
     prefix = os.path.realpath(str(prefix))
+    runtime_prefix = prefix if install_prefix is None else str(install_prefix)
     # The wrapper joins {PREFIX} with "opt/dca/...", so it must end in a separator exactly once.
-    rendered_prefix = prefix if prefix.endswith(os.sep) else prefix + os.sep
+    rendered_prefix = runtime_prefix if runtime_prefix.endswith(os.sep) \
+        else runtime_prefix + os.sep
 
     kit_dir = os.path.join(prefix, "opt", "dca")
     lib_dir = os.path.join(kit_dir, "lib", "dca")
@@ -398,8 +409,11 @@ def build_sbx_kit(destination, backends=None, artifact=None, skills_source=None,
 
     if backends is None:
         backends = available_backends(eligibility_path)
+    # The payload is staged here but INSTALLED at /opt/dca in the VM, so the wrappers are
+    # rendered against the production prefix, never against this temporary staging path.
     stage(payload_root, skills_source=skills_source or os.path.join(ROOT, "runtime", "skills"),
-          backends=backends, artifact=artifact, eligibility_path=eligibility_path)
+          backends=backends, artifact=artifact, eligibility_path=eligibility_path,
+          install_prefix=PRODUCTION_PREFIX)
 
     with open(VERSIONS, encoding="utf-8") as handle:
         expected = json.load(handle)["docker_agent_artifact"]["sha256"]
