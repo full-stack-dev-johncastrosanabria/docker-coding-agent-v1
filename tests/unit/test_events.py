@@ -71,6 +71,26 @@ def usage(session, input_tokens, output_tokens, agent="root"):
                  usage={"input_tokens": input_tokens, "output_tokens": output_tokens})
 
 
+def partials(identifier, name, raw, pieces=3):
+    """One tool call's arguments STREAMED, the way the Claude backend reports them.
+
+    Each fragment is a slice of the JSON text, linked to the dispatched call by the same id.
+    """
+    size = max(1, len(raw) // pieces)
+    chunks = [raw[i:i + size] for i in range(0, len(raw), size)]
+    return [event("partial_tool_call",
+                  tool_call={"id": identifier, "type": "function",
+                             "function": {"name": name, "arguments": chunk}})
+            for chunk in chunks]
+
+
+def streamed_call(identifier, name, arguments):
+    """The Claude shape: fragments, then a dispatched tool_call carrying NO arguments."""
+    return partials(identifier, name, json.dumps(arguments)) + [
+        event("tool_call", tool_call={"id": identifier, "type": "function",
+                                      "function": {"name": name, "arguments": None}})]
+
+
 def stream(*lines, terminal=True):
     body = list(lines)
     if terminal:
@@ -375,6 +395,59 @@ class TestAccounting(unittest.TestCase):
             verification_commands=["make test"])
         self.assertEqual(result.verification_runs, 2)
         self.assertEqual(result.retries, 1)
+
+    def test_52a_streamed_arguments_are_reassembled_from_partial_tool_call(self):
+        """The Claude backend dispatches with `arguments: null` after streaming them.
+
+        The complete text exists only in the preceding `partial_tool_call` fragments. A host that
+        read the dispatched event alone saw no command at all, so a declared verification command
+        was never recognised - `verification_runs` and `retries` stayed at zero and the retry limit
+        could never fire (FR-023, G11 criterion 6).
+        """
+        result = events.analyze(stream(
+            *streamed_call("v1", "Bash", {"command": "sh check.sh"}),
+            response("v1", "check failed\nexit status 1"),
+            *streamed_call("e1", "Write", {"file_path": "/workspace/check.sh",
+                                           "content": "exit 0\n"}),
+            response("e1", "File written successfully"),
+            *streamed_call("v2", "Bash", {"command": "sh check.sh"}),
+            response("v2", "ok")), exit_status=0,
+            verification_commands=["sh check.sh"])
+        self.assertEqual(result.verification_runs, 2)
+        self.assertEqual(result.retries, 1)
+        self.assertEqual([r.command for r in result.tool_calls if r.name == "Bash"],
+                         ["sh check.sh", "sh check.sh"])
+        self.assertEqual([r.paths for r in result.tool_calls if r.name == "Write"],
+                         [["/workspace/check.sh"]])
+
+    def test_52b_the_streaming_host_counter_reassembles_them_too(self):
+        """`StreamAccountant` is what actually stops a live run, so it needs the same reading."""
+        accountant = events.StreamAccountant(["sh check.sh"])
+        for line in stream(
+                *streamed_call("v1", "Bash", {"command": "sh check.sh"}),
+                response("v1", "check failed\nexit status 1"),
+                *streamed_call("e1", "Write", {"file_path": "/workspace/check.sh",
+                                               "content": "exit 0\n"}),
+                response("e1", "written"),
+                *streamed_call("v2", "Bash", {"command": "sh check.sh"}),
+                response("v2", "check failed\nexit status 1")).splitlines():
+            accountant.feed(line)
+        self.assertEqual(accountant.counters()["verification_runs"], 2)
+        self.assertEqual(accountant.counters()["retries"], 1)
+        self.assertEqual(accountant.limit_reached({"retries": 1}), "retries")
+
+    def test_52c_fragments_that_do_not_form_an_object_stay_conservative(self):
+        """Unjoinable fragments must read exactly like a call that carried no arguments."""
+        result = events.analyze(stream(
+            event("partial_tool_call",
+                  tool_call={"id": "v1", "type": "function",
+                             "function": {"name": "Bash", "arguments": '{"command": "sh ch'}}),
+            event("tool_call", tool_call={"id": "v1", "type": "function",
+                                          "function": {"name": "Bash", "arguments": None}})),
+            exit_status=0, verification_commands=["sh check.sh"])
+        self.assertEqual(result.verification_runs, 0)
+        self.assertIsNone(result.tool_calls[0].command)
+        self.assertTrue(result.tool_calls[0].mutation)
 
     def test_53_rerunning_a_check_without_changing_anything_is_not_a_retry(self):
         result = events.analyze(stream(

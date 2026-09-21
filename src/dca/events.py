@@ -94,6 +94,9 @@ TERMINAL_EVENT = "stream_stopped"
 #: not dispatched - but an attempted mutation still means the agent tried to change the workspace,
 #: which is what FR-001's ordering rule is about.
 ATTEMPT_EVENTS = frozenset({"tool_call", "hook_blocked", "tool_call_confirmation"})
+#: The event that carries a tool call's arguments one fragment at a time, before the
+#: dispatched `tool_call` itself arrives.
+PARTIAL_EVENT = "partial_tool_call"
 
 COMPLETE = "complete"
 HOST_TERMINATED = "host-terminated"
@@ -175,6 +178,49 @@ def _arguments(call):
     return decoded if isinstance(decoded, dict) else None
 
 
+class StreamedArguments:
+    """`partial_tool_call` fragments, reassembled per tool-call id.
+
+    THE CLAUDE BACKEND STREAMS A TOOL CALL'S ARGUMENTS AND THEN DISPATCHES IT WITH
+    `arguments: null`. The complete text exists only in the fragments, joined in arrival order and
+    linked to the dispatched call by the same `tool_call.id`. A host that read the `tool_call`
+    alone therefore saw no command and no paths for every streamed call - so a declared
+    verification command was never recognised, `verification_runs` and `retries` stayed at zero,
+    and the retry limit could not fire at all (FR-023, G11 criterion 6).
+
+    Fragments are accumulated, never trusted: text that does not join into a JSON object decodes
+    to None and every argument-dependent check falls back to its conservative answer, exactly as
+    it does for a call that carried no arguments in the first place.
+    """
+
+    def __init__(self):
+        self._fragments = {}
+
+    def feed(self, event):
+        call = event.get("tool_call")
+        if not isinstance(call, dict):
+            return
+        identifier = call.get("id")
+        function = call.get("function")
+        raw = function.get("arguments") if isinstance(function, dict) else None
+        if isinstance(identifier, str) and isinstance(raw, str) and raw:
+            self._fragments.setdefault(identifier, []).append(raw)
+
+    def decoded(self, call):
+        """The decoded arguments streamed for `call`, or None."""
+        identifier = call.get("id") if isinstance(call, dict) else None
+        if not isinstance(identifier, str):
+            return None
+        joined = "".join(self._fragments.get(identifier, ()))
+        if not joined.strip():
+            return None
+        try:
+            value = json.loads(joined)
+        except ValueError:
+            return None
+        return value if isinstance(value, dict) else None
+
+
 def _command_text(arguments):
     if not arguments:
         return None
@@ -226,7 +272,7 @@ def shell_is_read_only(command):
 class ToolCallRecord:
     """One attempted or dispatched tool call, with what the host could tell about it."""
 
-    def __init__(self, order, event, dispatched, scratch_dir):
+    def __init__(self, order, event, dispatched, scratch_dir, streamed=None):
         call = event.get("tool_call") or {}
         function = call.get("function") if isinstance(call.get("function"), dict) else {}
         self.order = order
@@ -236,7 +282,11 @@ class ToolCallRecord:
         self.name = function.get("name") or ""
         self.agent = event.get("agent_name")
         self.timestamp = event.get("timestamp")
+        # The dispatched event's own arguments first; the streamed fragments only when it carried
+        # none, so a backend that reports them inline is unaffected.
         self.arguments = _arguments(call)
+        if self.arguments is None and streamed is not None:
+            self.arguments = streamed.decoded(call)
         self.command = _command_text(self.arguments)
         self.paths = _target_paths(self.arguments)
         definition = event.get("tool_definition")
@@ -484,6 +534,7 @@ def analyze(text, exit_status=None, host_stop=None, sandbox_created=True,
     structural = []
     saw_terminal = False
     typed = []
+    streamed = StreamedArguments()
 
     for number, line in enumerate(lines, 1):
         try:
@@ -507,6 +558,8 @@ def analyze(text, exit_status=None, host_stop=None, sandbox_created=True,
         result.event_types[kind] = result.event_types.get(kind, 0) + 1
         typed.append(event)
 
+        if kind == PARTIAL_EVENT:
+            streamed.feed(event)
         if kind in ATTEMPT_EVENTS:
             dispatched = kind == TOOL_CALL_EVENT
             if dispatched:
@@ -519,7 +572,8 @@ def analyze(text, exit_status=None, host_stop=None, sandbox_created=True,
             call = event.get("tool_call")
             if not isinstance(call, dict):
                 continue
-            record = ToolCallRecord(len(result.tool_calls), event, dispatched, scratch_dir)
+            record = ToolCallRecord(len(result.tool_calls), event, dispatched, scratch_dir,
+                                    streamed=streamed)
             result.tool_calls.append(record)
             if dispatched:
                 result.steps += 1
@@ -767,6 +821,7 @@ class StreamAccountant:
         self.first_mutation = None
         self.context_record_at = None
         self._sessions = {}
+        self._streamed = StreamedArguments()
 
     def feed(self, line):
         """Read one raw stream line. Returns True when it changed a counter."""
@@ -780,8 +835,14 @@ class StreamAccountant:
         if not isinstance(event, dict):
             return False
         kind = event.get("type")
+        if kind == PARTIAL_EVENT:
+            # The fragments always precede the dispatched call, so they are complete by the time
+            # the record is built and the host counts the step.
+            self._streamed.feed(event)
+            return False
         if kind == TOOL_CALL_EVENT and not _valid_tool_call(event):
-            record = ToolCallRecord(len(self.tool_calls), event, True, self.scratch_dir)
+            record = ToolCallRecord(len(self.tool_calls), event, True, self.scratch_dir,
+                                    streamed=self._streamed)
             self.tool_calls.append(record)
             self.steps += 1
             if self.context_record_at is None and record.writes(CONTEXT_RECORD, self.scratch_dir):
@@ -793,7 +854,8 @@ class StreamAccountant:
         if kind in ATTEMPT_EVENTS and kind != TOOL_CALL_EVENT:
             call = event.get("tool_call")
             if isinstance(call, dict):
-                record = ToolCallRecord(len(self.tool_calls), event, False, self.scratch_dir)
+                record = ToolCallRecord(len(self.tool_calls), event, False, self.scratch_dir,
+                                        streamed=self._streamed)
                 self.tool_calls.append(record)
                 if self.first_mutation is None and record.mutation:
                     self.first_mutation = record.order
