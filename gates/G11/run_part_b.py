@@ -110,13 +110,36 @@ def read_json(path, default=None):
 # --- prerequisites ----------------------------------------------------------------------------
 
 
+#: The criteria part B owns. A re-run REPLACES them instead of appending, so a document that has
+#: been through part B twice reads exactly like one that has been through it once.
+PART_B_PREFIXES = ("G11.pre.", "G11.c5.", "G11.c6.", "G11.c7.", "G11.c8.")
+
+
+def part_a_status(entry):
+    """Part A's own verdict for one backend, read from PART A'S OWN CRITERIA.
+
+    Part B records its result in the same `status` field, so after one part-B run that field is
+    part B's last answer, not part A's. Reading it as the prerequisite made a FAILED part B
+    permanently block the very re-run that would fix it. Part A's criteria are still in the
+    document, untouched, and "every part A criterion passed" is exactly what part A's status
+    meant - so the verdict is recomputed from them instead of from a field part B overwrites,
+    which also keeps the evidence document's shape unchanged.
+    """
+    rows = [item for item in (entry.get("criteria") or [])
+            if not str(item.get("id", "")).startswith(PART_B_PREFIXES)]
+    if not rows:
+        return entry.get("status")
+    return PASS if all(item.get("result") == PASS for item in rows) else FAIL
+
+
 def prerequisites(document, backend, versions):
     """Every condition that must hold before this gate may run, as (name, ok, detail) rows."""
     rows = []
     part_a = read_json(EVIDENCE, {}) or {}
     backend_a = ((part_a.get("backends") or {}).get(backend) or {})
-    rows.append(("G11.partA", backend_a.get("status") == PASS,
-                 f"part A status for {backend}: {backend_a.get('status')!r}"))
+    observed = part_a_status(backend_a)
+    rows.append(("G11.partA", observed == PASS,
+                 f"part A status for {backend}: {observed!r}"))
 
     digest = (part_a.get("provenance") or {}).get("runtime_versions_digest")
     current = eligibility.canonical_digest(versions)
@@ -366,15 +389,19 @@ def main(argv=None):
     merged["part_b_run_at"] = now()
     for backend, outcome in sorted(backends.items()):
         entry = dict(((merged.get("backends") or {}).get(backend) or {}))
-        entry.setdefault("criteria", [])
-        entry["criteria"] = list(entry["criteria"]) + list(outcome.get("criteria") or [])
-        part_a_status = ((part_a.get("backends") or {}).get(backend) or {}).get("status")
-        if outcome["status"] == PASS and part_a_status == PASS:
+        # Read part A's verdict from its own criteria before this run overwrites `status`, and
+        # drop any part-B criteria an earlier run left behind so re-running replaces them rather
+        # than stacking them.
+        observed = part_a_status(entry)
+        entry["criteria"] = [item for item in (entry.get("criteria") or [])
+                             if not str(item.get("id", "")).startswith(PART_B_PREFIXES)] \
+            + list(outcome.get("criteria") or [])
+        if outcome["status"] == PASS and observed == PASS:
             entry["status"] = PASS
         elif outcome["status"] == FAIL:
             entry["status"] = FAIL
         else:
-            entry["status"] = part_a_status or NOT_RUN
+            entry["status"] = observed or NOT_RUN
         if outcome.get("reason"):
             entry["part_b_reason"] = outcome["reason"]
         merged.setdefault("backends", {})[backend] = entry
