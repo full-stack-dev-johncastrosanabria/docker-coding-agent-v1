@@ -1,0 +1,23 @@
+#!/bin/sh
+# Gate wrapper (tasks.md T032, contracts/policy-gate.md "Environment hardening").
+#
+# Rendered by runtime/sandbox/kit/stage.py with ONLY {PREFIX} and {PYTHON} substituted.
+# Production renders {PREFIX}=/ and {PYTHON}=/usr/bin/python3, giving the contract's exact command.
+#
+# THE CHILD IS NOT exec'd, DELIBERATELY. `exec` would replace this shell, letting a status such as
+# 126 or 127 from a missing or non-executable interpreter escape unmapped - and Claude treats a
+# non-2 non-zero exit as NON-BLOCKING, so the tool call would proceed. Running it as a child lets
+# every status other than 0 be mapped to 2 (deny).
+#
+# `env -i` starts from an empty environment, which removes PYTHONPATH, PYTHONHOME, PYTHONSTARTUP,
+# PYTHONUSERBASE, LD_PRELOAD, LD_LIBRARY_PATH, BASH_ENV, ENV and everything else a repository's
+# settings could have injected into the hook runner. `-I` additionally ignores PYTHON* variables,
+# user site-packages and the script-directory path entry. Both paths are absolute.
+/usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 {PYTHON} -I {PREFIX}opt/dca/lib/dca/policy_gate.py
+status=$?
+
+# 0 stays 0. Everything else, including 126/127, becomes 2.
+if [ "$status" -eq 0 ]; then
+    exit 0
+fi
+exit 2

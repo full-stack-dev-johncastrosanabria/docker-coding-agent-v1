@@ -1,0 +1,292 @@
+{
+  "_comment": "Action-class policy (tasks.md T026, data-model.md 'Action Classes'). JSON-encoded like runtime/versions.yaml, and that is forced rather than stylistic: the policy gate runs under `python3 -I` with sys.path restricted to its trusted root plus the stdlib (T030), so PyYAML is not importable there and the policy must parse with the standard library alone. Decisions are ALLOW, ASK (which becomes ALLOW only with a matching host-issued grant) and DENY. Both trust levels use the same 31 classes; trust level changes only the network rows (14, 17, 31) and the isolation profile. These in-VM decisions are COOPERATIVE controls - the enforcement boundary is the host-side sbx network policy, credential proxy, limits and change retrieval (research R8, R20).",
+  "version": 1,
+  "policy": {
+    "sensitive_globs": [
+      "**/.env",
+      "**/.env.*",
+      "**/.ssh/**",
+      "**/.aws/**",
+      "**/.netrc",
+      "**/.npmrc",
+      "**/.docker/config.json",
+      "**/.config/cagent/**",
+      "**/chatgpt-auth.json",
+      "**/.claude/.credentials.json",
+      "**/.credentials.json",
+      "**/id_rsa",
+      "**/id_ed25519",
+      "**/*.pem",
+      "**/*.key",
+      "**/*.p12",
+      "**/*.pfx",
+      "/run/dca/grants/**",
+      "/opt/dca/**"
+    ],
+    "documentation_hosts": [
+      "docs.claude.com",
+      "code.claude.com"
+    ],
+    "workspace_root": "/workspace",
+    "scratch_dir": "/run/dca/scratch",
+    "runtime_skills": [
+      "repository-navigation",
+      "root-cause-debugging",
+      "verification",
+      "change-receipt"
+    ]
+  },
+  "classes": [
+    {
+      "id": 1,
+      "name": "Read workspace file (realpath inside workspace, not excluded-sensitive)",
+      "decision": {"trusted": "ALLOW", "untrusted": "ALLOW"},
+      "source": "FR-026a",
+      "paths": {"realpath": true, "inside": ["workspace"], "not_matching": "sensitive_globs"}
+    },
+    {
+      "id": 2,
+      "name": "Read excluded-sensitive path (policy.sensitive_globs, credential paths)",
+      "decision": {"trusted": "DENY", "untrusted": "DENY"},
+      "source": "FR-026a, FR-030",
+      "paths": {"realpath": true, "matching": "sensitive_globs"}
+    },
+    {
+      "id": 3,
+      "name": "Create/modify in-scope source/test/config/docs inside workspace",
+      "decision": {"trusted": "ALLOW", "untrusted": "ALLOW"},
+      "source": "FR-026a",
+      "paths": {"realpath": true, "inside": ["workspace"], "in_scope": true}
+    },
+    {
+      "id": 4,
+      "name": "Write judged unrelated to task scope (outside Repository Map scope set)",
+      "decision": {"trusted": "ASK", "untrusted": "ASK"},
+      "source": "FR-026a",
+      "paths": {"realpath": true, "inside": ["workspace"], "in_scope": false}
+    },
+    {
+      "id": 5,
+      "name": "Any read/write whose realpath is outside workspace + run scratch dir (incl. symlink escape)",
+      "decision": {"trusted": "DENY", "untrusted": "DENY"},
+      "source": "FR-026a, FR-033a",
+      "paths": {"realpath": true, "outside": ["workspace", "scratch"]}
+    },
+    {
+      "id": 6,
+      "name": "Temporary files in run scratch dir",
+      "decision": {"trusted": "ALLOW", "untrusted": "ALLOW"},
+      "source": "FR-026a",
+      "paths": {"realpath": true, "inside": ["scratch"]}
+    },
+    {
+      "id": 7,
+      "name": "Regenerate generated files via established procedure",
+      "decision": {"trusted": "ALLOW", "untrusted": "ALLOW"},
+      "source": "FR-026a"
+    },
+    {
+      "id": 8,
+      "name": "Run declared/recorded verification command (build/test/lint/typecheck/format-check/static analysis)",
+      "decision": {"trusted": "ALLOW", "untrusted": "ALLOW"},
+      "source": "FR-026a",
+      "commands": {"declared_only": true}
+    },
+    {
+      "id": 9,
+      "name": "Formatter limited to in-scope files",
+      "decision": {"trusted": "ALLOW", "untrusted": "ALLOW"},
+      "source": "FR-026a"
+    },
+    {
+      "id": 10,
+      "name": "Delete tracked workspace file required by task",
+      "decision": {"trusted": "ALLOW", "untrusted": "ALLOW"},
+      "source": "FR-026a"
+    },
+    {
+      "id": 11,
+      "name": "Delete untracked/ignored file not created in this run; bulk delete beyond scope",
+      "decision": {"trusted": "ASK", "untrusted": "ASK"},
+      "source": "FR-026a, FR-033a"
+    },
+    {
+      "id": 12,
+      "name": "Repository script not in established build/verification workflow",
+      "decision": {"trusted": "ASK", "untrusted": "ASK"},
+      "source": "FR-026a"
+    },
+    {
+      "id": 13,
+      "name": "Modify isolated environment beyond workspace (system config, global install inside VM)",
+      "decision": {"trusted": "ASK", "untrusted": "ASK"},
+      "source": "FR-026a, FR-026b"
+    },
+    {
+      "id": 14,
+      "name": "Install repository-declared dependencies (lockfile/manifest)",
+      "decision": {"trusted": "ALLOW", "untrusted": "ASK"},
+      "source": "FR-026b",
+      "network": {"grant_required_untrusted": true}
+    },
+    {
+      "id": 15,
+      "name": "Add a new dependency",
+      "decision": {"trusted": "ASK", "untrusted": "ASK"},
+      "source": "FR-026b",
+      "requires_justification": "FR-012"
+    },
+    {
+      "id": 16,
+      "name": "Install onto host",
+      "decision": {"trusted": "DENY", "untrusted": "DENY"},
+      "source": "FR-026b",
+      "note": "structurally impossible from the VM"
+    },
+    {
+      "id": 17,
+      "name": "Source-control read (fetch/clone)",
+      "decision": {"trusted": "ALLOW", "untrusted": "ASK"},
+      "source": "FR-026b",
+      "network": {"grant_required_untrusted": true}
+    },
+    {
+      "id": 18,
+      "name": "Source-control write (push to non-protected branch, open PR/issue)",
+      "decision": {"trusted": "ASK", "untrusted": "ASK"},
+      "source": "FR-026b, FR-033a"
+    },
+    {
+      "id": 19,
+      "name": "Force-push / history rewrite of shared or remote branch; protected-branch merge",
+      "decision": {"trusted": "DENY", "untrusted": "DENY"},
+      "source": "FR-033a"
+    },
+    {
+      "id": 20,
+      "name": "History rewrite of the agent's own unpublished task branch",
+      "decision": {"trusted": "ASK", "untrusted": "ASK"},
+      "source": "FR-033a"
+    },
+    {
+      "id": 21,
+      "name": "External API call: a request by a shell HTTP client or language one-liner to a host not in the policy lists, for a task purpose",
+      "decision": {"trusted": "ASK", "untrusted": "ASK"},
+      "source": "FR-026b",
+      "network": {
+        "intent": "api-call",
+        "tools": ["Bash", "shell", "run_command"],
+        "clients": ["curl", "wget", "http", "https", "nc", "python3", "python", "node", "ruby", "perl"],
+        "host_not_in": ["documentation_hosts"]
+      }
+    },
+    {
+      "id": 22,
+      "name": "Deployment or production-system action",
+      "decision": {"trusted": "DENY", "untrusted": "DENY"},
+      "source": "FR-033, FR-033a"
+    },
+    {
+      "id": 23,
+      "name": "Credential create/modify/rotate/revoke; security-policy change",
+      "decision": {"trusted": "DENY", "untrusted": "DENY"},
+      "source": "FR-033a"
+    },
+    {
+      "id": 24,
+      "name": "Destructive op on disposable resource created in this run",
+      "decision": {"trusted": "ALLOW", "untrusted": "ALLOW"},
+      "source": "FR-033a"
+    },
+    {
+      "id": 25,
+      "name": "Modify the agent's own policy, limits, instructions, harness config, gate state",
+      "decision": {"trusted": "DENY", "untrusted": "DENY"},
+      "source": "FR-026a, FR-028",
+      "paths": {"realpath": true, "matching_any": ["/opt/dca/**", "/run/dca/**", "/etc/claude-code/**"]}
+    },
+    {
+      "id": 26,
+      "name": "Invoke skill not in runtime allowlist; spawn subagent not in {researcher, reviewer}",
+      "decision": {"trusted": "DENY", "untrusted": "DENY"},
+      "source": "FR-005, FR-028",
+      "denied_tools": ["run_skill"],
+      "positive_complement": {
+        "_comment": "research R20, data-model 'Class 26 and its positive complement'. A call matching this allowlist is OUTSIDE class 26 and is ALLOW. It is logged as class null with rule class26-positive-complement, never as class 26 with allow. The skill NAME alone is never sufficient: the trusted source must be established.",
+        "delegation": {
+          "from": "root",
+          "to": ["researcher", "reviewer"],
+          "tools": {
+            "codex": ["transfer_task"],
+            "claude": ["Task", "Agent"],
+            "subagents": ["dca-researcher", "dca-reviewer"]
+          }
+        },
+        "skills": {
+          "from": "root",
+          "names": ["repository-navigation", "root-cause-debugging", "verification", "change-receipt"],
+          "source": "trusted-kit",
+          "tools": {
+            "codex": ["read_skill", "read_skill_file"],
+            "claude": ["Skill"]
+          },
+          "codex_source": {
+            "skill_path": "<KIT_DIR>/skills/<name>/SKILL.md",
+            "manifest": "<KIT_DIR>/kit-manifest.json",
+            "kit_dir_from": "trusted-root"
+          },
+          "claude_source": {"proven_by": "G1d", "hash_checked": true}
+        }
+      }
+    },
+    {
+      "id": 27,
+      "name": "Any mutating tool by researcher/reviewer",
+      "decision": {"trusted": "DENY", "untrusted": "DENY"},
+      "source": "FR-022",
+      "agents": ["researcher", "reviewer"],
+      "tools": {
+        "mutating": ["Write", "Edit", "NotebookEdit", "write_file", "edit_file", "create_file",
+                     "delete_file", "move_file", "Bash", "shell", "run_command", "transfer_task"],
+        "read_only_exempt": ["git_diff", "git_status", "git_log", "Read", "Grep", "Glob",
+                             "read_file", "list_directory", "search"]
+      }
+    },
+    {
+      "id": 28,
+      "name": "Unparseable or ambiguous shell command",
+      "decision": {"trusted": "ASK", "untrusted": "ASK"},
+      "source": "R20"
+    },
+    {
+      "id": 29,
+      "name": "Any tool call after step limit reached",
+      "decision": {"trusted": "DENY", "untrusted": "DENY"},
+      "source": "FR-023a",
+      "marker": "DCA_LIMIT",
+      "note": "carries a stop instruction"
+    },
+    {
+      "id": 30,
+      "name": "Unconstrained general web browsing: a web-search tool, or fetching a non-policy-listed page with a browsing/fetch tool",
+      "decision": {"trusted": "DENY", "untrusted": "DENY"},
+      "source": "FR-026b",
+      "network": {
+        "intent": "browsing",
+        "tools": ["WebSearch", "WebFetch", "web_search", "web_fetch", "fetch", "open_url",
+                  "browser", "browse"]
+      }
+    },
+    {
+      "id": 31,
+      "name": "Technical documentation retrieval from a policy-listed documentation host",
+      "decision": {"trusted": "ALLOW", "untrusted": "ASK"},
+      "source": "FR-026b",
+      "network": {
+        "intent": "documentation",
+        "host_in": ["documentation_hosts"],
+        "grant_required_untrusted": true
+      }
+    }
+  ]
+}

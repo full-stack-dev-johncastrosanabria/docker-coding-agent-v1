@@ -360,19 +360,19 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
 **Purpose**: The single policy engine shared by both backends, plus its isolated-execution packaging. It is host-independent and can run **in parallel with Phase 2** once Phase 1 is done.
 
-- [ ] T025 [P] **Test** Write `tests/unit/test_actions_policy.py`: table-driven tests asserting that `runtime/policy/actions.yaml` defines exactly classes **1–31**. Each class has exactly one decision per trust level, and the decisions match data-model.md "Action Classes" verbatim, e.g.:
+- [X] T025 [P] **Test** Write `tests/unit/test_actions_policy.py`: table-driven tests asserting that `runtime/policy/actions.yaml` defines exactly classes **1–31**. Each class has exactly one decision per trust level, and the decisions match data-model.md "Action Classes" verbatim, e.g.:
   - class 14: "trusted: ALLOW · untrusted: ASK";
   - class 21: external API call → ASK;
   - class 30: unconstrained general web browsing → DENY;
   - class 31: policy-listed documentation → "trusted: ALLOW · untrusted: ASK".
 
   The DENY set must equal `{2, 5, 16, 19, 22, 23, 25, 26, 27, 29, 30}` (the approval-grant schema's non-grantable list). Depends: T002, T003. Evidence: fails before T026, passes after.
-- [ ] T026 **Impl (decided)** Write `runtime/policy/actions.yaml` with classes 1–31 exactly as in data-model.md, including class metadata (path rules, tool-name matchers, network-intent rules for 21/30/31, sensitive globs). Class 26's metadata carries its **positive complement allowlist** (data-model "Class 26 and its positive complement"; no new class):
+- [X] T026 **Impl (decided)** Write `runtime/policy/actions.yaml` with classes 1–31 exactly as in data-model.md, including class metadata (path rules, tool-name matchers, network-intent rules for 21/30/31, sensitive globs). Class 26's metadata carries its **positive complement allowlist** (data-model "Class 26 and its positive complement"; no new class):
   - `delegation: {from: root, to: [researcher, reviewer]}`, with tool matchers for Codex `transfer_task` and Claude's subagent tool (`dca-researcher`, `dca-reviewer`);
   - `skills: {from: root, names: [repository-navigation, root-cause-debugging, verification, change-receipt], source: trusted-kit}`, with tool matchers for Codex `read_skill`/`read_skill_file` and Claude's skill tool.
 
   `run_skill` is never on the allowlist. Depends: T025. Evidence: T025 passes. (FR-004, FR-005, FR-026, FR-026a, FR-026b, FR-028, FR-033a)
-- [ ] T027 [P] **Test** Write `tests/unit/test_shellparse.py`, including adversarial cases. Cover:
+- [X] T027 [P] **Test** Write `tests/unit/test_shellparse.py`, including adversarial cases. Cover:
   - segmentation on `;`, `&&`, `||`, `|` and newline;
   - `$(…)`, backticks, and nested substitution;
   - `eval`, `sh -c` and `bash -c` handled recursively;
@@ -381,8 +381,8 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **unparseable → class 28 (ASK)**.
 
   Depends: T002. Evidence: fails before T028, passes after.
-- [ ] T028 **Impl (decided)** Write `src/dca/shellparse.py`: conservative, stdlib-only (contracts/policy-gate.md "Classification rules"). Depends: T027. Evidence: T027 passes.
-- [ ] T029 **Test** Write `tests/unit/test_policy_gate.py`. Cover:
+- [X] T028 **Impl (decided)** Write `src/dca/shellparse.py`: conservative, stdlib-only (contracts/policy-gate.md "Classification rules"). Depends: T027. Evidence: T027 passes.
+- [X] T029 **Test** Write `tests/unit/test_policy_gate.py`. Cover:
   - Claude and Codex payload normalization to `{backend, agent, tool, input, cwd, session_id}`, with `dca-researcher`/`dca-reviewer` → researcher/reviewer (Claude `agent_type`) and `root`/`researcher`/`reviewer` from Codex `agent_name`; a missing or unknown Codex `agent_name` → exit 2;
   - decision output: Claude ALLOW = exit 0 with no output; Codex ALLOW = exit 0 with exactly `{"hook_specific_output":{"hook_event_name":"pre_tool_use","permission_decision":"allow"}}` on stdout; every DENY or ASK-without-grant = exit 2; no code path exits 0 without a Codex decision;
   - realpath/symlink escape → class 5; sensitive paths → class 2; a mutating tool by researcher/reviewer → class 27, while the Codex reviewer's fixed `git_diff`/`git_status`/`git_log` tools are allowed as read-only inspection; an advisory step limit → class 29 with `DCA_LIMIT`;
@@ -397,7 +397,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - the decision log never contains file contents or secret-like values.
 
   Depends: T026, T028. Evidence: fails before T030, passes after.
-- [ ] T030 **Impl (decided)** Write `src/dca/policy_gate.py`, the gate logic plus a **trusted-root bootstrap**:
+- [X] T030 **Impl (decided)** Write `src/dca/policy_gate.py`, the gate logic plus a **trusted-root bootstrap**:
   - the trusted root is derived **only** from the script's own resolved absolute path. The kit installs it as `/opt/dca/lib/dca/policy_gate.py`, so the trusted root is `/opt/dca/lib`;
   - `sys.path` is set to `[trusted_root]` plus the interpreter's stdlib entries **only**, so it is independent of the current directory, `PYTHONPATH` and `PYTHONHOME`;
   - it imports `dca.shellparse` from there, and any import or other error → exit 2 (`DCA_DENY internal`);
@@ -405,7 +405,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - the decision log follows the contract, including `class: null` + `rule: "class26-positive-complement"` for complement ALLOWs.
 
   Depends: T029. Evidence: T029 passes. (FR-026a, FR-027, FR-028)
-- [ ] T031 **Test** Write `tests/unit/test_gate_isolated_exec.py`. It exercises the **exact installed wrapper command and layout**:
+- [X] T031 **Test** Write `tests/unit/test_gate_isolated_exec.py`. It exercises the **exact installed wrapper command and layout**:
   - **Staging**: use the T032 staging tool to build the kit layout (`opt/dca/{bin/dca-gate,lib/dca/{policy_gate.py,shellparse.py,__init__.py},policy/}`) under a temp prefix, rendering the wrapper from the same template as production, with only `{PREFIX}` and `{PYTHON}` substituted.
   - **Invocation**: call the staged `dca-gate`, which runs `/usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 {PYTHON} -I {PREFIX}/opt/dca/lib/dca/policy_gate.py`.
   - **Assertions**:
@@ -416,19 +416,19 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
     5. pointing `{PYTHON}` at a nonexistent interpreter → exit **2**, never 126/127.
 
   Production's `/opt/dca` layout with `/usr/bin/python3` is re-checked inside the VM by T062. Depends: T030. Evidence: fails before T032, passes after.
-- [ ] T032 **Impl (decided)** Write the wrapper template `runtime/sandbox/kit/templates/dca-gate.sh.in` and the staging tool `runtime/sandbox/kit/stage.py`.
+- [X] T032 **Impl (decided)** Write the wrapper template `runtime/sandbox/kit/templates/dca-gate.sh.in` and the staging tool `runtime/sandbox/kit/stage.py`.
   - **Wrapper** (POSIX `sh`): runs the contract's command `/usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 /usr/bin/python3 -I /opt/dca/lib/dca/policy_gate.py` **without `exec`**, and maps every status other than 0 and 2, including 126/127 from a missing interpreter, to **exit 2**. This implements the contract's guarantee that any internal error, including a missing interpreter, results in exit 2.
   - **Staging tool**: renders the template with `{PREFIX}`/`{PYTHON}` (production: `/` and `/usr/bin/python3`) and lays out `opt/dca/…`. Given a skills source directory, it also stages `opt/dca/skills/<name>/SKILL.md` for exactly the four runtime skills and writes the canonical `opt/dca/kit-manifest.json` in the exact serialization of policy-gate.md *Kit manifest* (sorted keys, compact separators, no trailing newline, lowercase-hex SHA-256), so two staging runs produce identical bytes. It refuses any other skill directory. T055, T056 and T061 use this.
 
   Depends: T031. Evidence: T031 passes.
-- [ ] T033 [P] **Test** Write `tests/unit/test_taskid.py`.
+- [X] T033 [P] **Test** Write `tests/unit/test_taskid.py`.
   - **Test vector**: prompt `"Fix the off-by-one in  paginate()\r\n"`, criteria `["page 2 starts at item 11","tests pass"]`, verify `["make test"]` → `sha256:95a55eec90cdab43c62e2a329c873b1ebf2c19f6384c5b25117d4557287a5086`.
   - **Properties**: CRLF vs LF gives the same fingerprint; inner whitespace changes it; criteria order changes it; empty criteria lines are omitted.
   - **Error**: invalid UTF-8 → usage error (exit 2).
 
   Depends: T002. Evidence: fails before T034, passes after.
-- [ ] T034 **Impl (decided)** Write `src/dca/taskid.py` with `task_fingerprint()`, exactly per data-model.md "Task fingerprint algorithm". Depends: T033. Evidence: T033 passes.
-- [ ] T035 **Test** Write `tests/unit/test_grants.py`.
+- [X] T034 **Impl (decided)** Write `src/dca/taskid.py` with `task_fingerprint()`, exactly per data-model.md "Task fingerprint algorithm". Depends: T033. Evidence: T033 passes.
+- [X] T035 **Test** Write `tests/unit/test_grants.py`.
   - **Positive**: default report discovery (`<repo>/../.dca-runs/<origin-run-id>/report.json`); `--approval-report <path>`; a valid grant file with `granted_by: developer-cli` that validates against `contracts/approval-grant.schema.json`.
   - **Negative**, each → exit 3:
     - report not found;
@@ -441,7 +441,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **Guarantees**: no code path reads a grant file as **input**; the in-VM copy is never read back.
 
   Depends: T034, T007. Evidence: fails before T036, passes after.
-- [ ] T036 **Impl (decided)** Write `src/dca/grants.py`: host-authoritative grants and provenance verification (data-model ApprovalGrant; contracts/launcher-cli.md "Approval provenance"). Depends: T035. Evidence: T035 passes. (FR-027a–FR-027d)
+- [X] T036 **Impl (decided)** Write `src/dca/grants.py`: host-authoritative grants and provenance verification (data-model ApprovalGrant; contracts/launcher-cli.md "Approval provenance"). Depends: T035. Evidence: T035 passes. (FR-027a–FR-027d)
 
 **Checkpoint**: The policy engine, parser, isolated-execution packaging, fingerprint and grants all pass with no sandbox.
 
