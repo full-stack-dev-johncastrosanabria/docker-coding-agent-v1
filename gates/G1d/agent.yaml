@@ -1,0 +1,26 @@
+# gates/G1d/agent.yaml — Gate G1d probe agent (tasks.md T018).
+#
+# The minimum config that exercises the V1 primary backend: the pinned Docker Agent
+# `claude-code` harness at effort high, with no `harness.model`, so the authenticated CLI
+# default is used (research R1). Config version 15 is what V1 pins (E1); the pinned binary's
+# strict v15 parser is the compatibility authority, so this file is validated with
+# `docker agent debug config` rather than against the root JSON schema.
+#
+# No `instruction` is set: for harness agents Docker Agent does not forward injected
+# instructions to the harness (E4), so an instruction here would be inert and would imply a
+# control this gate does not have. The whole task arrives as the run's message argument.
+version: 15
+
+metadata:
+  description: Gate G1d probe agent - managed subagents, skills and memory
+  version: "0.1.0"
+
+agents:
+  root:
+    description: >
+      Probe agent for gate G1d. It runs inside a hostile fixture repository that ships
+      same-named copies of a managed subagent and of the verification skill, so the gate can
+      record which copy Claude actually loads rather than inferring it from path precedence.
+    harness:
+      type: claude-code
+      effort: high

@@ -121,6 +121,158 @@
         }
       }
     },
+    "observed_precedence": {
+      "type": "object",
+      "description": "G1d (tasks.md T018): what each of the four adversarial runs ACTUALLY resolved to, as a typed field rather than prose, written whether the gate passes or fails, because T018 requires the observed precedence to be recorded either way and the fallback decision depends on which source won. Keys are the run labels: precedence-root and precedence-nested are the authoritative precedence proof, run under the managed settings V1 pins with the hostile copies present as candidates; lockout-root and lockout-nested repeat both contexts with managed strictPluginOnlyCustomization for skills and agents and are defense in depth only. Each entry records the identity of the exact Skill invocation, the SHA-256 of the body Claude was actually delivered, the trusted copy's SHA-256, the source classification, the marker names each delegated subagent reported, and the in-VM Claude Code build the pinned transcript shape was proven against. Only identity fields, digests, marker NAMES and PASS/FAIL facts appear: no transcript content, which holds unrelated tool inputs and outputs, is ever copied into evidence.",
+      "additionalProperties": false,
+      "propertyNames": {
+        "enum": [
+          "precedence-root",
+          "precedence-nested",
+          "lockout-root",
+          "lockout-nested"
+        ]
+      },
+      "patternProperties": {
+        "^(precedence|lockout)-(root|nested)$": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "extraction": {
+              "const": "unreadable",
+              "description": "the sanitized in-VM extraction could not be read at all"
+            },
+            "extraction_ok": {
+              "type": "boolean"
+            },
+            "failures": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "why the extraction failed closed"
+            },
+            "claude_code_version": {
+              "type": [
+                "string",
+                "array",
+                "null"
+              ],
+              "description": "the in-VM Claude Code build whose transcript shape this observation is pinned to"
+            },
+            "cwd": {
+              "type": [
+                "string",
+                "array",
+                "null"
+              ]
+            },
+            "skill_tool_use_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "the exact Skill invocation the delivered body was linked to by sourceToolUseID"
+            },
+            "verification_source": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "source classification from marker names: trusted-managed, hostile:<names>, or unclassified"
+            },
+            "delivered_sha256": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "trusted_file_sha256": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "trusted_body_sha256": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "SHA-256 of the trusted SKILL.md body (frontmatter removed) that the delivered representation must carry verbatim"
+            },
+            "expected_delivery_sha256": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "SHA-256 of the ONE representation the pinned build may deliver: the header naming the managed skill directory, a blank line, then the trusted body. delivered_sha256 must equal this"
+            },
+            "managed_skill_dir": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "the managed directory the trusted copy was installed in and read back from"
+            },
+            "observed_header": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200,
+              "description": "the header region Claude Code actually delivered, capped at 200 characters: a fixed phrase plus the directory it resolved the skill FROM. When a hostile copy wins, this names it. Never body content"
+            },
+            "byte_identical_to_trusted": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "hostile_markers_in_transcript": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "subagents": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "description": "per managed subagent, the identity marker NAMES its reply carried"
+            },
+            "repository_skill_probe": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "skill": {
+                  "type": "string"
+                },
+                "attempts": {
+                  "type": "integer"
+                },
+                "delivered": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "prerequisite_restoration": {
       "type": "object",
       "description": "G4 (tasks.md T015): present only when THIS run consumed a one-time, developer-authorized restoration of the documented post-G0 global network-policy baseline. It is run-bound: the run recorded the durable record's digest, the digest still matches the bytes on disk, and the baseline the run started from is the one the restoration produced. A later run that starts from an already-valid baseline omits the field even though gates/G4/prereq/restoration.json still exists, so a restoration claim is never inherited.",
@@ -158,6 +310,96 @@
     },
     "notes": {
       "type": "string"
+    },
+    "claude_subscription": {
+      "type": "object",
+      "description": "G1a (tasks.md T016): what the Claude backend was actually proven to be, as a typed field rather than prose, written only when G1a passes. The plan and the fresh-sandbox property are recorded as the two SEPARATE observations they are. subscription_type_proven_at_login is the plan the step-1 sandbox reported after a real interactive login - a value the inherited-credential path provably never produces. subscription_type_reported_by_fresh_sandbox is what the completely fresh step-2 sandbox reported, recorded verbatim: it is null on that path, both before and after a successful execution, because the inherited credential carries the token without the plan metadata the login response cached. The null is never rewritten as the proven plan. proven_without_login and proven_without_api_key record that step 2 ran with no /login and with no provider API-key name set in its environment.",
+      "additionalProperties": false,
+      "required": [
+        "logged_in",
+        "auth_method",
+        "api_provider",
+        "subscription_type_proven_at_login",
+        "subscription_type_reported_by_fresh_sandbox",
+        "proven_without_login",
+        "proven_without_api_key"
+      ],
+      "properties": {
+        "logged_in": {
+          "const": true,
+          "description": "the fresh sandbox reported an authenticated session"
+        },
+        "auth_method": {
+          "type": "string",
+          "description": "the authentication mechanism the fresh sandbox used; a subscription login, never an API key"
+        },
+        "api_provider": {
+          "type": "string",
+          "description": "the provider path the fresh sandbox used"
+        },
+        "subscription_type_proven_at_login": {
+          "type": "string",
+          "description": "the plan step 1's real interactive login explicitly reported"
+        },
+        "subscription_type_reported_by_fresh_sandbox": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "what the fresh sandbox reported, verbatim; null on the inherited path"
+        },
+        "proven_without_login": {
+          "const": true
+        },
+        "proven_without_api_key": {
+          "const": true
+        },
+        "claude_code_version": {
+          "type": "string",
+          "description": "the Claude Code build inside the pinned sandbox base that actually produced the result. It is informational: runtime/versions.yaml's claude_code pin describes the developer's HOST CLI, while the in-sandbox build is governed indirectly by the separately pinned sandbox_bases.claude digest (E14b)."
+        },
+        "docker_agent_version": {
+          "type": "string",
+          "description": "the pinned Docker Agent artifact the G6 kit installed, read back from the VM"
+        }
+      }
+    },
+    "claude_secret_isolation": {
+      "type": "object",
+      "description": "G1b (tasks.md T021): whether a PRIVILEGED repository workload inside the VM can read Claude's token material, as a typed field rather than prose, written on PASS and FAIL alike - because a FAIL here is a real, consumable result, not an absence of one. token_material_readable_by_privileged_workload true with implication 'trusted-only' is exactly T021's defined FAIL outcome: Claude stays a usable V1 backend but may only serve TRUSTED runs, and G9 consumes this rather than trying to overturn it. false with 'eligible-for-untrusted' is the PASS outcome, which still leaves G9 required. readable_findings names the CLASS of each finding and its count only ('home/claude-oauth-access x1'); no secret value, no file content and no digest of either ever enters the evidence, so the document stays safe to commit and read.",
+      "additionalProperties": false,
+      "required": [
+        "token_material_readable_by_privileged_workload",
+        "locations_scanned",
+        "readable_findings",
+        "implication"
+      ],
+      "properties": {
+        "token_material_readable_by_privileged_workload": {
+          "type": "boolean"
+        },
+        "locations_scanned": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "the scopes the scanner covered, so a clean result states its own coverage"
+        },
+        "readable_findings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+/[a-z0-9-]+ x[0-9]+$"
+          },
+          "description": "'<location>/<finding-class> x<count>' only - never a secret value"
+        },
+        "implication": {
+          "enum": [
+            "trusted-only",
+            "eligible-for-untrusted"
+          ]
+        }
+      }
     }
   },
   "$defs": {
@@ -755,6 +997,35 @@
           "gate": {
             "const": "G4"
           }
+        }
+      }
+    },
+    {
+      "description": "a G1a PASS records the proven Claude subscription as a typed field, and only G1a may carry one: the plan comes from step 1's interactive login and the fresh-sandbox property from step 2, so neither is inferred from the other",
+      "if": {
+        "properties": {
+          "gate": {
+            "const": "G1a"
+          },
+          "status": {
+            "const": "PASS"
+          }
+        },
+        "required": [
+          "gate",
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "claude_subscription"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "claude_subscription"
+          ]
         }
       }
     }

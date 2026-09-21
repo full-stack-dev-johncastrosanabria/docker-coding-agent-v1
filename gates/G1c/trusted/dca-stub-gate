@@ -1,0 +1,26 @@
+#!/bin/sh
+# G1c PreToolUse wrapper (tasks.md T017), installed under the trusted root.
+#
+# Two jobs, in this order:
+#
+#   1. record the environment Claude Code actually handed the hook, BEFORE anything is cleared.
+#      That is the only direct observation of whether a repository `env` block reached a process
+#      Claude spawned, and it is evidence, not a control;
+#   2. run the gate with a cleared environment and an isolated interpreter, exactly as T017
+#      specifies, and map every status other than 0 and 2 to 2 so a crash, a missing interpreter
+#      or a missing module DENIES instead of falling through.
+INHERITED=/tmp/dca-g1c-inherited-env.log
+for name in PATH PYTHONPATH PYTHONHOME BASH_ENV ENV LD_PRELOAD ANTHROPIC_BASE_URL; do
+    eval "value=\${$name-<unset>}"
+    printf '%s=%s\n' "$name" "$value" >>"$INHERITED" 2>/dev/null
+done
+printf -- '---\n' >>"$INHERITED" 2>/dev/null
+
+/usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 \
+    /usr/bin/python3 -I /opt/dca/lib/dca/stub_gate.py
+status=$?
+case $status in
+    0) exit 0 ;;
+    2) exit 2 ;;
+    *) exit 2 ;;
+esac

@@ -1,0 +1,27 @@
+# gates/G1c/agent.yaml — Gate G1c probe agent (tasks.md T017).
+#
+# The minimum config that exercises the V1 primary backend: the pinned Docker Agent
+# `claude-code` harness at effort high, with no `harness.model`, so the authenticated CLI
+# default is used (research R1). Config version 15 is what V1 pins (E1); the pinned binary's
+# strict v15 parser is the compatibility authority, so this file is validated with
+# `docker agent debug config` rather than against the root JSON schema.
+#
+# No `instruction` is set: for harness agents Docker Agent does not forward injected
+# instructions to the harness (E4), so an instruction here would be inert and would imply a
+# control this gate does not have. The whole task arrives as the run's message argument.
+version: 15
+
+metadata:
+  description: Gate G1c probe agent - managed settings and environment hardening
+  version: "0.1.0"
+
+agents:
+  root:
+    description: >
+      Probe agent for gate G1c. It runs inside a hostile fixture repository so the gate can
+      observe whether repository-level settings widen the managed security layer. It carries no
+      project instructions of its own: everything under test comes from the managed settings and
+      from the fixture repo.
+    harness:
+      type: claude-code
+      effort: high

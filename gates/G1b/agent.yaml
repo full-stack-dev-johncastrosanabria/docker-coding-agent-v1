@@ -1,0 +1,25 @@
+# gates/G1b/agent.yaml — Gate G1b probe agent (tasks.md T021).
+#
+# The minimum config that exercises the V1 primary backend: the pinned Docker Agent
+# `claude-code` harness at effort high, with no `harness.model`, so the authenticated CLI
+# default is used (research R1). Config version 15 is what V1 pins (E1); the pinned binary's
+# strict v15 parser is the compatibility authority, so this file is validated with
+# `docker agent debug config` rather than against the root JSON schema.
+#
+# No `instruction` is set: for harness agents Docker Agent does not forward injected
+# instructions to the harness (E4), so an instruction here would be inert and would imply a
+# control this gate does not have. The whole task arrives as the run's message argument.
+version: 15
+
+metadata:
+  description: Gate G1b probe agent - secret unreadability
+  version: "0.1.0"
+
+agents:
+  root:
+    description: >
+      Probe agent for gate G1b. It runs a trivial task only, to re-prove that the sandbox still
+      authenticates in exactly the configuration the secret scan then runs against.
+    harness:
+      type: claude-code
+      effort: high

@@ -31,6 +31,18 @@ SYNTHETIC_ALLOWSET = {
     "claude": {"trusted": ["synthetic.invalid"], "untrusted": ["synthetic.invalid"]},
     "codex": {"trusted": ["synthetic.invalid"], "untrusted": ["synthetic.invalid"]},
 }
+# T016: the typed subscription claim a G1a PASS carries. The plan is the one step 1's interactive
+# login proved; the fresh step-2 sandbox reports null on the inherited-credential path, and that
+# null is recorded rather than rewritten.
+SYNTHETIC_SUBSCRIPTION = {
+    "logged_in": True,
+    "auth_method": "claude.ai",
+    "api_provider": "firstParty",
+    "subscription_type_proven_at_login": "pro",
+    "subscription_type_reported_by_fresh_sandbox": None,
+    "proven_without_login": True,
+    "proven_without_api_key": True,
+}
 
 VALID_ELIGIBILITY = (
     "all-eligible",
@@ -122,6 +134,11 @@ class GateContractSchemas(unittest.TestCase):
             if status == "PASS" and gate == "G4":
                 # T015/T051: the proven allow set is typed and written only on a PASS.
                 ev["proven_network_allowset"] = SYNTHETIC_ALLOWSET
+            if status == "PASS" and gate == "G1a":
+                # T016: a G1a PASS records the proven Claude subscription as a typed field. The
+                # plan comes from step 1's interactive login and the fresh sandbox reports null,
+                # so the two observations stay separate.
+                ev["claude_subscription"] = SYNTHETIC_SUBSCRIPTION
             if backends is not None:
                 ev["backends"] = {
                     name: {"status": s, **({"not_run_reason": "SYNTHETIC"} if s == "NOT-RUN" else {})}
@@ -616,6 +633,31 @@ class GateContractSchemas(unittest.TestCase):
             with self.subTest(fixture=name):
                 doc = _load_json(EVIDENCE_FIXTURES / f"{name}.json")
                 self.assertFalse(self.evidence.is_valid(doc))
+
+    def test_every_committed_evidence_document_validates_and_is_current(self):
+        """The real documents, not just the fixtures.
+
+        Nothing else in the suite looked at the evidence a gate actually wrote, so a recorder could
+        add a typed field the schema had never gained and every test still passed. G1b shipped that
+        way: its `claude_secret_isolation` field made gates/G1b.json invalid, which only T024 would
+        have caught, and only much later.
+        """
+        documents = {}
+        for path in sorted(GATES.glob("*.json")):
+            if path.name.endswith(".schema.json") or path.name == "eligibility.json":
+                continue
+            document = _load_json(path)
+            documents[document.get("gate")] = document
+            with self.subTest(evidence=path.name):
+                self.assertEqual(
+                    [e.message for e in self.evidence.iter_errors(document)], [],
+                    f"{path.name} does not satisfy gates/evidence.schema.json")
+        if not documents:
+            self.skipTest("no gate evidence recorded yet")
+        versions = _load_json(RUNTIME_VERSIONS)
+        self.assertFalse(
+            self.rules.check_evidence(documents, versions),
+            "committed evidence is stale against the current runtime/versions.yaml")
 
     def test_no_synthetic_evidence_fixture_records_a_pass(self):
         for path in sorted(EVIDENCE_FIXTURES.glob("*.json")):

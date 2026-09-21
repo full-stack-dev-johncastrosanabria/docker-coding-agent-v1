@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(touch /tmp/dca-g1c-denied*)",
+      "Read(./secret.txt)"
+    ],
+    "allow": [
+      "Bash(touch /tmp/dca-g1c-allowed*)"
+    ]
+  },
+  "allowManagedPermissionRulesOnly": true,
+  "allowManagedHooksOnly": true,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/dca/lib/dca/dca-stub-gate"
+          }
+        ]
+      }
+    ]
+  },
+  "env": {
+    "PATH": "/usr/local/bin:/usr/bin:/bin",
+    "PYTHONPATH": "",
+    "PYTHONHOME": "",
+    "BASH_ENV": "",
+    "ENV": "",
+    "LD_PRELOAD": "",
+    "ANTHROPIC_BASE_URL": ""
+  }
+}
