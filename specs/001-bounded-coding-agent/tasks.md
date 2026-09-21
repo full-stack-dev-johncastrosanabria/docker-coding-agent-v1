@@ -449,7 +449,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
 ## Phase 4: Source delivery, event processing and finalization (order item 4)
 
-- [ ] T037 [P] **Test** Write `tests/unit/test_source.py` using throwaway local repos under `tests/unit/work/`.
+- [X] T037 [P] **Test** Write `tests/unit/test_source.py` using throwaway local repos under `tests/unit/work/`.
   - **Branch-ref validation**:
     - accepted: a local branch name, `refs/heads/<branch>`, `HEAD` attached to a local branch;
     - refused with exit 3: a tag, a raw SHA, `HEAD~1`, a remote-tracking ref, an ambiguous name, a detached `HEAD`;
@@ -460,8 +460,8 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **No temporary host refs**.
 
   Depends: T002. Evidence: fails before T038, passes after.
-- [ ] T038 **Impl (decided)** Write `src/dca/source.py`: host-side branch validation, dirty check, bundle export/verify and quarantine import. Depends: T037. Evidence: T037 passes. (R11, FR-030, FR-034)
-- [ ] T039 **Test** Write `tests/unit/test_events.py`, using `gates/G11/captures/<backend>/` for **each available backend**, plus synthetic cases. Cover:
+- [X] T038 **Impl (decided)** Write `src/dca/source.py`: host-side branch validation, dirty check, bundle export/verify and quarantine import. Depends: T037. Evidence: T037 passes. (R11, FR-030, FR-034)
+- [X] T039 **Test** Write `tests/unit/test_events.py`, using `gates/G11/captures/<backend>/` for **each available backend**, plus synthetic cases. Cover:
   - exact tool-call counts;
   - imitation-event JSON in tool output isn't counted;
   - malformed → `stream = malformed`, truncated → `truncated`, abrupt termination → `agent_exit = abnormal`;
@@ -476,10 +476,10 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **first workspace mutation** detection per data-model "Context Record": the first tool call, attempted or executed, that can change the workspace or candidate repository state. Shell, build and verification commands count unless classified as read-only inspection. Writes confined to `/run/dca/out/` (`context.json`, `plan.md`, `report.agent.json`), reads, skill loading and delegation don't count. Tests include a scratch-only write before the first edit (not a mutation) and a build command before `context.json` (a mutation, so ordering fails). T075 needs this for FR-001 and FR-008.
 
   Depends: T020. Evidence: fails before T040, passes after.
-- [ ] T040 **Impl (gated: G11)** Write `src/dca/events.py`: a typed outer-event parser that fails closed, with step, retry and token accounting, mutation ordering, native ceiling termination classification (`budget_exceeded`, `max_iterations_reached`, `error` with `code: loop_detected` → `limit_reached: native_ceiling` plus `native_ceiling` detail), and `run_integrity` values `stream: complete|host-terminated|malformed|truncated|none` and `agent_exit: normal|host-limit|abnormal|not-started`. Depends: T039, T020. Evidence: T039 passes. (R8, FR-023, FR-023a)
-- [ ] T041 [P] **Test** Write `tests/unit/test_fingerprint.py`: the workspace fingerprint covers HEAD, the index, and the worktree including untracked non-ignored files; it is stable across runs and changes on any content, mode or new-file change. Depends: T002. Evidence: fails before T042, passes after.
-- [ ] T042 **Impl (decided)** Write `src/dca/fingerprint.py`. Depends: T041. Evidence: T041 passes. (R16, FR-022)
-- [ ] T043 **Test** Write `tests/unit/test_report.py`. Cover:
+- [X] T040 **Impl (gated: G11)** Write `src/dca/events.py`: a typed outer-event parser that fails closed, with step, retry and token accounting, mutation ordering, native ceiling termination classification (`budget_exceeded`, `max_iterations_reached`, `error` with `code: loop_detected` → `limit_reached: native_ceiling` plus `native_ceiling` detail), and `run_integrity` values `stream: complete|host-terminated|malformed|truncated|none` and `agent_exit: normal|host-limit|abnormal|not-started`. Depends: T039, T020. Evidence: T039 passes. (R8, FR-023, FR-023a)
+- [X] T041 [P] **Test** Write `tests/unit/test_fingerprint.py`: the workspace fingerprint covers HEAD, the index, and the worktree including untracked non-ignored files; it is stable across runs and changes on any content, mode or new-file change. Depends: T002. Evidence: fails before T042, passes after.
+- [X] T042 **Impl (decided)** Write `src/dca/fingerprint.py`. Depends: T041. Evidence: T041 passes. (R16, FR-022)
+- [X] T043 **Test** Write `tests/unit/test_report.py`. Cover:
   - **Final-outcome rule, in order**:
     1. a missing or invalid agent report → `blocked`;
     2. malformed, truncated or abnormal → `blocked`, never `succeeded`;
@@ -502,7 +502,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **Schema**: every produced report validates against `contracts/completion-report.schema.json`.
 
   Depends: T007. Evidence: fails before T044, passes after.
-- [ ] T044 **Impl (decided)** Write `src/dca/report.py` (merge, D-FIN finalization, render, stdlib structural validation) and `src/dca/errors.py` (`UsageError`=2, `PreconditionError`=3, `InfraAbort`=4). Depends: T043, T034. Evidence: T043 passes. (FR-008, FR-016, FR-020, FR-022, FR-035, FR-035a, SC-005, SC-007, SC-008, SC-009)
+- [X] T044 **Impl (decided)** Write `src/dca/report.py` (merge, D-FIN finalization, render, stdlib structural validation) and `src/dca/errors.py` (`UsageError`=2, `PreconditionError`=3, `InfraAbort`=4). Depends: T043, T034. Evidence: T043 passes. (FR-008, FR-016, FR-020, FR-022, FR-035, FR-035a, SC-005, SC-007, SC-008, SC-009)
 
 **Checkpoint**: Source handling, event parsing and finalization are proven by unit tests against real captured streams.
 
