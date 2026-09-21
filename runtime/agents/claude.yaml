@@ -1,0 +1,42 @@
+# runtime/agents/claude.yaml - the Claude backend's Docker Agent config (tasks.md T054).
+#
+# ONE HARNESS AGENT, AND NOTHING ELSE. Claude Code is a harness: Docker Agent starts it and reads
+# its event stream, but does not supply its tools, its subagents or its instructions. So everything
+# that shapes Claude's behaviour lives where Claude actually reads it - the kit-installed managed
+# settings at /etc/claude-code (permissions, the dca-gate PreToolUse hook, the pinned env), the
+# managed CLAUDE.md (= runtime/instructions/root.md), and the managed subagents dca-researcher and
+# dca-reviewer. Declaring toolsets, sub_agents or an instruction_file here would describe controls
+# that do not exist on this path: Docker Agent does not forward injected instructions to a harness
+# agent (research E4), so they would be inert while looking authoritative.
+#
+# No `harness.model`: the authenticated CLI default is used (research R1), so the run follows the
+# developer's own subscription rather than a model this file pins independently of it.
+#
+# Only turn/stop hooks appear here, and only to collect the run record. Per-tool mediation for this
+# backend is the managed PreToolUse hook, and duplicating it here would run the gate twice per call
+# without adding a decision.
+version: "15"
+
+metadata:
+  description: docker-coding-agent-v1 Claude backend
+  version: "1.0.0"
+
+agents:
+  root:
+    description: >
+      Root coding agent for one bounded task. Its instructions, permissions, subagents and skills
+      come from the kit-installed managed Claude configuration, not from this file.
+    harness:
+      type: claude-code
+      effort: high
+    hooks:
+      turn_end:
+        - type: command
+          name: dca-run-record-turn
+          command: /opt/dca/bin/dca-fingerprint
+          on_error: ignore
+      stop:
+        - type: command
+          name: dca-run-record-stop
+          command: /opt/dca/bin/dca-fingerprint
+          on_error: ignore

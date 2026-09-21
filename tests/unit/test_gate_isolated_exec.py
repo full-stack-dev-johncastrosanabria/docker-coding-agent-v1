@@ -268,7 +268,8 @@ class StagingTool(unittest.TestCase):
         self.assertEqual(rendered, expected)
 
     def test_15b_the_production_render_is_the_contracts_exact_command(self):
-        rendered = stage._render_wrapper(stage.PRODUCTION_PREFIX, stage.PRODUCTION_PYTHON)
+        rendered = stage._render_wrapper(stage.TEMPLATE, stage.PRODUCTION_PREFIX,
+                                          stage.PRODUCTION_PYTHON)
         self.assertIn(
             "/usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 /usr/bin/python3 -I "
             "/opt/dca/lib/dca/policy_gate.py", rendered)

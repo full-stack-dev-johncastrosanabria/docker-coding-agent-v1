@@ -28,7 +28,7 @@
       "code.claude.com"
     ],
     "workspace_root": "/workspace",
-    "scratch_dir": "/run/dca/scratch",
+    "scratch_dir": "/run/dca/out",
     "runtime_skills": [
       "repository-navigation",
       "root-cause-debugging",

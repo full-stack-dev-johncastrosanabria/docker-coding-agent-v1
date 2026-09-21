@@ -1,0 +1,108 @@
+# context hygiene only — NOT a security boundary
+#
+# This file keeps noise and obviously sensitive paths out of the agent's working context. It is a
+# hint, nothing more: the agent runs with sudo inside the VM and can read anything the VM holds, so
+# nothing here prevents access to anything. The controls that actually hold are host-side — the
+# mountless sandbox with only committed source, the sbx network policy, host-enforced limits and
+# change retrieval by bundle — plus the cooperative in-VM policy gate's class-2 sensitive-path DENY.
+#
+# Treat every pattern below as "the agent has no reason to read this", never as "the agent cannot
+# read this".
+
+# --- credential-shaped paths (also class-2 DENY in the policy gate) ---
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+.ssh/
+.gnupg/
+.netrc
+.npmrc
+.pypirc
+.docker/config.json
+.aws/
+.config/gcloud/
+.kube/config
+secrets/
+**/*secret*
+**/*credential*
+
+# --- build output and caches: large, regenerated, never the source of truth ---
+node_modules/
+vendor/
+target/
+build/
+dist/
+out/
+bin/
+obj/
+.gradle/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.tox/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.cache/
+coverage/
+htmlcov/
+*.egg-info/
+
+# --- lockfiles: enormous, and the manifest is what the task reasons about ---
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+poetry.lock
+Cargo.lock
+go.sum
+composer.lock
+
+# --- binaries and media: nothing to read, everything to spend context on ---
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.pdf
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.jar
+*.war
+*.so
+*.dylib
+*.dll
+*.exe
+*.class
+*.o
+*.a
+*.wasm
+*.mp4
+*.mov
+*.mp3
+*.wav
+*.woff
+*.woff2
+*.ttf
+
+# --- version control and editor state ---
+.git/
+.hg/
+.svn/
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# --- this run's own machinery: agent-written evidence, never repository content ---
+/run/dca/
