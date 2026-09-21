@@ -386,6 +386,46 @@ class Launcher:
                 f"the approval is stale or undiscoverable: {exc}. Re-run without --approve to "
                 "obtain a new request.") from exc
 
+    def prepare_gate_run(self):
+        """Resolve source and load evidence for the G11 part-B harness, WITHOUT precondition 7.
+
+        This exists because of a genuine ordering problem: `dca run` refuses a backend whose G11 is
+        not a final PASS, and the gate that MAKES it a final PASS has to execute on that backend.
+        So the harness checks its own prerequisites - part A PASS, production conformance PASS,
+        common and backend gates PASS - and then calls this to set up the same Phase 3 the launcher
+        uses.
+
+        It is NOT a bypass. It is unreachable from `dca run` and from `dca.cli`: nothing in the CLI
+        calls it, and there is no flag that reaches it. Everything it skips is checked by the
+        harness instead, and everything it keeps - the source rules, the dirty-checkout rule, the
+        provider-key rule, sbx and SSH state, the network fingerprint - still applies, because a
+        gate run that ignored those would be proving a property about a different environment.
+        """
+        request = self.request
+        source_module.require_repository_root(request.repo)
+        self.source_ref, self.source_commit = source_module.resolve_branch(request.repo,
+                                                                          request.ref)
+        self.dirty_paths = source_module.check_clean(request.repo, request.ignore_uncommitted)
+        present = [name for name in PROVIDER_KEY_NAMES if name in os.environ]
+        if present:
+            raise PreconditionError(
+                "these provider API-key variables are present and dca is subscription-only: "
+                + ", ".join(sorted(present)))
+        try:
+            self.versions = eligibility_module.load_versions(self.versions_path)
+            self.evidence = eligibility_module.load(self.eligibility_path)
+            eligibility_module.check_freshness(self.evidence, self.versions,
+                                               self.eligibility_path)
+            eligibility_module.check_common_gates(self.evidence)
+            eligibility_module.check_backend_available(self.evidence, request.backend)
+        except eligibility_module.EvidenceProblem as exc:
+            raise PreconditionError(str(exc)) from exc
+        self._check_sbx_version()
+        self._check_ssh()
+        self._check_backend_auth()
+        self._check_network_fingerprint()
+        return True
+
     # --- phase 2: policy disposition --------------------------------------------------------
 
     def policy_disposition(self):
