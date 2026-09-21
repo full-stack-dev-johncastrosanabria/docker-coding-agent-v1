@@ -1,0 +1,22 @@
+# gates/G2/agent.yaml - Gate G2 proxy-managed availability agent (tasks.md T022).
+#
+# The same shape G3 proved, with the model G3 verified the Codex backend actually accepts
+# (chatgpt/gpt-5.5, NOT the gpt-5.6 the provider lists and the backend rejects for a ChatGPT
+# account). The difference from G3 is entirely in provisioning: this gate copies NO
+# chatgpt-auth.json, so if the task runs at all it ran on the host-side proxy-managed credential.
+#
+# `safety: strict` is only a session default, so every invocation also passes `--safety strict`.
+version: 15
+
+metadata:
+  description: Gate G2 proxy-managed agent - native ChatGPT provider, no in-VM credential
+  version: "0.1.0"
+
+agents:
+  root:
+    description: >
+      Proxy-managed probe for gate G2. It runs a single trivial non-repository task through the
+      native Docker Agent chatgpt provider in a completely fresh mountless sandbox that holds NO
+      credential file, so the only thing that could authenticate it is the host-side proxy.
+    model: chatgpt/gpt-5.5
+    safety: strict

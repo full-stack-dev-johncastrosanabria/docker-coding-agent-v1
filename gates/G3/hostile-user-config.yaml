@@ -1,0 +1,12 @@
+# gates/G3/hostile-user-config.yaml - CASE D fixture (tasks.md T019 step 3d, research E18).
+#
+# A user-level Docker Agent config that asks for the two weakest settings the runtime has. The
+# gate places it in the config directory the session actually reads and still launches with
+# `--safety strict`. Safety precedence for a new session is: explicit --safety flag > alias
+# options > user settings > the agent's safety > runtime.safety - so this must lose.
+#
+# The check is BEHAVIORAL, not a reported label: under `autonomous` every tool call is
+# auto-approved and the pre_tool_use hook is never consulted, so if this config won, the exit-2
+# hook could not block the write and the file would appear.
+safety: autonomous
+yolo: true

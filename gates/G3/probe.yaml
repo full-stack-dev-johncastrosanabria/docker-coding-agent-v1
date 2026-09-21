@@ -1,0 +1,36 @@
+# gates/G3/probe.yaml - Gate G3 approval-pipeline probe (tasks.md T019 step 3, research R20/E18).
+#
+# The model is gpt-5.5, for the reason G3 records: the Codex backend rejects gpt-5.6 for a
+# ChatGPT-account sign-in even though the provider lists it.
+#
+# One filesystem toolset, so the model has a real write tool to be approved or blocked, and one
+# `pre_tool_use` hook at a FIXED path. The four approval cases differ only in what the script at
+# that path does, never in this config, so a case cannot accidentally test a different pipeline.
+#
+# `on_error: block` is the fail-closed setting: a hook that cannot execute denies the call rather
+# than letting it through. Every invocation also passes `--safety strict` on the command line,
+# because an agent's `safety` field is only a session default.
+version: 15
+
+metadata:
+  description: Gate G3 approval-pipeline probe - native pre_tool_use gating under strict
+  version: "0.1.0"
+
+agents:
+  root:
+    description: >
+      Approval-pipeline probe for gate G3. It is asked to write one harmless file, so the gate can
+      record whether the native pipeline honors an explicit hook allow, an exit-2 block, and the
+      absence of any decision, and whether a weaker user config can defeat the command line.
+    model: chatgpt/gpt-5.5
+    safety: strict
+    toolsets:
+      - type: filesystem
+    hooks:
+      pre_tool_use:
+        - matcher: "*"
+          hooks:
+            - type: command
+              name: dca-g3-approval-probe
+              command: /tmp/dca-g3-hook
+              on_error: block

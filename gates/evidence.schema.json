@@ -400,6 +400,130 @@
           ]
         }
       }
+    },
+    "codex_backend": {
+      "type": "object",
+      "description": "G3 (tasks.md T019) and G2 (tasks.md T022): what the Codex backend was actually proven to be, as a typed field rather than prose, so T024 and T051 consume it directly. G3 records the provider, the model it selected FROM THE PROVIDER'S OWN LIST (with model_fallback_applied true only when T019's documented non-deprecated GPT-5.x fallback was used), the required safety mode, whether the trusted token-file fallback is proven, and whether the sandboxed provider must refresh in-VM - in_vm_refresh_required is false only when runtime evidence shows it, never because documentation names the host, and null when unobserved. G2 additionally records credential_mechanism, which SELECTS the V1 mechanism: 'proxy-managed' is preferred for both profiles, 'token-file-trusted-only' keeps trusted Codex on G3's proven fallback and leaves untrusted blocked. A mechanism is never recorded as proxy-managed after a failure, and credential_mechanism alone never makes a backend untrusted-eligible: G9 decides that. No token value, partial value, digest, Authorization header, cookie or credential file content ever appears here.",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "const": "chatgpt"
+        },
+        "selected_model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the model this gate ran, which must appear in the provider's own list"
+        },
+        "model_fallback_applied": {
+          "type": "boolean"
+        },
+        "model_selection_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "listed_models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "what `docker agent models --provider chatgpt` advertised. Recorded for contrast: the listing is NOT the availability authority, because it advertises a model the Codex backend rejects for a ChatGPT-account sign-in"
+        },
+        "backend_accepted_models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "the candidates the real endpoint ACCEPTED, in T019 preference order. selected_model is the first of these"
+        },
+        "backend_rejected_models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "the candidates the real endpoint rejected"
+        },
+        "safety": {
+          "const": "strict",
+          "description": "the only mode a native Codex execution may be used as V1 evidence under; there is no weaker fallback"
+        },
+        "token_file_fallback_proven": {
+          "type": "boolean",
+          "description": "G3 proved the trusted chatgpt-auth.json fallback works non-interactively in fresh sandboxes"
+        },
+        "in_vm_refresh_required": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "true only on runtime evidence that the sandboxed provider must refresh against auth.openai.com; that promotion goes through the T014/T015 path with an evidence_ref and re-runs the affected G4 checks"
+        },
+        "refresh_candidate": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "host": {
+              "type": "string"
+            },
+            "purpose": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sandbox_required": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "profiles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "how the committed T014 inventory classifies the promotion candidate at the time of this run"
+        },
+        "credential_mechanism": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "proxy-managed",
+            "token-file-trusted-only",
+            null
+          ],
+          "description": "G2 only: the SELECTED V1 credential mechanism"
+        },
+        "trusted_implication": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "untrusted_implication": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "proxy_managed_token_readable": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "G2 only: whether a privileged workload could read OpenAI OAuth material in a proxy-managed sandbox. true forces token-file-trusted-only"
+        }
+      }
     }
   },
   "$defs": {
