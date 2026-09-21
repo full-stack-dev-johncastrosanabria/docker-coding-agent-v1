@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""A fake `sbx` for the launcher tests (tasks.md T063, T066, T068, T070).
+
+Standard library only. It is a RECORDER and a SCRIPTED RESPONDER, not a simulator: it never
+pretends to run a VM. Its whole job is to let a test assert on the exact command the launcher
+built - the sandbox base, `--skills off`, the per-sandbox network rules, `--safety strict`,
+`DOCKER_AGENT_KIT_DIR` - and to hand back a recorded event stream so host-side limit enforcement
+can be exercised without a model.
+
+State lives in `$DCA_FAKE_SBX_DIR`:
+
+  * `state.json`  - what to answer: `version`, `settings`, `policy`, `templates`, `sandboxes`,
+    `fail` (a map of "subcommand" -> exit status, so a test can make exactly one step fail), and
+    `streams` (a map of marker -> path to a recorded `.jsonl` stream that `exec` replays).
+  * `calls.jsonl` - every invocation, appended, with its full argv.
+
+It deliberately refuses `policy init`, `reset` and `rm --all`: the launcher must never call them,
+and a fake that answered them would hide the day one slipped in.
+"""
+
+import json
+import os
+import sys
+import time
+
+STATE_DIR = os.environ.get("DCA_FAKE_SBX_DIR", "")
+FORBIDDEN = (("policy", "init"), ("reset",), ("rm", "--all"))
+
+
+def _state_path():
+    return os.path.join(STATE_DIR, "state.json")
+
+
+def load_state():
+    try:
+        with open(_state_path(), encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(state):
+    with open(_state_path(), "w", encoding="utf-8") as handle:
+        json.dump(state, handle, indent=2, sort_keys=True)
+
+
+def record(argv, status):
+    if not STATE_DIR:
+        return
+    with open(os.path.join(STATE_DIR, "calls.jsonl"), "a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"argv": argv, "status": status, "at": time.time()}) + "\n")
+
+
+def fail_for(state, key):
+    return (state.get("fail") or {}).get(key)
+
+
+def main(argv):
+    args = argv[1:]
+    if not args:
+        record(argv, 2)
+        print("fake sbx: no subcommand", file=sys.stderr)
+        return 2
+
+    for forbidden in FORBIDDEN:
+        if tuple(args[:len(forbidden)]) == forbidden:
+            record(argv, 99)
+            print(f"fake sbx: `sbx {' '.join(forbidden)}` must never be called by the launcher",
+                  file=sys.stderr)
+            return 99
+
+    state = load_state()
+    command = args[0]
+    status = fail_for(state, " ".join(args[:2])) or fail_for(state, command)
+    if status:
+        record(argv, int(status))
+        print(f"fake sbx: scripted failure for {command}", file=sys.stderr)
+        return int(status)
+
+    if command == "version":
+        record(argv, 0)
+        print(state.get("version", "sbx version: v0.43.0"))
+        return 0
+
+    if command == "ls":
+        record(argv, 0)
+        print(json.dumps({"sandboxes": state.get("sandboxes", [])}))
+        return 0
+
+    if command == "settings":
+        record(argv, 0)
+        settings = state.get("settings", {"ssh.agentForwardingEnabled": False,
+                                          "ssh.agentSocketPath": ""})
+        # The real `sbx settings ls --json` answers with a LIST of setting objects, not a mapping.
+        # The fake writes the same shape so a test cannot pass on a shape production never sees.
+        if isinstance(settings, dict):
+            settings = [{"key": key, "value": value, "source": "default"}
+                        for key, value in sorted(settings.items())]
+        print(json.dumps(settings))
+        return 0
+
+    if command == "template":
+        record(argv, 0)
+        print(json.dumps(state.get("templates", [])))
+        return 0
+
+    if command == "policy":
+        record(argv, 0)
+        if args[1:2] == ["ls"]:
+            print(json.dumps(state.get("policy", {"rules": [], "governance": {"active": False}})))
+            return 0
+        rules = state.setdefault("applied_rules", [])
+        rules.append(args[1:])
+        save_state(state)
+        return 0
+
+    if command == "create":
+        record(argv, 0)
+        name = args[args.index("--name") + 1] if "--name" in args else "unnamed"
+        state.setdefault("sandboxes", []).append({"name": name})
+        save_state(state)
+        print(state.get("create_output", "created from docker/sandbox-templates:unspecified"))
+        return 0
+
+    if command == "cp":
+        record(argv, 0)
+        # A copy OUT is asked to produce a file; a test supplies its content by path.
+        if len(args) >= 3 and ":" in args[1]:
+            _, _, remote = args[1].partition(":")
+            payload = (state.get("copy_out") or {}).get(remote)
+            if payload is None:
+                print(f"fake sbx: nothing recorded at {remote}", file=sys.stderr)
+                return 1
+            destination = args[2]
+            os.makedirs(os.path.dirname(os.path.abspath(destination)) or ".", exist_ok=True)
+            if os.path.isfile(payload):
+                with open(payload, "rb") as src, open(destination, "wb") as dst:
+                    dst.write(src.read())
+            else:
+                with open(destination, "w", encoding="utf-8") as dst:
+                    dst.write(payload)
+        return 0
+
+    if command == "exec":
+        script = args[-1]
+        stream_path = None
+        for marker, path in sorted((state.get("streams") or {}).items()):
+            if marker in script:
+                stream_path = path
+                break
+        exit_status = int((state.get("exec_status") or {}).get(
+            next((m for m in sorted(state.get("streams") or {}) if m in script), ""), 0))
+        record(argv, exit_status)
+        if stream_path:
+            delay = float(state.get("stream_delay", 0) or 0)
+            with open(stream_path, encoding="utf-8") as handle:
+                for line in handle:
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+                    if delay:
+                        time.sleep(delay)
+        else:
+            sys.stdout.write((state.get("exec_output") or {}).get("default", ""))
+        return exit_status
+
+    if command == "rm":
+        record(argv, 0)
+        name = args[-1]
+        state["sandboxes"] = [s for s in state.get("sandboxes", []) if s.get("name") != name]
+        state.setdefault("removed", []).append(name)
+        save_state(state)
+        return 0
+
+    if command == "kit":
+        record(argv, 0)
+        print("VALID")
+        return 0
+
+    record(argv, 2)
+    print(f"fake sbx: unsupported subcommand {command!r}", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

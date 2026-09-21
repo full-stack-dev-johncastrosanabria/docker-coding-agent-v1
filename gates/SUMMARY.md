@@ -1,6 +1,6 @@
 # Gate review — architectural eligibility
 
-Generated `2026-09-21T15:33:49Z` from the committed evidence in `gates/`, bound to
+Generated `2026-09-21T21:36:47Z` from the committed evidence in `gates/`, bound to
 `runtime/versions.yaml` digest `sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088`.
 Re-run with `python3 gates/review.py`; T062 and T073 re-run it as their evidence lands.
 
@@ -21,7 +21,7 @@ question T024 actually decides — is established.
 
 | Backend | Available | Trusted-eligible (final) | Untrusted-eligible | Architecturally viable, trusted profile |
 |---|---|---|---|---|
-| claude | yes | not yet | **no** | yes |
+| claude | yes | yes | **no** | yes |
 | codex | yes | not yet | **no** | yes |
 
 ## 4. Why Claude is trusted-only
@@ -117,8 +117,8 @@ status as `PARTIAL` until part B completes it, which is what T073 already says i
 | G1c | PASS | claude |
 | G1d | PASS | claude |
 | G9 | FAIL | claude |
-| G11 | PASS — part A only; `gates/G11.json` is PARTIAL until T073 | claude |
-| PRODUCTION-CONFORMANCE | NOT-RUN | claude |
+| G11 | PASS | claude |
+| PRODUCTION-CONFORMANCE | PASS | claude |
 | G3 | PASS | codex |
 | G2 | FAIL | codex |
 | G9 | PASS | codex |

@@ -1,0 +1,11 @@
+#!/bin/sh
+# bin/dca - the only user-facing entry point (tasks.md T065, contracts/launcher-cli.md).
+#
+# A thin POSIX shim. It adds the repository's src/ to PYTHONPATH and hands every argument to
+# dca.cli unchanged, so the CLI contract lives in one place and this file can never develop an
+# opinion of its own about flags.
+set -eu
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH
+exec python3 -m dca "$@"

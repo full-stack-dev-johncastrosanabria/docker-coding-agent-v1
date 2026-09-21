@@ -1,7 +1,7 @@
 {
   "gate": "G11",
   "status": "PARTIAL",
-  "run_at": "2026-09-21T04:07:30Z",
+  "run_at": "2026-09-21T21:29:56Z",
   "versions": {
     "sbx": "v0.43.0"
   },
@@ -97,6 +97,72 @@
           "description": "criterion 4: Docker Agent was killed abruptly mid-run from the host-side procedure. The run is classified abnormal and can never read as success - the process outcome is decisive and a stream that happens to look finished cannot overrule it. This is abnormal TERMINATION, not the host limit enforcement T073 adds",
           "result": "PASS",
           "evidence_ref": "agent_exit=137 -> abnormal: the agent exited 137 (killed by signal 9), and its stream was truncated; the partial stream classified truncated"
+        },
+        {
+          "id": "G11.pre.G11.partA",
+          "description": "prerequisite: G11.partA",
+          "result": "PASS",
+          "evidence_ref": "part A status for claude: 'PASS'"
+        },
+        {
+          "id": "G11.pre.G11.partA.provenance",
+          "description": "prerequisite: G11.partA.provenance",
+          "result": "PASS",
+          "evidence_ref": "part A provenance sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088 vs current sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+        },
+        {
+          "id": "G11.pre.conformance",
+          "description": "prerequisite: conformance",
+          "result": "PASS",
+          "evidence_ref": "production conformance for claude: 'PASS'"
+        },
+        {
+          "id": "G11.pre.common-gates",
+          "description": "prerequisite: common-gates",
+          "result": "PASS",
+          "evidence_ref": "failing common gates: none"
+        },
+        {
+          "id": "G11.pre.availability.claude",
+          "description": "prerequisite: availability.claude",
+          "result": "PASS",
+          "evidence_ref": "G1a: 'PASS'"
+        },
+        {
+          "id": "G11.pre.trusted-gates.claude",
+          "description": "prerequisite: trusted-gates.claude",
+          "result": "PASS",
+          "evidence_ref": "failing trusted gates: none"
+        },
+        {
+          "id": "G11.pre.launcher",
+          "description": "prerequisite: launcher",
+          "result": "PASS",
+          "evidence_ref": "the production execution primitives are importable"
+        },
+        {
+          "id": "G11.c5.claude",
+          "description": "criterion 5: a step limit is enforced FROM THE HOST - the run really stopped, and it stopped because the host counted dispatched tool_call events rather than trusting the in-VM advisory counter",
+          "result": "PASS",
+          "evidence_ref": "limit 3, host counted 3 steps, stop reason 'steps', stream host-terminated"
+        },
+        {
+          "id": "G11.c6.claude",
+          "description": "criterion 6: retries are counted as repair/re-verify cycles - a workspace change followed by re-execution of a required check that had not passed - and the host stops the run at the configured number",
+          "result": "PASS",
+          "evidence_ref": "limit 1, host counted 1 retries over 2 verification runs, stop reason 'retries'"
+        },
+        {
+          "id": "G11.c7.claude",
+          "description": "criterion 7: a host-triggered stop records the correct limit_reached, wall clock included, and the run integrity says the HOST ended the run (host-terminated / host-limit) rather than the agent dying",
+          "result": "PASS",
+          "evidence_ref": "limit_reached 'wall_clock', run_integrity {'stream': 'host-terminated', 'agent_exit': 'host-limit', 'sandbox_created': True}"
+        },
+        {
+          "id": "G11.c8.claude",
+          "description": "criterion 8 (FR-023a): at a host limit, `succeeded` is allowed only when every required success proof predates the limit. Both directions are scripted, because a rule that only ever refuses cannot be told apart from one that never permits",
+          "result": "PASS",
+          "evidence_ref": "evidence-predates-limit -> 'succeeded'; evidence-does-not -> 'blocked' (reason \"required check 'sh check.sh' could not be resolved before the steps limit\")"
         }
       ]
     },
@@ -145,9 +211,10 @@
           "result": "PASS",
           "evidence_ref": "agent_exit=137 -> abnormal: the agent exited 137 (killed by signal 9), and its stream was truncated; the partial stream classified truncated"
         }
-      ]
+      ],
+      "not_run_reason": "backend unavailable or not selected"
     }
   },
-  "notes": "G11 PART A only (tasks.md T020): event-stream integrity for every available backend. The gate status is PARTIAL by construction and stays PARTIAL until T073 proves criteria 5 host step-limit enforcement, 6 retry-cycle enforcement, 7 wall-clock / host limit stop semantics, 8 FR-023a success-at-limit behavior; nothing here reports on them, and no host-side limit is implemented or claimed. The prototype parser is gates/G11/probe_parser.py, which T040 will build src/dca/events.py from; it is gate-local and deliberately supports only the pinned docker_agent v1.136.0. A tool call is counted from the typed outer event 'tool_call' and never from text that looks like one. That matters because partial_tool_call, tool_call_response, hook_blocked and tool_call_confirmation all carry a tool_call object with the SAME key set as a real tool_call event, so only the type string separates them: partial_tool_call repeats the id of the call it is streaming, and G3's approval cases recorded 0 tool_call with 1 tool_call_response each because a hook denied the call - counting either would count attempts and deltas as dispatched calls. The recognized set is the 19 outer types the pinned runtime was actually OBSERVED emitting across this repository's real captures; it is not guessed from documentation and not read out of the binary, whose Go string table is grouped by length and interleaves unrelated constants. An unrecognized type fails closed rather than being tolerated. Criterion 1's ground truth is the markers the tool calls left in the VM filesystem, read before any parsing, so the stream is never checked against itself. Criterion 3 is derived deterministically on the host from each backend's real capture, because mutating stream bytes needs no model run. Captures under gates/G11/captures/<backend>/ are sanitized by redacting credential-shaped STRING VALUES only, leaving every type, key and nesting level where the runtime put it; a textual redaction would rewrite object boundaries and make the capture parse as malformed, which would make the gate a test of its own sanitizer. Each backend used its own exact pinned base and its own accepted G4 cell; Codex additionally ran --safety strict on every invocation and carried only the minimal chatgpt-auth.json the accepted G2 decision selected, never the full ~/.config/cagent. One backend failing part A never fails the other. Every rule this gate added carried --sandbox; the global fingerprint is captured with zero sandboxes before and after; sbx policy init, sbx reset and sbx rm --all are never called; sandboxes were created and removed one at a time by name.",
+  "notes": "G11 PART A only (tasks.md T020): event-stream integrity for every available backend. The gate status is PARTIAL by construction and stays PARTIAL until T073 proves criteria 5 host step-limit enforcement, 6 retry-cycle enforcement, 7 wall-clock / host limit stop semantics, 8 FR-023a success-at-limit behavior; nothing here reports on them, and no host-side limit is implemented or claimed. The prototype parser is gates/G11/probe_parser.py, which T040 will build src/dca/events.py from; it is gate-local and deliberately supports only the pinned docker_agent v1.136.0. A tool call is counted from the typed outer event 'tool_call' and never from text that looks like one. That matters because partial_tool_call, tool_call_response, hook_blocked and tool_call_confirmation all carry a tool_call object with the SAME key set as a real tool_call event, so only the type string separates them: partial_tool_call repeats the id of the call it is streaming, and G3's approval cases recorded 0 tool_call with 1 tool_call_response each because a hook denied the call - counting either would count attempts and deltas as dispatched calls. The recognized set is the 19 outer types the pinned runtime was actually OBSERVED emitting across this repository's real captures; it is not guessed from documentation and not read out of the binary, whose Go string table is grouped by length and interleaves unrelated constants. An unrecognized type fails closed rather than being tolerated. Criterion 1's ground truth is the markers the tool calls left in the VM filesystem, read before any parsing, so the stream is never checked against itself. Criterion 3 is derived deterministically on the host from each backend's real capture, because mutating stream bytes needs no model run. Captures under gates/G11/captures/<backend>/ are sanitized by redacting credential-shaped STRING VALUES only, leaving every type, key and nesting level where the runtime put it; a textual redaction would rewrite object boundaries and make the capture parse as malformed, which would make the gate a test of its own sanitizer. Each backend used its own exact pinned base and its own accepted G4 cell; Codex additionally ran --safety strict on every invocation and carried only the minimal chatgpt-auth.json the accepted G2 decision selected, never the full ~/.config/cagent. One backend failing part A never fails the other. Every rule this gate added carried --sandbox; the global fingerprint is captured with zero sandboxes before and after; sbx policy init, sbx reset and sbx rm --all are never called; sandboxes were created and removed one at a time by name.\n\nPART B (tasks.md T073): host-side limit enforcement on real sandboxes, run by gates/G11/run_part_b.py using the launcher's own Phase 3 execution primitives. The harness adds no public bypass: dca run still refuses a backend whose G11 is not a final PASS, and Codex executions still carry --safety strict and DOCKER_AGENT_KIT_DIR from the same builder production uses.",
   "network_policy_fingerprint": "sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697"
 }

@@ -1,0 +1,16 @@
+#!/bin/sh
+# Fingerprint hook wrapper (tasks.md T053/T055, FR-022).
+#
+# Rendered by runtime/sandbox/kit/stage.py with ONLY {PREFIX} and {PYTHON} substituted, exactly
+# like the gate wrapper, so the shipped wrapper and the tested one differ in nothing else.
+#
+# IT ALWAYS EXITS 0, which is the opposite of the gate's rule and deliberately so. The gate decides
+# whether a tool call may proceed, so any doubt there must deny. This hook only RECORDS evidence:
+# a fingerprint it failed to take is evidence that is absent, and absent review evidence already
+# stops a planned task from being reported as a success. Letting it block tool calls would add a
+# way for the run to die without protecting anything that the missing evidence does not.
+#
+# `env -i` and `-I` are kept for the same reason as in the gate wrapper: the hook resolves its
+# interpreter and modules by absolute path, never through repository-controlled environment.
+/usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 {PYTHON} -I {PREFIX}opt/dca/lib/dca/fingerprint_hook.py
+exit 0

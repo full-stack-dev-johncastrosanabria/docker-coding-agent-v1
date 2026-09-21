@@ -1,0 +1,80 @@
+{
+  "_comment": "tasks.md T051. GENERATED FROM PROVEN EVIDENCE, NOT FROM INTENT. Every host here is (a) proven allowed for that backend and profile in gates/G4.json proven_network_allowset, and (b) either sandbox_required:true for that profile in gates/inventory/control-plane-hosts.json (control_plane) or a G4-proven trusted allowlist entry (allow). The untrusted 'allow' list is EMPTY by design: an untrusted repository reaches only its backend's control plane, and any further host arrives as a per-run grant applied to the host-side sbx policy. host-oauth-login and discovery-only hosts never appear as allowed: the browser sign-in runs on the developer's host, not in the sandbox. Claude's built-in kit declares a sandbox-scoped allow rule covering seven hosts and that rule is editable:false, so every kit host a profile does not permit is neutralised by an explicit sandbox-scoped deny; Codex's base kit declares no network allow at all, so it needs no denies and chatgpt.com is added explicitly. JSON-compatible YAML: read and written with the stdlib json module only.",
+  "backends": {
+    "claude": {
+      "trusted": {
+        "allow": [
+          "code.claude.com",
+          "codeload.github.com",
+          "crates.io",
+          "docs.claude.com",
+          "files.pythonhosted.org",
+          "github.com",
+          "objects.githubusercontent.com",
+          "proxy.golang.org",
+          "pypi.org",
+          "registry.npmjs.org",
+          "static.crates.io"
+        ],
+        "control_plane": [
+          "api.anthropic.com"
+        ],
+        "deny": [
+          "bridge.claudeusercontent.com",
+          "claude.com",
+          "downloads.claude.ai",
+          "mcp-proxy.anthropic.com",
+          "platform.claude.com"
+        ]
+      },
+      "untrusted": {
+        "allow": [],
+        "control_plane": [
+          "api.anthropic.com"
+        ],
+        "deny": [
+          "bridge.claudeusercontent.com",
+          "claude.com",
+          "code.claude.com",
+          "downloads.claude.ai",
+          "mcp-proxy.anthropic.com",
+          "platform.claude.com"
+        ]
+      }
+    },
+    "codex": {
+      "trusted": {
+        "allow": [
+          "code.claude.com",
+          "codeload.github.com",
+          "crates.io",
+          "docs.claude.com",
+          "files.pythonhosted.org",
+          "github.com",
+          "objects.githubusercontent.com",
+          "proxy.golang.org",
+          "pypi.org",
+          "registry.npmjs.org",
+          "static.crates.io"
+        ],
+        "control_plane": [
+          "chatgpt.com"
+        ],
+        "deny": []
+      },
+      "untrusted": {
+        "allow": [],
+        "control_plane": [
+          "chatgpt.com"
+        ],
+        "deny": []
+      }
+    }
+  },
+  "must_deny": [
+    "auth.openai.com",
+    "claude.ai",
+    "platform.claude.com"
+  ],
+  "version": 1
+}

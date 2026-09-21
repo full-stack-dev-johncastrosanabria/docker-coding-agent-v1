@@ -1,13 +1,33 @@
 #!/bin/sh
-# scripts/verify.sh: static repository checks (tasks.md T006; extended by T061, used by `dca verify`).
+# scripts/verify.sh: repository verification (tasks.md T006, extended by T061; used by `dca verify`).
 #
-# POSIX sh. Runs against the repository that contains this script. Prints every failing
-# check with the offending path, then exits 1; exits 0 when all checks pass. It reads no
-# environment secrets and prints no file contents.
+# POSIX sh. Runs against the repository that contains this script. Prints every failing check with
+# the offending path, then exits 1; exits 0 when all checks pass. It reads no environment secrets
+# and prints no file contents.
 #
-# Checks:
-#   (a) construction-time Spec Kit skills never enter the runtime or the kit: no `speckit-*`
-#       name or reference and no `.claude/skills` path anywhere under runtime/ (which includes
+# TWO LAYERS, AND THE SPLIT IS DELIBERATE.
+#
+#   * The shell checks below are the ones that are natural in `sh`: path shapes under runtime/ and
+#     the presence of the pins file. They need nothing but a filesystem.
+#   * Everything structured - the policy files, gate evidence, version pins, the effective Codex
+#     tool lists, the trusted skill source - is in scripts/verify_checks.py, because expressing
+#     those in `sh` would mean parsing JSON with `sed`, and a check nobody can read is a check
+#     nobody maintains.
+#
+# `--static` restricts the run to the credential-free, daemon-free checks, which is what CI can
+# run. Without it, the live checks run too: version pins against the installed tools, the live
+# global network-policy fingerprint against the one the gate evidence recorded, backend sign-in
+# read from safe structural fields only, and - for each AVAILABLE backend - the pinned binary's
+# own `debug config`, `debug toolsets --json` and `debug skills` against a freshly staged kit.
+# Those last three load the Codex team using the developer's existing sign-in, never a provider API
+# key, and no token value is printed or logged.
+#
+# `--allow-drift` records a version-pin mismatch as a note instead of a failure. Nothing else is
+# ever relaxed by it.
+#
+# Shell checks:
+#   (a) construction-time Spec Kit skills never enter the runtime or the kit: no `speckit-*` name
+#       or reference and no `.claude/skills` path anywhere under runtime/ (which includes
 #       runtime/sandbox/kit/);
 #   (b) runtime/agents/*.yaml never references the construction bootstrap
 #       docker-agent.bootstrap.yaml;
@@ -17,6 +37,14 @@ set -u
 
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd) || exit 1
 cd "$ROOT" || exit 1
+
+PYTHON_ARGS=""
+for arg in "$@"; do
+    case "$arg" in
+        --static|--allow-drift) PYTHON_ARGS="$PYTHON_ARGS $arg" ;;
+        *) printf 'verify: unknown option %s\n' "$arg" >&2; exit 2 ;;
+    esac
+done
 
 failed=0
 
@@ -56,6 +84,18 @@ done
 # (c) Exact version pins exist.
 if [ ! -f runtime/versions.yaml ]; then
     fail "(c) missing runtime/versions.yaml"
+fi
+
+# (d) Everything structured. It reads gates/ and runs the contract tests, so it applies only to a
+# full repository checkout. A partial tree (the isolation fixture copies scripts/ and runtime/
+# only) says so out loud rather than reporting a pass it never computed.
+if [ -f gates/eligibility.json ] && [ -d tests ]; then
+    # shellcheck disable=SC2086
+    if ! python3 scripts/verify_checks.py $PYTHON_ARGS; then
+        failed=1
+    fi
+else
+    printf 'verify: NOTE structured checks skipped: this tree has no gates/eligibility.json or tests/\n'
 fi
 
 if [ "$failed" -ne 0 ]; then

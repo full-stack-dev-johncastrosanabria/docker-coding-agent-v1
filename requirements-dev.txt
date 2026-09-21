@@ -12,3 +12,9 @@
 # Install into a separate development virtual environment:
 #   python3 -m venv <dev-venv> && <dev-venv>/bin/pip install -r requirements-dev.txt
 jsonschema==4.26.0
+
+# PyYAML is used exclusively by the test suite to parse the Docker Agent configs
+# (runtime/agents/*.yaml), which Docker Agent itself owns and parses as real YAML.
+# It is NOT a runtime dependency: DCA-owned data files are JSON-compatible YAML and
+# are read with the stdlib json module only (tasks.md, Global constraints).
+pyyaml==6.0.3

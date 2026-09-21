@@ -360,19 +360,19 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
 **Purpose**: The single policy engine shared by both backends, plus its isolated-execution packaging. It is host-independent and can run **in parallel with Phase 2** once Phase 1 is done.
 
-- [ ] T025 [P] **Test** Write `tests/unit/test_actions_policy.py`: table-driven tests asserting that `runtime/policy/actions.yaml` defines exactly classes **1–31**. Each class has exactly one decision per trust level, and the decisions match data-model.md "Action Classes" verbatim, e.g.:
+- [X] T025 [P] **Test** Write `tests/unit/test_actions_policy.py`: table-driven tests asserting that `runtime/policy/actions.yaml` defines exactly classes **1–31**. Each class has exactly one decision per trust level, and the decisions match data-model.md "Action Classes" verbatim, e.g.:
   - class 14: "trusted: ALLOW · untrusted: ASK";
   - class 21: external API call → ASK;
   - class 30: unconstrained general web browsing → DENY;
   - class 31: policy-listed documentation → "trusted: ALLOW · untrusted: ASK".
 
   The DENY set must equal `{2, 5, 16, 19, 22, 23, 25, 26, 27, 29, 30}` (the approval-grant schema's non-grantable list). Depends: T002, T003. Evidence: fails before T026, passes after.
-- [ ] T026 **Impl (decided)** Write `runtime/policy/actions.yaml` with classes 1–31 exactly as in data-model.md, including class metadata (path rules, tool-name matchers, network-intent rules for 21/30/31, sensitive globs). Class 26's metadata carries its **positive complement allowlist** (data-model "Class 26 and its positive complement"; no new class):
+- [X] T026 **Impl (decided)** Write `runtime/policy/actions.yaml` with classes 1–31 exactly as in data-model.md, including class metadata (path rules, tool-name matchers, network-intent rules for 21/30/31, sensitive globs). Class 26's metadata carries its **positive complement allowlist** (data-model "Class 26 and its positive complement"; no new class):
   - `delegation: {from: root, to: [researcher, reviewer]}`, with tool matchers for Codex `transfer_task` and Claude's subagent tool (`dca-researcher`, `dca-reviewer`);
   - `skills: {from: root, names: [repository-navigation, root-cause-debugging, verification, change-receipt], source: trusted-kit}`, with tool matchers for Codex `read_skill`/`read_skill_file` and Claude's skill tool.
 
   `run_skill` is never on the allowlist. Depends: T025. Evidence: T025 passes. (FR-004, FR-005, FR-026, FR-026a, FR-026b, FR-028, FR-033a)
-- [ ] T027 [P] **Test** Write `tests/unit/test_shellparse.py`, including adversarial cases. Cover:
+- [X] T027 [P] **Test** Write `tests/unit/test_shellparse.py`, including adversarial cases. Cover:
   - segmentation on `;`, `&&`, `||`, `|` and newline;
   - `$(…)`, backticks, and nested substitution;
   - `eval`, `sh -c` and `bash -c` handled recursively;
@@ -381,8 +381,8 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **unparseable → class 28 (ASK)**.
 
   Depends: T002. Evidence: fails before T028, passes after.
-- [ ] T028 **Impl (decided)** Write `src/dca/shellparse.py`: conservative, stdlib-only (contracts/policy-gate.md "Classification rules"). Depends: T027. Evidence: T027 passes.
-- [ ] T029 **Test** Write `tests/unit/test_policy_gate.py`. Cover:
+- [X] T028 **Impl (decided)** Write `src/dca/shellparse.py`: conservative, stdlib-only (contracts/policy-gate.md "Classification rules"). Depends: T027. Evidence: T027 passes.
+- [X] T029 **Test** Write `tests/unit/test_policy_gate.py`. Cover:
   - Claude and Codex payload normalization to `{backend, agent, tool, input, cwd, session_id}`, with `dca-researcher`/`dca-reviewer` → researcher/reviewer (Claude `agent_type`) and `root`/`researcher`/`reviewer` from Codex `agent_name`; a missing or unknown Codex `agent_name` → exit 2;
   - decision output: Claude ALLOW = exit 0 with no output; Codex ALLOW = exit 0 with exactly `{"hook_specific_output":{"hook_event_name":"pre_tool_use","permission_decision":"allow"}}` on stdout; every DENY or ASK-without-grant = exit 2; no code path exits 0 without a Codex decision;
   - realpath/symlink escape → class 5; sensitive paths → class 2; a mutating tool by researcher/reviewer → class 27, while the Codex reviewer's fixed `git_diff`/`git_status`/`git_log` tools are allowed as read-only inspection; an advisory step limit → class 29 with `DCA_LIMIT`;
@@ -397,7 +397,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - the decision log never contains file contents or secret-like values.
 
   Depends: T026, T028. Evidence: fails before T030, passes after.
-- [ ] T030 **Impl (decided)** Write `src/dca/policy_gate.py`, the gate logic plus a **trusted-root bootstrap**:
+- [X] T030 **Impl (decided)** Write `src/dca/policy_gate.py`, the gate logic plus a **trusted-root bootstrap**:
   - the trusted root is derived **only** from the script's own resolved absolute path. The kit installs it as `/opt/dca/lib/dca/policy_gate.py`, so the trusted root is `/opt/dca/lib`;
   - `sys.path` is set to `[trusted_root]` plus the interpreter's stdlib entries **only**, so it is independent of the current directory, `PYTHONPATH` and `PYTHONHOME`;
   - it imports `dca.shellparse` from there, and any import or other error → exit 2 (`DCA_DENY internal`);
@@ -405,7 +405,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - the decision log follows the contract, including `class: null` + `rule: "class26-positive-complement"` for complement ALLOWs.
 
   Depends: T029. Evidence: T029 passes. (FR-026a, FR-027, FR-028)
-- [ ] T031 **Test** Write `tests/unit/test_gate_isolated_exec.py`. It exercises the **exact installed wrapper command and layout**:
+- [X] T031 **Test** Write `tests/unit/test_gate_isolated_exec.py`. It exercises the **exact installed wrapper command and layout**:
   - **Staging**: use the T032 staging tool to build the kit layout (`opt/dca/{bin/dca-gate,lib/dca/{policy_gate.py,shellparse.py,__init__.py},policy/}`) under a temp prefix, rendering the wrapper from the same template as production, with only `{PREFIX}` and `{PYTHON}` substituted.
   - **Invocation**: call the staged `dca-gate`, which runs `/usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 {PYTHON} -I {PREFIX}/opt/dca/lib/dca/policy_gate.py`.
   - **Assertions**:
@@ -416,19 +416,19 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
     5. pointing `{PYTHON}` at a nonexistent interpreter → exit **2**, never 126/127.
 
   Production's `/opt/dca` layout with `/usr/bin/python3` is re-checked inside the VM by T062. Depends: T030. Evidence: fails before T032, passes after.
-- [ ] T032 **Impl (decided)** Write the wrapper template `runtime/sandbox/kit/templates/dca-gate.sh.in` and the staging tool `runtime/sandbox/kit/stage.py`.
+- [X] T032 **Impl (decided)** Write the wrapper template `runtime/sandbox/kit/templates/dca-gate.sh.in` and the staging tool `runtime/sandbox/kit/stage.py`.
   - **Wrapper** (POSIX `sh`): runs the contract's command `/usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 /usr/bin/python3 -I /opt/dca/lib/dca/policy_gate.py` **without `exec`**, and maps every status other than 0 and 2, including 126/127 from a missing interpreter, to **exit 2**. This implements the contract's guarantee that any internal error, including a missing interpreter, results in exit 2.
   - **Staging tool**: renders the template with `{PREFIX}`/`{PYTHON}` (production: `/` and `/usr/bin/python3`) and lays out `opt/dca/…`. Given a skills source directory, it also stages `opt/dca/skills/<name>/SKILL.md` for exactly the four runtime skills and writes the canonical `opt/dca/kit-manifest.json` in the exact serialization of policy-gate.md *Kit manifest* (sorted keys, compact separators, no trailing newline, lowercase-hex SHA-256), so two staging runs produce identical bytes. It refuses any other skill directory. T055, T056 and T061 use this.
 
   Depends: T031. Evidence: T031 passes.
-- [ ] T033 [P] **Test** Write `tests/unit/test_taskid.py`.
+- [X] T033 [P] **Test** Write `tests/unit/test_taskid.py`.
   - **Test vector**: prompt `"Fix the off-by-one in  paginate()\r\n"`, criteria `["page 2 starts at item 11","tests pass"]`, verify `["make test"]` → `sha256:95a55eec90cdab43c62e2a329c873b1ebf2c19f6384c5b25117d4557287a5086`.
   - **Properties**: CRLF vs LF gives the same fingerprint; inner whitespace changes it; criteria order changes it; empty criteria lines are omitted.
   - **Error**: invalid UTF-8 → usage error (exit 2).
 
   Depends: T002. Evidence: fails before T034, passes after.
-- [ ] T034 **Impl (decided)** Write `src/dca/taskid.py` with `task_fingerprint()`, exactly per data-model.md "Task fingerprint algorithm". Depends: T033. Evidence: T033 passes.
-- [ ] T035 **Test** Write `tests/unit/test_grants.py`.
+- [X] T034 **Impl (decided)** Write `src/dca/taskid.py` with `task_fingerprint()`, exactly per data-model.md "Task fingerprint algorithm". Depends: T033. Evidence: T033 passes.
+- [X] T035 **Test** Write `tests/unit/test_grants.py`.
   - **Positive**: default report discovery (`<repo>/../.dca-runs/<origin-run-id>/report.json`); `--approval-report <path>`; a valid grant file with `granted_by: developer-cli` that validates against `contracts/approval-grant.schema.json`.
   - **Negative**, each → exit 3:
     - report not found;
@@ -441,7 +441,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **Guarantees**: no code path reads a grant file as **input**; the in-VM copy is never read back.
 
   Depends: T034, T007. Evidence: fails before T036, passes after.
-- [ ] T036 **Impl (decided)** Write `src/dca/grants.py`: host-authoritative grants and provenance verification (data-model ApprovalGrant; contracts/launcher-cli.md "Approval provenance"). Depends: T035. Evidence: T035 passes. (FR-027a–FR-027d)
+- [X] T036 **Impl (decided)** Write `src/dca/grants.py`: host-authoritative grants and provenance verification (data-model ApprovalGrant; contracts/launcher-cli.md "Approval provenance"). Depends: T035. Evidence: T035 passes. (FR-027a–FR-027d)
 
 **Checkpoint**: The policy engine, parser, isolated-execution packaging, fingerprint and grants all pass with no sandbox.
 
@@ -449,7 +449,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
 ## Phase 4: Source delivery, event processing and finalization (order item 4)
 
-- [ ] T037 [P] **Test** Write `tests/unit/test_source.py` using throwaway local repos under `tests/unit/work/`.
+- [X] T037 [P] **Test** Write `tests/unit/test_source.py` using throwaway local repos under `tests/unit/work/`.
   - **Branch-ref validation**:
     - accepted: a local branch name, `refs/heads/<branch>`, `HEAD` attached to a local branch;
     - refused with exit 3: a tag, a raw SHA, `HEAD~1`, a remote-tracking ref, an ambiguous name, a detached `HEAD`;
@@ -460,8 +460,8 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **No temporary host refs**.
 
   Depends: T002. Evidence: fails before T038, passes after.
-- [ ] T038 **Impl (decided)** Write `src/dca/source.py`: host-side branch validation, dirty check, bundle export/verify and quarantine import. Depends: T037. Evidence: T037 passes. (R11, FR-030, FR-034)
-- [ ] T039 **Test** Write `tests/unit/test_events.py`, using `gates/G11/captures/<backend>/` for **each available backend**, plus synthetic cases. Cover:
+- [X] T038 **Impl (decided)** Write `src/dca/source.py`: host-side branch validation, dirty check, bundle export/verify and quarantine import. Depends: T037. Evidence: T037 passes. (R11, FR-030, FR-034)
+- [X] T039 **Test** Write `tests/unit/test_events.py`, using `gates/G11/captures/<backend>/` for **each available backend**, plus synthetic cases. Cover:
   - exact tool-call counts;
   - imitation-event JSON in tool output isn't counted;
   - malformed → `stream = malformed`, truncated → `truncated`, abrupt termination → `agent_exit = abnormal`;
@@ -476,10 +476,10 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **first workspace mutation** detection per data-model "Context Record": the first tool call, attempted or executed, that can change the workspace or candidate repository state. Shell, build and verification commands count unless classified as read-only inspection. Writes confined to `/run/dca/out/` (`context.json`, `plan.md`, `report.agent.json`), reads, skill loading and delegation don't count. Tests include a scratch-only write before the first edit (not a mutation) and a build command before `context.json` (a mutation, so ordering fails). T075 needs this for FR-001 and FR-008.
 
   Depends: T020. Evidence: fails before T040, passes after.
-- [ ] T040 **Impl (gated: G11)** Write `src/dca/events.py`: a typed outer-event parser that fails closed, with step, retry and token accounting, mutation ordering, native ceiling termination classification (`budget_exceeded`, `max_iterations_reached`, `error` with `code: loop_detected` → `limit_reached: native_ceiling` plus `native_ceiling` detail), and `run_integrity` values `stream: complete|host-terminated|malformed|truncated|none` and `agent_exit: normal|host-limit|abnormal|not-started`. Depends: T039, T020. Evidence: T039 passes. (R8, FR-023, FR-023a)
-- [ ] T041 [P] **Test** Write `tests/unit/test_fingerprint.py`: the workspace fingerprint covers HEAD, the index, and the worktree including untracked non-ignored files; it is stable across runs and changes on any content, mode or new-file change. Depends: T002. Evidence: fails before T042, passes after.
-- [ ] T042 **Impl (decided)** Write `src/dca/fingerprint.py`. Depends: T041. Evidence: T041 passes. (R16, FR-022)
-- [ ] T043 **Test** Write `tests/unit/test_report.py`. Cover:
+- [X] T040 **Impl (gated: G11)** Write `src/dca/events.py`: a typed outer-event parser that fails closed, with step, retry and token accounting, mutation ordering, native ceiling termination classification (`budget_exceeded`, `max_iterations_reached`, `error` with `code: loop_detected` → `limit_reached: native_ceiling` plus `native_ceiling` detail), and `run_integrity` values `stream: complete|host-terminated|malformed|truncated|none` and `agent_exit: normal|host-limit|abnormal|not-started`. Depends: T039, T020. Evidence: T039 passes. (R8, FR-023, FR-023a)
+- [X] T041 [P] **Test** Write `tests/unit/test_fingerprint.py`: the workspace fingerprint covers HEAD, the index, and the worktree including untracked non-ignored files; it is stable across runs and changes on any content, mode or new-file change. Depends: T002. Evidence: fails before T042, passes after.
+- [X] T042 **Impl (decided)** Write `src/dca/fingerprint.py`. Depends: T041. Evidence: T041 passes. (R16, FR-022)
+- [X] T043 **Test** Write `tests/unit/test_report.py`. Cover:
   - **Final-outcome rule, in order**:
     1. a missing or invalid agent report → `blocked`;
     2. malformed, truncated or abnormal → `blocked`, never `succeeded`;
@@ -502,7 +502,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **Schema**: every produced report validates against `contracts/completion-report.schema.json`.
 
   Depends: T007. Evidence: fails before T044, passes after.
-- [ ] T044 **Impl (decided)** Write `src/dca/report.py` (merge, D-FIN finalization, render, stdlib structural validation) and `src/dca/errors.py` (`UsageError`=2, `PreconditionError`=3, `InfraAbort`=4). Depends: T043, T034. Evidence: T043 passes. (FR-008, FR-016, FR-020, FR-022, FR-035, FR-035a, SC-005, SC-007, SC-008, SC-009)
+- [X] T044 **Impl (decided)** Write `src/dca/report.py` (merge, D-FIN finalization, render, stdlib structural validation) and `src/dca/errors.py` (`UsageError`=2, `PreconditionError`=3, `InfraAbort`=4). Depends: T043, T034. Evidence: T043 passes. (FR-008, FR-016, FR-020, FR-022, FR-035, FR-035a, SC-005, SC-007, SC-008, SC-009)
 
 **Checkpoint**: Source handling, event parsing and finalization are proven by unit tests against real captured streams.
 
@@ -510,7 +510,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
 ## Phase 5: Runtime assets and production conformance (order item 5)
 
-- [ ] T045 [P] **Impl (decided)** Write `runtime/instructions/root.md`, under 150 lines. It is the shared root instruction for both backends and implements the task lifecycle concisely. It must require:
+- [X] T045 [P] **Impl (decided)** Write `runtime/instructions/root.md`, under 150 lines. It is the shared root instruction for both backends and implements the task lifecycle concisely. It must require:
   1. **classify** the task as direct or planned, and record the reason (FR-007);
   2. for planned work, write the **plan** to `/run/dca/out/plan.md` **before the first workspace mutation** (FR-008);
   3. if a direct task grows beyond direct-task bounds, **escalate exactly once** to planned and record `escalated_from: direct` (FR-009);
@@ -529,30 +529,30 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
       - the report duty (`/run/dca/out/report.agent.json`).
 
   Depends: T002. Evidence: `wc -l` < 150; T058 content assertions pass.
-- [ ] T046 [P] **Impl (decided)** Write `runtime/instructions/researcher.md` (read-only, concise cited findings, uncertainty; FR-004, US5) and `runtime/instructions/reviewer.md` (adversarial, read-only, evidence-backed findings in the data-model Review Finding categories, never modifies the candidate; FR-020–FR-022, US6). Depends: T002. Evidence: T058 content assertions pass.
-- [ ] T047 [P] **Impl (decided)** Write `runtime/skills/repository-navigation/SKILL.md`. It must explicitly require:
+- [X] T046 [P] **Impl (decided)** Write `runtime/instructions/researcher.md` (read-only, concise cited findings, uncertainty; FR-004, US5) and `runtime/instructions/reviewer.md` (adversarial, read-only, evidence-backed findings in the data-model Review Finding categories, never modifies the candidate; FR-020–FR-022, US6). Depends: T002. Evidence: T058 content assertions pass.
+- [X] T047 [P] **Impl (decided)** Write `runtime/skills/repository-navigation/SKILL.md`. It must explicitly require:
   - a proportional map (minimal for direct tasks, component-level for planned tasks);
   - **progressive retrieval (FR-003)**: begin from the proportional Repository Map, then read further repository detail progressively and only when it is task-relevant; **never** load unrelated repository content wholesale into the primary working context;
   - repository-wide exploration only under FR-001b, with the reason recorded;
   - the Context Record write (`/run/dca/out/context.json`, the data-model fields) before the first workspace mutation, where scratch-dir writes don't count.
 
   (FR-001, FR-001a, FR-001b, FR-003.) Depends: T002. Evidence: valid frontmatter; T058 passes.
-- [ ] T048 [P] **Impl (decided)** Write `runtime/skills/root-cause-debugging/SKILL.md`: reproduce → isolate → smallest safe fix, and a **baseline before changes** that separates failures that already existed from regressions (FR-019). Depends: T002. Evidence: T058 passes.
-- [ ] T049 [P] **Impl (decided)** Write `runtime/skills/verification/SKILL.md`: deterministic checks first; the verification approach, and for FR-014a its alternative definition and limitation, is recorded in the Context Record (`context.json`) before the first workspace mutation, including before the first build or verification command; model confidence is never verification; `none-adequate` → blocked; stale evidence is unresolved. Depends: T002. Evidence: T058 passes.
-- [ ] T050 [P] **Impl (decided)** Write `runtime/skills/change-receipt/SKILL.md`: how to write `report.agent.json` (agent-authored fields of `contracts/completion-report.schema.json`). Depends: T002. Evidence: T058 passes.
-- [ ] T051 **Impl (gated: G4, G1a, G3)** Write `runtime/policy/network.yaml` **from proven G4 evidence**:
+- [X] T048 [P] **Impl (decided)** Write `runtime/skills/root-cause-debugging/SKILL.md`: reproduce → isolate → smallest safe fix, and a **baseline before changes** that separates failures that already existed from regressions (FR-019). Depends: T002. Evidence: T058 passes.
+- [X] T049 [P] **Impl (decided)** Write `runtime/skills/verification/SKILL.md`: deterministic checks first; the verification approach, and for FR-014a its alternative definition and limitation, is recorded in the Context Record (`context.json`) before the first workspace mutation, including before the first build or verification command; model confidence is never verification; `none-adequate` → blocked; stale evidence is unresolved. Depends: T002. Evidence: T058 passes.
+- [X] T050 [P] **Impl (decided)** Write `runtime/skills/change-receipt/SKILL.md`: how to write `report.agent.json` (agent-authored fields of `contracts/completion-report.schema.json`). Depends: T002. Evidence: T058 passes.
+- [X] T051 **Impl (gated: G4, G1a, G3)** Write `runtime/policy/network.yaml` **from proven G4 evidence**:
   - per backend and profile, **only** hosts that are `sandbox_required: true` for that profile in the inventory **and** proven allowed in `gates/G4.json`, including any host promoted with G1a/G2/G3 evidence;
   - the trusted allowlist from G4;
   - the untrusted allowlist is empty (grants only).
 
   `host-oauth-login` and `discovery`-only hosts (e.g. `auth.openai.com`, unless promoted as a `refresh` host for the trusted token-file profile) never enter the file. A promoted `refresh` host appears only under the trusted token-file profile, never under untrusted. Include no broad wildcards beyond what G4 proved. Entries exist only for available backends. Depends: T014, T015, T016, T019, T022 (so G2-driven promotions are final before the file is generated). Evidence: T061 checks, for every backend and profile, that the hosts are a subset of G4's proven set and that each host is `sandbox_required: true` for that profile in the inventory.
-- [ ] T052 [P] **Impl (decided)** Write `runtime/policy/limits.yaml` per research R19, in two sections.
+- [X] T052 [P] **Impl (decided)** Write `runtime/policy/limits.yaml` per research R19, in two sections.
   - **`host_limits`** (**authoritative**; the launcher enforces them for both backends once classification is known during execution):
     - `direct`: retries 3, wall-clock 20 min (including a 5-min re-verification reserve), steps 120, tokens 3,000,000;
     - `planned`: retries 5, 45 min, steps 300, tokens 8,000,000;
     - Claude tokens/cost: not enforced (usage recorded).
   - **`native_ceilings`** (Codex, **static defense in depth**): `max_iterations: 150`, `max_consecutive_tool_calls: 25`, run-wide `max_tokens: 8000000`. These are the **planned maxima**, because a static Docker Agent config can't know the classification in advance. They never define direct/planned semantics. Depends: T002. Evidence: T061 value check.
-- [ ] T053 **Impl (gated: G1c, G1d)** Write `runtime/claude/managed-settings.json` and `runtime/claude/agents/{dca-researcher.md,dca-reviewer.md}`.
+- [X] T053 **Impl (gated: G1c, G1d)** Write `runtime/claude/managed-settings.json` and `runtime/claude/agents/{dca-researcher.md,dca-reviewer.md}`.
   - **managed-settings.json**:
     - deny rules for the prohibited classes, derived from `actions.yaml`;
     - `allowManagedPermissionRulesOnly: true`, `allowManagedHooksOnly: true`;
@@ -563,8 +563,8 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **If Claude is unavailable** per `gates/eligibility.json` (G1a FAIL, or G1c FAIL with no fallback), record this task **NOT-APPLICABLE** with that reason instead of building the assets; Codex work continues.
 
   Depends: T017, T018, T026, T045, T046. Evidence: JSON validates and T060 and T061 checks pass, or an explicit NOT-APPLICABLE record.
-- [ ] T054 **Impl (gated: G1a)** Write `runtime/agents/claude.yaml`: config `version: "15"`, a single agent with `harness: {type: claude-code, effort: high}` and no `harness.model`. No toolsets, `sub_agents`, `instruction_file` or `code_mode_tools`. Only turn/stop hooks for run-record collection. If Claude is unavailable, record this task **NOT-APPLICABLE** instead. Depends: T016. Evidence: `docker agent debug config runtime/agents/claude.yaml` exits 0 and T059 passes, or an explicit NOT-APPLICABLE record.
-- [ ] T055 **Impl (gated: G3)** Write `runtime/agents/codex.yaml` (research R15, R19, R20):
+- [X] T054 **Impl (gated: G1a)** Write `runtime/agents/claude.yaml`: config `version: "15"`, a single agent with `harness: {type: claude-code, effort: high}` and no `harness.model`. No toolsets, `sub_agents`, `instruction_file` or `code_mode_tools`. Only turn/stop hooks for run-record collection. If Claude is unavailable, record this task **NOT-APPLICABLE** instead. Depends: T016. Evidence: `docker agent debug config runtime/agents/claude.yaml` exits 0 and T059 passes, or an explicit NOT-APPLICABLE record.
+- [X] T055 **Impl (gated: G3)** Write `runtime/agents/codex.yaml` (research R15, R19, R20):
   - config `version: "15"`;
   - agents `root`, `researcher` and `reviewer`, all with `model: chatgpt/gpt-5.6`, or G3's pinned fallback model, and `instruction_file` → the matching `runtime/instructions/*.md`:
     - `root`: toolsets `{type: filesystem}` (workspace read/write) and `{type: shell}` (build, test and version-control commands), and **nothing broader**: no `fetch`, `open_url`, `api`, `mcp`, `rag`, `memory` or other toolset; `sub_agents: [researcher, reviewer]`; `skills:` = the four runtime skill names. These resolve **only** from `<KIT_DIR>/skills`, because every Codex execution receives `DOCKER_AGENT_KIT_DIR=<KIT_DIR>` (T069); a name filter alone doesn't isolate repository skills (research R17, E18). No runtime skill declares `context: fork`;
@@ -582,7 +582,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - If Codex is unavailable per `gates/eligibility.json`, record this task **NOT-APPLICABLE** instead; Claude work continues.
 
   Depends: T019, T032, T052, T045, T046, T047, T048, T049, T050 (T032 provides the staging tool the evidence below uses). Evidence: `docker agent debug config`, `debug skills` and `debug toolsets --json` succeed with the pinned binary (`debug skills` and `debug toolsets` load the team using the developer's existing ChatGPT sign-in from G3; no API key). `debug skills`, run with `DOCKER_AGENT_KIT_DIR` set to a staged kit root (T032 staging tool), lists exactly the four skills with paths under that `<KIT_DIR>/skills`; the effective tool lists match (root: filesystem read/write, shell, and the tools Docker Agent adds for `sub_agents` delegation and `skills`, nothing else; researcher: read-only filesystem tools only; reviewer: read-only filesystem tools plus exactly `git_diff`, `git_status`, `git_log`); T059 passes. Or an explicit NOT-APPLICABLE record.
-- [ ] T056 **Impl (gated: G6, G1c, G2)** Build the production kit in `runtime/sandbox/kit/` (kit spec plus install steps), laid out with `stage.py` (T032). It has a **shared production core** plus backend-specific material staged **only for available backends** (per `gates/eligibility.json`); it never requires an unavailable backend's assets.
+- [X] T056 **Impl (gated: G6, G1c, G2)** Build the production kit in `runtime/sandbox/kit/` (kit spec plus install steps), laid out with `stage.py` (T032). It has a **shared production core** plus backend-specific material staged **only for available backends** (per `gates/eligibility.json`); it never requires an unavailable backend's assets.
   - **Shared core** (always):
     - pinned `docker-agent` with **SHA-256 verified against `runtime/versions.yaml` `docker_agent_artifact`** (fail the install on mismatch);
     - `/opt/dca/lib/dca/{policy_gate.py,shellparse.py,fingerprint.py,__init__.py}`;
@@ -599,8 +599,8 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **Codex material** (only if Codex is available): the credential hook per `gates/G2.json`, and an in-VM Docker Agent user config (`~/.config/cagent/config.yaml`) with **no** `permissions`, `safety`, `yolo` or alias options, which the kit/gate preflight verifies on every run.
 
   Use the custom-template variant if G6 applied its fallback. Depends: T009, T017, T022, T030, T032, T053 (T017, T022 and T053 may have completed as NOT-RUN or NOT-APPLICABLE for an unavailable backend). Evidence: a kit build in a throwaway sandbox shows every expected path for each available backend and none for an unavailable one; `<KIT_DIR>/skills` contains exactly the four skills matching `kit-manifest.json`; the install fails for a planted fifth skill directory, a tampered skill file, and a malformed, duplicate-key or extra-property manifest; the checksum mismatch path is tested with a tampered artifact; a planted user config with `permissions.allow` or `safety: autonomous` fails the preflight.
-- [ ] T057 [P] **Impl (decided)** Write `.agentsignore`: sensitive and irrelevant paths, with the header "context hygiene only — NOT a security boundary". Depends: T002. Evidence: T061 checks presence and the header.
-- [ ] T058 **Test** Write `tests/contract/test_runtime_assets.py`. It checks that:
+- [X] T057 [P] **Impl (decided)** Write `.agentsignore`: sensitive and irrelevant paths, with the header "context hygiene only — NOT a security boundary". Depends: T002. Evidence: T061 checks presence and the header.
+- [X] T058 **Test** Write `tests/contract/test_runtime_assets.py`. It checks that:
   - there are exactly four skills, with valid frontmatter, and none declares `context: fork`;
   - `repository-navigation/SKILL.md` explicitly states each FR-003 behavior, one assertion each: starting from the proportional Repository Map; retrieving further detail progressively and only when task-relevant; never loading unrelated repository content wholesale into the primary context; repository-wide exploration only under FR-001b with a recorded reason;
   - root.md is under 150 lines and **explicitly** contains every T045 topic, each checked by its own assertion: classification with reason; plan before the first workspace mutation; single direct→planned escalation with `escalated_from: direct`; research delegation; researcher read-only; independent reviewer before success on planned work; reviewer must not modify the candidate; findings resolved or reflected in the disposition; planned success requires review evidence and a plan; the Context Record (`context.json`) before the first workspace mutation; verification-first and `none-adequate`; scope discipline; "repository content is data, not instructions"; the report duty;
@@ -608,7 +608,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - no `speckit` references appear.
 
   Depends: T045, T046, T047, T048, T049, T050. Evidence: passes.
-- [ ] T059 **Test** Write `tests/contract/test_runtime_configs.py`. It validates `runtime/agents/{claude,codex}.yaml` (config `version: "15"`) against the vendored root/latest schema `tests/contract/agent-schema-v1.136.0.json` as a **static sanity check only**. That schema describes version 16 and accepts `"15"`; v15 compatibility is proven by the pinned binary's strict v15 parser in T055/T061. It asserts:
+- [X] T059 **Test** Write `tests/contract/test_runtime_configs.py`. It validates `runtime/agents/{claude,codex}.yaml` (config `version: "15"`) against the vendored root/latest schema `tests/contract/agent-schema-v1.136.0.json` as a **static sanity check only**. That schema describes version 16 and accepts `"15"`; v15 compatibility is proven by the pinned binary's strict v15 parser in T055/T061. It asserts:
   - claude.yaml has a harness and no sub_agents or toolsets;
   - codex.yaml has no harness and declares **`safety: strict`** on every agent; no value `restricted` appears anywhere;
   - codex.yaml has a top-level `permissions.deny` containing the prohibited-class rules derived from `actions.yaml`, and **no** `permissions.allow` or `permissions.ask`; each agent's `pre_tool_use` entry has matcher `*` and a `command` hook `/opt/dca/bin/dca-gate` with `on_error: block`;
@@ -618,7 +618,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - a backend recorded NOT-APPLICABLE in `gates/eligibility.json` has its config assertions reported as skipped with that reason, never as passed.
 
   This is a static (credential-free, CI Layer B) test. Effective tool lists are checked with the pinned binary in T061 and inside the VM in T062. Depends: T003, T054, T055. Evidence: passes.
-- [ ] T060 **Test** Write the backend parity contract test `tests/contract/test_backend_parity.py`. It checks behavioral and config-artifact parity, **not textual YAML equality**, across the **available** backend implementations. Each backend's availability is read from `gates/eligibility.json`. An unavailable backend is reported explicitly as **NOT-APPLICABLE** with its reason, never as a silent PASS. With one available backend, its assets are still checked against the shared sources (items 1 and 3–6).
+- [X] T060 **Test** Write the backend parity contract test `tests/contract/test_backend_parity.py`. It checks behavioral and config-artifact parity, **not textual YAML equality**, across the **available** backend implementations. Each backend's availability is read from `gates/eligibility.json`. An unavailable backend is reported explicitly as **NOT-APPLICABLE** with its reason, never as a silent PASS. With one available backend, its assets are still checked against the shared sources (items 1 and 3–6).
   1. **Actions policy**: Claude's managed PreToolUse hook command and Codex's `pre_tool_use` command are the same `/opt/dca/bin/dca-gate`, and both deny lists derive from the same `actions.yaml` DENY classes. Codex declares `safety: strict` and no permission allow/ask rules, so the gate mediates every Codex call not already natively denied. The runtime `--safety strict` pin is tested in T068.
   2. **Limits**: the host launcher enforces `limits.yaml` `host_limits` (direct/planned) identically for both backends. Codex's native `max_iterations`, `max_consecutive_tool_calls` and top-level `budget.max_tokens` equal `native_ceilings`, which equal the **planned** host maxima, so native ceilings are never the source of direct/planned semantics.
   3. **Instructions**: the staged managed `CLAUDE.md` is byte-equal to `runtime/instructions/root.md`; the Claude subagent bodies equal researcher.md/reviewer.md; Codex `instruction_file` references the same three files.
@@ -627,7 +627,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   6. **Completion report**: both backends' instructions reference the same agent-report path, and the same backend-agnostic finalizer (`src/dca/report.py`) is used.
 
   Depends: T026, T052, T053, T054, T055, T056. Evidence: passes; a seeded divergence (e.g. a different limit in codex.yaml, or `safety: restricted`) fails; a synthetic eligibility file with Codex unavailable reports Codex NOT-APPLICABLE while the Claude checks still run.
-- [ ] T061 **Impl (decided)** Extend `scripts/verify.sh` (also used by `dca verify`). It must check:
+- [X] T061 **Impl (decided)** Extend `scripts/verify.sh` (also used by `dca verify`). It must check:
   - configs parse;
   - spec-kit isolation;
   - exactly four runtime skills;
@@ -695,7 +695,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
 **Purpose**: `dca run`, `dca verify` and the host enforcement point, split into reviewable lifecycle units. Integration tests use a fake `sbx` (`tests/fakes/sbx`) and recorded streams. Live execution happens only in T073 and the Validate tasks, **after** T062.
 
-- [ ] T063 **Test** Write `tests/unit/test_launcher_preconditions.py`, using `tests/fakes/sbx` and the **synthetic eligibility fixtures** from T005 (not live gates). Cover:
+- [X] T063 **Test** Write `tests/unit/test_launcher_preconditions.py`, using `tests/fakes/sbx` and the **synthetic eligibility fixtures** from T005 (not live gates). Cover:
   - **Every exit-3 precondition**: not a git repo; non-branch `--ref`; dirty checkout; provider key **present** (the value never appears in stdout, stderr or files); sbx missing, < 0.43.0 or drifted; the selected backend's `sandbox_bases` pin missing (refused even with `--allow-drift`); SSH forwarding active; backend auth missing (Claude → "offer codex", no switch); stale or undiscoverable approval; and required gate evidence missing, invalid or stale:
     - `gates/eligibility.json` missing, schema-invalid, or for other pinned versions;
     - `gates/eligibility.json` stale: its `runtime_versions_digest` or an explicit pin differs from `runtime/versions.yaml` (e.g. a changed docker-agent artifact SHA-256 or sandbox base);
@@ -708,9 +708,9 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **Phase 2 disposition**: untrusted with no eligible backend → a blocked report with `sandbox_created: false` (S5a shape) and exit 11, not a generic CLI error; an LFS/submodule prerequisite → exit 11.
 
   Depends: T005, T036, T038, T044. Evidence: fails before T064, passes after.
-- [ ] T064 **Impl (gated: G0, G7)** Write `src/dca/launcher.py`, phases 1–2: preconditions and policy disposition per contracts/launcher-cli.md (preconditions 1–9). It reads the host file `gates/eligibility.json` (never evidence from the VM or the repository under test) validates it structurally with a stdlib validator (the runtime never imports `jsonschema`; T063 proves parity with the schema), applies the same semantic and pin-binding rules as `gates/eligibility_rules.py`, and rejects it as stale when its `runtime_versions_digest` or explicit pins differ from `runtime/versions.yaml` (the same canonical digest), never prints environment values, runs `sbx` with `SSH_AUTH_SOCK` removed, reads (never writes) global sbx settings, recomputes and compares the global network-policy fingerprint, and defaults `--trust` to `untrusted`. Depends: T063, T008, T010. Evidence: T063 passes.
-- [ ] T065 **Impl (decided)** Write `src/dca/cli.py`, `src/dca/__main__.py` and `bin/dca`: argument parsing for `run`/`verify`/`bench` exactly per contracts/launcher-cli.md (including `--approve` repeatable and `--approval-report`), with usage errors → exit 2, **no `--dry-run`**, and **no** safety-mode, gate-skip or G11 override option (`--safety`, `--skip-gates`, `--ignore-g11`, `--unsafe` and similar are usage errors). Dispatch is wired in T072. Add `tests/unit/test_cli.py`. Depends: T044. Evidence: `test_cli.py` passes; `bin/dca --help` lists exactly the contract flags.
-- [ ] T066 **Test** Write `tests/integration/test_launcher_provisioning.py` for **A: provisioning and source delivery**. Cover:
+- [X] T064 **Impl (gated: G0, G7)** Write `src/dca/launcher.py`, phases 1–2: preconditions and policy disposition per contracts/launcher-cli.md (preconditions 1–9). It reads the host file `gates/eligibility.json` (never evidence from the VM or the repository under test) validates it structurally with a stdlib validator (the runtime never imports `jsonschema`; T063 proves parity with the schema), applies the same semantic and pin-binding rules as `gates/eligibility_rules.py`, and rejects it as stale when its `runtime_versions_digest` or explicit pins differ from `runtime/versions.yaml` (the same canonical digest), never prints environment values, runs `sbx` with `SSH_AUTH_SOCK` removed, reads (never writes) global sbx settings, recomputes and compares the global network-policy fingerprint, and defaults `--trust` to `untrusted`. Depends: T063, T008, T010. Evidence: T063 passes.
+- [X] T065 **Impl (decided)** Write `src/dca/cli.py`, `src/dca/__main__.py` and `bin/dca`: argument parsing for `run`/`verify`/`bench` exactly per contracts/launcher-cli.md (including `--approve` repeatable and `--approval-report`), with usage errors → exit 2, **no `--dry-run`**, and **no** safety-mode, gate-skip or G11 override option (`--safety`, `--skip-gates`, `--ignore-g11`, `--unsafe` and similar are usage errors). Dispatch is wired in T072. Add `tests/unit/test_cli.py`. Depends: T044. Evidence: `test_cli.py` passes; `bin/dca --help` lists exactly the contract flags.
+- [X] T066 **Test** Write `tests/integration/test_launcher_provisioning.py` for **A: provisioning and source delivery**. Cover:
   - the happy path: bundle from the branch ref → `sbx create` mountless `--skills=off` with the kit → sandbox-scoped network policy plus host-authoritative grant destinations → `sbx cp` of the bundle and run config → in-VM clone and task branch at `source.commit` → kit/gate preflight;
   - **sandbox base per backend** (launcher-cli Phase 3 step 2): Claude runs are created from exactly `runtime/versions.yaml` `sandbox_bases.claude`, and Codex runs from exactly `sandbox_bases.codex`, both mountless with the V1 kit. A missing base pin → exit 3 (precondition 4) and no `sbx create`. The launcher never resolves or substitutes a base at runtime;
   - **exit-4 paths with no report, best-effort `sbx rm` and no branch**: (a) source bundle creation or validation failure (no sandbox created); (b) each provisioning step failing.
@@ -724,8 +724,8 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
     - the material is removed together with the sandbox.
 
   Depends: T064, T038. Evidence: fails before T067, passes after.
-- [ ] T067 **Impl (gated: G4, G5, G6, G7, G8, G10)** Implement provisioning in `src/dca/launcher.py` (A), including the per-backend sandbox base from `sandbox_bases` (G6/G1a evidence) and the Codex trusted token-file lifecycle. Its behavior is fixed by the contract; which mechanism is used at runtime comes from `gates/eligibility.json`. Depends: T066, T009, T010, T011, T012, T013, T015. Evidence: T066 passes against the fake sbx.
-- [ ] T068 **Test** Write `tests/integration/test_launcher_execution.py` for **B: agent execution and host limits**. Cover:
+- [X] T067 **Impl (gated: G4, G5, G6, G7, G8, G10)** Implement provisioning in `src/dca/launcher.py` (A), including the per-backend sandbox base from `sandbox_bases` (G6/G1a evidence) and the Codex trusted token-file lifecycle. Its behavior is fixed by the contract; which mechanism is used at runtime comes from `gates/eligibility.json`. Depends: T066, T009, T010, T011, T012, T013, T015. Evidence: T066 passes against the fake sbx.
+- [X] T068 **Test** Write `tests/integration/test_launcher_execution.py` for **B: agent execution and host limits**. Cover:
   - `sbx exec docker agent run --exec --json` with stdin closed;
   - **Codex safety pin** (CR1/H7): the generated command for every native Codex execution contains `--safety strict`, even when a fake in-VM user config sets another safety mode or `yolo`; no CLI input or environment variable can remove or change it. The Claude command is unchanged by this;
   - **Codex skill-source pin** (N1): the exact generated Codex execution command and environment explicitly set `DOCKER_AGENT_KIT_DIR` to the trusted staged-kit root (`/opt/dca` in production) and nothing else. The value doesn't change when the caller's environment has a different `DOCKER_AGENT_KIT_DIR`, when the repository contains `.claude/skills`, `.github/skills` or `.agents/skills`, or for any task, CLI input or repository content. The Claude command is unaffected;
@@ -736,8 +736,8 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - an abnormal agent exit or malformed/truncated stream → `blocked` (exit 11), **not** exit 4.
 
   Depends: T067, T040. Evidence: fails before T069, passes after.
-- [ ] T069 **Impl (gated: G11)** Implement execution and host limits in `src/dca/launcher.py` (B), including the Codex command builder that always adds `--safety strict` and an explicit `DOCKER_AGENT_KIT_DIR=<KIT_DIR>`. The launcher builds that value from the trusted staged-kit path, never from repository content or the inherited environment, and exposes no option to override it. Expose the Phase 3 execution primitives as internal functions that T073's gate harness can call, with no public bypass. Depends: T068, T020. Evidence: T068 passes.
-- [ ] T070 **Test** Write `tests/integration/test_launcher_finalization.py` for **C: retrieval, finalization and cleanup**. Cover:
+- [X] T069 **Impl (gated: G11)** Implement execution and host limits in `src/dca/launcher.py` (B), including the Codex command builder that always adds `--safety strict` and an explicit `DOCKER_AGENT_KIT_DIR=<KIT_DIR>`. The launcher builds that value from the trusted staged-kit path, never from repository content or the inherited environment, and exposes no option to override it. Expose the Phase 3 execution primitives as internal functions that T073's gate harness can call, with no public bypass. Depends: T068, T020. Evidence: T068 passes.
+- [X] T070 **Test** Write `tests/integration/test_launcher_finalization.py` for **C: retrieval, finalization and cleanup**. Cover:
   - the launcher's final re-execution of required deterministic checks on the final state;
   - task-branch bundle export → `sbx cp` into a quarantine directory outside `.git` → `git bundle verify` → exact advertised candidate identity (one head; SHA == candidate commit; ref == `refs/heads/dca/<run-id>`) → object-level quarantine validation → only then fetch exactly `dca/<run-id>`. A corrupted or truncated returned bundle that header verification accepts but object-level validation rejects is an explicit case: it aborts (exit 4) with no partial ref;
   - **exit-4 path (c)**: any export, copy, verify or import failure → no report, no partial branch, only safe artifacts (`events.jsonl`, gate log) kept;
@@ -745,8 +745,8 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - `sbx rm` always attempted.
 
   Depends: T069, T042, T044. Evidence: fails before T071, passes after.
-- [ ] T071 **Impl (gated: G5)** Implement retrieval, finalization and cleanup in `src/dca/launcher.py` (C). Depends: T070, T013. Evidence: T070 passes.
-- [ ] T072 **Impl (decided)** Wire the CLI dispatch: `run` → the launcher (A–C), `verify` → `scripts/verify.sh`, `bench` → a placeholder until T076. Extend `tests/unit/test_cli.py` for exit-code propagation (0/2/3/4/10/11). Depends: T065, T071, T061. Evidence: extended tests pass.
+- [X] T071 **Impl (gated: G5)** Implement retrieval, finalization and cleanup in `src/dca/launcher.py` (C). Depends: T070, T013. Evidence: T070 passes.
+- [X] T072 **Impl (decided)** Wire the CLI dispatch: `run` → the launcher (A–C), `verify` → `scripts/verify.sh`, `bench` → a placeholder until T076. Extend `tests/unit/test_cli.py` for exit-code propagation (0/2/3/4/10/11). Depends: T065, T071, T061. Evidence: extended tests pass.
 - [ ] T073 **Gate G11 (part B)** Host-side limit enforcement on real sandboxes, for each backend whose availability gate (T016, T019) is PASS; others `NOT-RUN`.
   - **Harness, not `dca run`**: normal `dca run` keeps refusing execution while G11 isn't final PASS (launcher-cli precondition 7), so this gate doesn't use it. It uses the **internal** gate harness `gates/G11/run_part_b.py`, which calls the launcher's already-implemented Phase 3 execution primitives (T067, T069, T071) directly. The harness is available only to this gate procedure and adds **no** public `--skip-gates`, `--ignore-g11`, `--unsafe` or similar CLI option. Its prerequisites, checked by the harness itself: G11 part A PASS for the backend (T020), that backend's production conformance PASS (T062), every common gate PASS, the backend's availability and trusted gates PASS, and the internal execution and host-limit implementation (T069, T072). Codex runs use the same builder, so they get `--safety strict` and `DOCKER_AGENT_KIT_DIR=<KIT_DIR>`.
   - **Criteria**:

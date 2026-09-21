@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-21T15:33:49Z",
+  "generated_at": "2026-09-21T21:36:47Z",
   "pinned_versions": {
     "docker_agent": "v1.136.0",
     "docker_agent_config_version": 15,
@@ -31,7 +31,7 @@
   "backends": {
     "claude": {
       "available": true,
-      "trusted_eligible": false,
+      "trusted_eligible": true,
       "untrusted_eligible": false,
       "credential_mechanism": "sbx-host-oauth",
       "gate_status": {
@@ -42,7 +42,7 @@
         "G9": "FAIL",
         "G11": "PASS"
       },
-      "production_conformance": "NOT-RUN",
+      "production_conformance": "PASS",
       "fallbacks_applied": []
     },
     "codex": {

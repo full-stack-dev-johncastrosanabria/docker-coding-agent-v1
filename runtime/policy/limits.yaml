@@ -1,0 +1,30 @@
+{
+  "_comment": "tasks.md T052, research R19. TWO SECTIONS THAT ARE NOT THE SAME THING. host_limits are AUTHORITATIVE: the host launcher counts steps, retries, wall clock and tokens from the typed outer event stream and stops the run itself, identically for both backends, using the row for the classification in force (switched to planned on the single direct->planned escalation). native_ceilings are Codex's own static defence in depth, written into runtime/agents/codex.yaml; a static config cannot know the classification in advance, so they carry the PLANNED maxima and never define direct/planned semantics. A native ceiling stop is reported as limit_reached: native_ceiling, distinct from every host limit. JSON-compatible YAML: read and written with the stdlib json module only.",
+  "host_limits": {
+    "direct": {
+      "retries": 3,
+      "reverification_reserve_seconds": 300,
+      "steps": 120,
+      "tokens": 3000000,
+      "wall_clock_seconds": 1200
+    },
+    "planned": {
+      "retries": 5,
+      "reverification_reserve_seconds": 300,
+      "steps": 300,
+      "tokens": 8000000,
+      "wall_clock_seconds": 2700
+    }
+  },
+  "native_ceilings": {
+    "max_consecutive_tool_calls": 25,
+    "max_iterations": 150,
+    "max_tokens": 8000000
+  },
+  "token_enforcement": {
+    "_comment": "Claude Code reports usage but the subscription path exposes no enforceable token or cost budget, so tokens are RECORDED for claude and ENFORCED for codex. cost_enforced in the completion report says which happened.",
+    "claude": false,
+    "codex": true
+  },
+  "version": 1
+}

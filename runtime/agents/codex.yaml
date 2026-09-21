@@ -1,0 +1,318 @@
+# runtime/agents/codex.yaml - the Codex backend's Docker Agent config (tasks.md T055).
+#
+# THREE AGENTS, ONE POLICY PIPELINE. root, researcher and reviewer are the logical agents; the
+# backend is the Codex/ChatGPT provider they all run on. Every tool call any of them makes passes
+# the `pre_tool_use` hook into /opt/dca/bin/dca-gate, which evaluates runtime/policy/actions.yaml -
+# the same file, the same code, that Claude's managed PreToolUse hook evaluates.
+#
+# `permissions` HAS ONLY A DENY LIST, and that is the whole point. The deny patterns are generated
+# from actions.yaml by src/dca/policy_rules.py, so they cannot drift from the policy. There is no
+# `allow` and no `ask`: a custom allow rule short-circuits Docker Agent's approval pipeline, so the
+# call would execute WITHOUT dca-gate ever seeing it. Native denies are acceptable because they are
+# at least as strict as the gate - they can only reject earlier, never permit.
+#
+# `safety: strict` is declared on every agent as the default, and the launcher additionally passes
+# an explicit `--safety strict` on every execution (research R20, E18). The flag is what guarantees
+# it at runtime; this declaration is what makes a config read alone say the same thing. `restricted`
+# is never used, and dca exposes no way to change the mode.
+#
+# THE REVIEWER HAS NO AGENT-LEVEL `readonly`, on purpose. That flag filters every tool without a
+# read-only annotation - which removes the `script` tools the review depends on (E18). Its
+# read-only property therefore rests on its effective capability set (a read-only filesystem
+# toolset plus three fixed, argument-free git commands), on class-27 gate enforcement, and on the
+# before/after workspace fingerprints the launcher compares.
+#
+# Skills resolve ONLY from <KIT_DIR>/skills, because every execution receives
+# DOCKER_AGENT_KIT_DIR=/opt/dca from the launcher. The name list below is a filter, not an
+# isolation mechanism: without the kit directory a repository could ship a same-named skill
+# (research R17, E18). No runtime skill declares `context: fork`.
+#
+# `instruction_file` is RELATIVE, because the pinned v15 parser refuses an absolute path or any
+# path outside the config's own directory. The kit therefore stages this file as
+# <KIT_DIR>/agents/codex.yaml with byte-identical copies of runtime/instructions/*.md beside it at
+# <KIT_DIR>/agents/instructions/, which is also the config that `docker agent debug config`,
+# `debug toolsets` and `debug skills` are run against - so what is validated is what ships.
+#
+# Native ceilings come from runtime/policy/limits.yaml `native_ceilings` and are static defence in
+# depth. They carry the PLANNED maxima, because a static config cannot know the classification in
+# advance; direct/planned semantics are enforced by the host launcher from `host_limits`.
+version: "15"
+
+metadata:
+  description: docker-coding-agent-v1 Codex backend
+  version: "1.0.0"
+
+# Run-wide, shared by every agent and sub-session in the run (schema: BudgetConfig).
+budget:
+  max_tokens: 8000000
+
+permissions:
+  deny:
+    - "api*"
+    - "browser*"
+    - "create_directory:path=**/*.key"
+    - "create_directory:path=**/*.p12"
+    - "create_directory:path=**/*.pem"
+    - "create_directory:path=**/*.pfx"
+    - "create_directory:path=**/.aws/**"
+    - "create_directory:path=**/.claude/.credentials.json"
+    - "create_directory:path=**/.config/cagent/**"
+    - "create_directory:path=**/.credentials.json"
+    - "create_directory:path=**/.docker/config.json"
+    - "create_directory:path=**/.env"
+    - "create_directory:path=**/.env.*"
+    - "create_directory:path=**/.netrc"
+    - "create_directory:path=**/.npmrc"
+    - "create_directory:path=**/.ssh/**"
+    - "create_directory:path=**/chatgpt-auth.json"
+    - "create_directory:path=**/id_ed25519"
+    - "create_directory:path=**/id_rsa"
+    - "create_directory:path=/etc/claude-code/**"
+    - "create_directory:path=/opt/dca/**"
+    - "create_directory:path=/run/dca/**"
+    - "create_directory:path=/run/dca/grants/**"
+    - "edit_file:path=**/*.key"
+    - "edit_file:path=**/*.p12"
+    - "edit_file:path=**/*.pem"
+    - "edit_file:path=**/*.pfx"
+    - "edit_file:path=**/.aws/**"
+    - "edit_file:path=**/.claude/.credentials.json"
+    - "edit_file:path=**/.config/cagent/**"
+    - "edit_file:path=**/.credentials.json"
+    - "edit_file:path=**/.docker/config.json"
+    - "edit_file:path=**/.env"
+    - "edit_file:path=**/.env.*"
+    - "edit_file:path=**/.netrc"
+    - "edit_file:path=**/.npmrc"
+    - "edit_file:path=**/.ssh/**"
+    - "edit_file:path=**/chatgpt-auth.json"
+    - "edit_file:path=**/id_ed25519"
+    - "edit_file:path=**/id_rsa"
+    - "edit_file:path=/etc/claude-code/**"
+    - "edit_file:path=/opt/dca/**"
+    - "edit_file:path=/run/dca/**"
+    - "edit_file:path=/run/dca/grants/**"
+    - "fetch*"
+    - "open_url*"
+    - "read_file:path=**/*.key"
+    - "read_file:path=**/*.p12"
+    - "read_file:path=**/*.pem"
+    - "read_file:path=**/*.pfx"
+    - "read_file:path=**/.aws/**"
+    - "read_file:path=**/.claude/.credentials.json"
+    - "read_file:path=**/.config/cagent/**"
+    - "read_file:path=**/.credentials.json"
+    - "read_file:path=**/.docker/config.json"
+    - "read_file:path=**/.env"
+    - "read_file:path=**/.env.*"
+    - "read_file:path=**/.netrc"
+    - "read_file:path=**/.npmrc"
+    - "read_file:path=**/.ssh/**"
+    - "read_file:path=**/chatgpt-auth.json"
+    - "read_file:path=**/id_ed25519"
+    - "read_file:path=**/id_rsa"
+    - "read_file:path=/opt/dca/**"
+    - "read_file:path=/run/dca/grants/**"
+    - "remove_directory:path=**/*.key"
+    - "remove_directory:path=**/*.p12"
+    - "remove_directory:path=**/*.pem"
+    - "remove_directory:path=**/*.pfx"
+    - "remove_directory:path=**/.aws/**"
+    - "remove_directory:path=**/.claude/.credentials.json"
+    - "remove_directory:path=**/.config/cagent/**"
+    - "remove_directory:path=**/.credentials.json"
+    - "remove_directory:path=**/.docker/config.json"
+    - "remove_directory:path=**/.env"
+    - "remove_directory:path=**/.env.*"
+    - "remove_directory:path=**/.netrc"
+    - "remove_directory:path=**/.npmrc"
+    - "remove_directory:path=**/.ssh/**"
+    - "remove_directory:path=**/chatgpt-auth.json"
+    - "remove_directory:path=**/id_ed25519"
+    - "remove_directory:path=**/id_rsa"
+    - "remove_directory:path=/etc/claude-code/**"
+    - "remove_directory:path=/opt/dca/**"
+    - "remove_directory:path=/run/dca/**"
+    - "remove_directory:path=/run/dca/grants/**"
+    - "run_skill*"
+    - "shell:cmd=aws deploy*"
+    - "shell:cmd=aws ecs update-service*"
+    - "shell:cmd=aws iam *"
+    - "shell:cmd=aws sts assume-role*"
+    - "shell:cmd=az ad *"
+    - "shell:cmd=az webapp deploy*"
+    - "shell:cmd=chmod 777 *"
+    - "shell:cmd=docker push *"
+    - "shell:cmd=fly deploy*"
+    - "shell:cmd=gcloud app deploy*"
+    - "shell:cmd=gcloud auth *"
+    - "shell:cmd=gcloud iam *"
+    - "shell:cmd=gcloud run deploy*"
+    - "shell:cmd=git push --delete*"
+    - "shell:cmd=git push --force*"
+    - "shell:cmd=git push --force-with-lease*"
+    - "shell:cmd=git push --mirror*"
+    - "shell:cmd=git push -f *"
+    - "shell:cmd=git push origin :*"
+    - "shell:cmd=gpg --full-generate-key*"
+    - "shell:cmd=gpg --gen-key*"
+    - "shell:cmd=helm *"
+    - "shell:cmd=kubectl *"
+    - "shell:cmd=op item *"
+    - "shell:cmd=security add-generic-password*"
+    - "shell:cmd=serverless deploy*"
+    - "shell:cmd=ssh-keygen *"
+    - "shell:cmd=sudo passwd*"
+    - "shell:cmd=terraform apply*"
+    - "shell:cmd=terraform destroy*"
+    - "shell:cmd=useradd *"
+    - "shell:cmd=usermod *"
+    - "shell:cmd=vault write *"
+    - "web_search*"
+    - "write_file:path=**/*.key"
+    - "write_file:path=**/*.p12"
+    - "write_file:path=**/*.pem"
+    - "write_file:path=**/*.pfx"
+    - "write_file:path=**/.aws/**"
+    - "write_file:path=**/.claude/.credentials.json"
+    - "write_file:path=**/.config/cagent/**"
+    - "write_file:path=**/.credentials.json"
+    - "write_file:path=**/.docker/config.json"
+    - "write_file:path=**/.env"
+    - "write_file:path=**/.env.*"
+    - "write_file:path=**/.netrc"
+    - "write_file:path=**/.npmrc"
+    - "write_file:path=**/.ssh/**"
+    - "write_file:path=**/chatgpt-auth.json"
+    - "write_file:path=**/id_ed25519"
+    - "write_file:path=**/id_rsa"
+    - "write_file:path=/etc/claude-code/**"
+    - "write_file:path=/opt/dca/**"
+    - "write_file:path=/run/dca/**"
+    - "write_file:path=/run/dca/grants/**"
+
+agents:
+  root:
+    description: >
+      Root coding agent for one bounded task. It classifies the task, builds context, edits,
+      verifies, delegates investigation to the researcher and independent review to the reviewer.
+    instruction_file: instructions/root.md
+    model: chatgpt/gpt-5.5
+    safety: strict
+    max_iterations: 150
+    max_consecutive_tool_calls: 25
+    max_tool_result_tokens: 8000
+    max_old_tool_call_tokens: 40000
+    session_compaction: true
+    compaction_threshold: 0.8
+    sub_agents:
+      - researcher
+      - reviewer
+    skills:
+      - repository-navigation
+      - root-cause-debugging
+      - verification
+      - change-receipt
+    toolsets:
+      - type: filesystem
+      - type: shell
+    hooks:
+      pre_tool_use:
+        - matcher: "*"
+          hooks:
+            - type: command
+              name: dca-gate
+              command: /opt/dca/bin/dca-gate
+              on_error: block
+      on_agent_switch:
+        - type: command
+          name: dca-fingerprint
+          command: /opt/dca/bin/dca-fingerprint
+          on_error: ignore
+      subagent_stop:
+        - type: command
+          name: dca-fingerprint
+          command: /opt/dca/bin/dca-fingerprint
+          on_error: ignore
+
+  researcher:
+    description: >
+      Read-only investigator. It answers one bounded question with cited evidence and changes
+      nothing.
+    instruction_file: instructions/researcher.md
+    readonly: true
+    model: chatgpt/gpt-5.5
+    safety: strict
+    max_iterations: 150
+    max_consecutive_tool_calls: 25
+    max_tool_result_tokens: 8000
+    max_old_tool_call_tokens: 40000
+    session_compaction: true
+    compaction_threshold: 0.8
+    toolsets:
+      - type: filesystem
+        readonly: true
+    hooks:
+      pre_tool_use:
+        - matcher: "*"
+          hooks:
+            - type: command
+              name: dca-gate
+              command: /opt/dca/bin/dca-gate
+              on_error: block
+      on_agent_switch:
+        - type: command
+          name: dca-fingerprint
+          command: /opt/dca/bin/dca-fingerprint
+          on_error: ignore
+      subagent_stop:
+        - type: command
+          name: dca-fingerprint
+          command: /opt/dca/bin/dca-fingerprint
+          on_error: ignore
+
+  reviewer:
+    description: >
+      Independent adversarial reviewer. It reads the candidate and three fixed git commands, and
+      must leave the candidate byte-identical.
+    instruction_file: instructions/reviewer.md
+    model: chatgpt/gpt-5.5
+    safety: strict
+    max_iterations: 150
+    max_consecutive_tool_calls: 25
+    max_tool_result_tokens: 8000
+    max_old_tool_call_tokens: 40000
+    session_compaction: true
+    compaction_threshold: 0.8
+    toolsets:
+      - type: filesystem
+        readonly: true
+      - type: script
+        shell:
+          git_diff:
+            cmd: git --no-pager diff --no-ext-diff
+            description: Show the candidate's uncommitted changes. Takes no arguments.
+          git_status:
+            cmd: git status --short --branch
+            description: Show the candidate's working-tree status. Takes no arguments.
+          git_log:
+            cmd: git --no-pager log --oneline --no-decorate -n 50
+            description: Show the candidate's recent commits. Takes no arguments.
+    hooks:
+      pre_tool_use:
+        - matcher: "*"
+          hooks:
+            - type: command
+              name: dca-gate
+              command: /opt/dca/bin/dca-gate
+              on_error: block
+      on_agent_switch:
+        - type: command
+          name: dca-fingerprint
+          command: /opt/dca/bin/dca-fingerprint
+          on_error: ignore
+      subagent_stop:
+        - type: command
+          name: dca-fingerprint
+          command: /opt/dca/bin/dca-fingerprint
+          on_error: ignore

@@ -102,14 +102,28 @@ class GateReview(unittest.TestCase):
                 self.assertTrue(document["backends"][backend]["available"])
                 self.assertFalse(document["backends"][backend]["untrusted_eligible"])
 
-    def test_04_trusted_eligible_is_false_while_production_conformance_has_not_run(self):
-        """Not a finding against either backend: the flag means FINAL runtime readiness."""
+    def test_04_trusted_eligible_requires_that_backend_s_production_conformance(self):
+        """`trusted_eligible` means FINAL runtime readiness, and it is decided PER BACKEND.
+
+        The rule, not the day's gate state: a backend whose production conformance is not PASS is
+        never trusted-eligible, and a backend that is trusted-eligible has it PASS. Asserting a
+        fixed NOT-RUN for both backends would make this test fail the moment T062 does its job,
+        which is the opposite of what it is for. The assertion is kept non-vacuous by requiring at
+        least one backend on each side to exist before the subtests run.
+        """
         self._run()
         document = self._document()
-        for backend in ("claude", "codex"):
+        conformance = {backend: document["backends"][backend]["production_conformance"]
+                       for backend in ("claude", "codex")}
+        self.assertTrue(any(value != "PASS" for value in conformance.values()),
+                        f"no backend is left un-conformant, so the refusal side is untested: "
+                        f"{conformance}")
+        for backend, value in conformance.items():
             with self.subTest(backend=backend):
-                self.assertEqual(document["backends"][backend]["production_conformance"], "NOT-RUN")
-                self.assertFalse(document["backends"][backend]["trusted_eligible"])
+                if value != "PASS":
+                    self.assertFalse(document["backends"][backend]["trusted_eligible"])
+                elif document["backends"][backend]["trusted_eligible"]:
+                    self.assertEqual(value, "PASS")
 
     def test_05_the_document_is_bound_to_the_current_pins(self):
         self._run()
