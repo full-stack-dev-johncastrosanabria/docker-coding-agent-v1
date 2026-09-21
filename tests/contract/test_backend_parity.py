@@ -26,6 +26,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import yaml
@@ -89,6 +90,28 @@ class ParityCase(unittest.TestCase):
             ok, reason = available(backend)
             if not ok:
                 raise unittest.SkipTest(f"NOT-APPLICABLE: {backend}: {reason}")
+
+
+class TestSbxKitPayloadPath(unittest.TestCase):
+    def test_00_home_files_map_to_the_installer_staging_path(self):
+        # The pinned sbx kit maps files/home/* into /home/agent/* (as G6's live probe
+        # established). A second "agent" component made production kit installation fail.
+        with tempfile.TemporaryDirectory(prefix="dca-kit-layout-") as temporary:
+            artifact = Path(temporary) / "artifact"
+            artifact.write_bytes(b"sentinel")
+            destination = Path(temporary) / "kit"
+
+            def stage_sentinel(path, **_):
+                (Path(path) / "sentinel").write_text("staged", encoding="utf-8")
+
+            with mock.patch.object(stage_module, "stage", side_effect=stage_sentinel):
+                stage_module.build_sbx_kit(destination, backends=["claude"], artifact=artifact)
+
+            self.assertEqual((destination / "files/home/dca-kit/sentinel").read_text(),
+                             "staged")
+            self.assertFalse((destination / "files/home/agent/dca-kit").exists())
+            self.assertIn("/home/agent/dca-kit/opt/dca/bin/docker-agent",
+                          (destination / "spec.yaml").read_text())
 
 
 # --- 1. the same actions policy, through the same gate ---------------------------------------

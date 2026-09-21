@@ -383,7 +383,11 @@ def build_sbx_kit(destination, backends=None, artifact=None, skills_source=None,
     destination = os.path.abspath(str(destination))
     if os.path.isdir(destination):
         shutil.rmtree(destination)
-    payload_root = os.path.join(destination, "files", KIT_STAGING.lstrip("/"))
+    # Kit `files/home/` is installed at the sandbox user's home (/home/agent), not at /.
+    # Using `files/home/agent/` would land the payload at /home/agent/agent/ and make the
+    # installer fail its pinned-artifact check before any production asset is installed.
+    payload_root = os.path.join(destination, "files", "home",
+                                os.path.relpath(KIT_STAGING, "/home/agent"))
     os.makedirs(payload_root, exist_ok=True)
 
     artifact = artifact or DEFAULT_ARTIFACT
