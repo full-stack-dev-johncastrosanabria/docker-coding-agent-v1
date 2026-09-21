@@ -59,7 +59,8 @@ sbx_module = _load("dca_sbx", os.path.join(ROOT, "src", "dca", "sbx.py"))
 rules = _load("dca_eligibility_rules", os.path.join(GATES, "eligibility_rules.py"))
 
 EVIDENCE = os.path.join(GATES, "G11.json")
-CONFORMANCE = os.path.join(GATES, "production-conformance.json")
+# The name gates/eligibility_rules.load_evidence reads and the schema's gate enum value.
+CONFORMANCE = os.path.join(GATES, "PRODUCTION-CONFORMANCE.json")
 WORK = os.path.join(HERE, "work")
 BACKENDS = ("claude", "codex")
 
