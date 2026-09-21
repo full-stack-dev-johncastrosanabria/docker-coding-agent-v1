@@ -141,6 +141,18 @@ def blockers(document, backend):
     return trusted, untrusted
 
 
+def _part_b_ran(g11, backend):
+    """Has G11 part B (T073) actually been run on this backend?
+
+    Read from the evidence itself: part B records criteria `G11.c5..c8.<backend>`, and part A
+    never does. A backend that has not been through part B keeps its part-A-only annotation even
+    when its recorded status is PASS.
+    """
+    entry = ((g11 or {}).get("backends") or {}).get(backend) or {}
+    return any(str(item.get("id", "")).startswith(f"G11.c5.{backend}")
+               for item in (entry.get("criteria") or []))
+
+
 def summary(document, evidence_by_id):
     """The human-readable review. It answers the questions a reviewer actually has."""
     g11 = evidence_by_id.get("G11") or {}
@@ -283,10 +295,13 @@ def summary(document, evidence_by_id):
         add(f"| {gate} | {document['common_gates'][gate]} | common |")
     for backend in ("claude", "codex"):
         for gate, value in document["backends"][backend]["gate_status"].items():
-            # A per-backend G11 PASS is the PART A verdict. The gate as a whole is PARTIAL until
-            # T073, and an unannotated PASS here would read as the opposite.
-            note = f" — part A only; `gates/G11.json` is {g11.get('status')} until T073" \
-                if gate == "G11" else ""
+            # A per-backend G11 PASS is the PART A verdict UNTIL part B has run on that backend,
+            # and an unannotated PASS would read as the whole gate. The annotation is therefore
+            # per backend: it is dropped only for a backend whose own part-B criteria are in the
+            # evidence, and kept for every backend still waiting on T073.
+            note = ""
+            if gate == "G11" and not _part_b_ran(g11, backend):
+                note = f" — part A only; `gates/G11.json` is {g11.get('status')} until T073"
             add(f"| {gate} | {value}{note} | {backend} |")
         add(f"| PRODUCTION-CONFORMANCE | "
             f"{document['backends'][backend]['production_conformance']} | {backend} |")

@@ -1,6 +1,6 @@
 # Gate review — architectural eligibility
 
-Generated `2026-09-21T21:29:56Z` from the committed evidence in `gates/`, bound to
+Generated `2026-09-21T21:36:47Z` from the committed evidence in `gates/`, bound to
 `runtime/versions.yaml` digest `sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088`.
 Re-run with `python3 gates/review.py`; T062 and T073 re-run it as their evidence lands.
 
@@ -64,7 +64,7 @@ override G2** — untrusted eligibility needs both.
 
 - Phase 3/4 implementation (the policy core and the launcher), which this review unblocks.
 - **T073 / G11 part B**: host step limits, retry cycles, wall-clock stop semantics and
-  FR-023a. `gates/G11.json` is **PASS** and stays that way until then;
+  FR-023a. `gates/G11.json` is **PARTIAL** and stays that way until then;
   criteria 1–4 are proven for both backends, criteria 5–8 are not yet exercised.
 
 ## 9. Remaining before final production acceptance
@@ -117,12 +117,12 @@ status as `PARTIAL` until part B completes it, which is what T073 already says i
 | G1c | PASS | claude |
 | G1d | PASS | claude |
 | G9 | FAIL | claude |
-| G11 | PASS — part A only; `gates/G11.json` is PASS until T073 | claude |
+| G11 | PASS | claude |
 | PRODUCTION-CONFORMANCE | PASS | claude |
 | G3 | PASS | codex |
 | G2 | FAIL | codex |
 | G9 | PASS | codex |
-| G11 | PASS — part A only; `gates/G11.json` is PASS until T073 | codex |
+| G11 | PASS — part A only; `gates/G11.json` is PARTIAL until T073 | codex |
 | PRODUCTION-CONFORMANCE | NOT-RUN | codex |
 
 G4 network policy fingerprint: `sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697`

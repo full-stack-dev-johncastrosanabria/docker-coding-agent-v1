@@ -386,7 +386,6 @@ def main(argv=None):
     # they were recorded, and only a backend whose 5-8 hold becomes a final PASS.
     merged = dict(part_a)
     merged["run_at"] = now()
-    merged["part_b_run_at"] = now()
     for backend, outcome in sorted(backends.items()):
         entry = dict(((merged.get("backends") or {}).get(backend) or {}))
         # Read part A's verdict from its own criteria before this run overwrites `status`, and
@@ -402,13 +401,23 @@ def main(argv=None):
             entry["status"] = FAIL
         else:
             entry["status"] = observed or NOT_RUN
+        # `not_run_reason` is the field the accepted evidence schema defines for this; a
+        # `part_b_reason` of our own would make the document fail its own schema.
         if outcome.get("reason"):
-            entry["part_b_reason"] = outcome["reason"]
+            entry["not_run_reason"] = outcome["reason"]
+        else:
+            entry.pop("not_run_reason", None)
         merged.setdefault("backends", {})[backend] = entry
 
+    # The DOCUMENT is a final PASS only when every backend has actually been through part B. A
+    # backend that was not selected keeps its part A PASS, and reading that as a completed G11
+    # would publish criteria 5-8 as proven for a backend they were never run on.
+    outcomes = [outcome["status"] for outcome in backends.values()]
     statuses = [entry.get("status") for entry in (merged.get("backends") or {}).values()]
-    merged["status"] = PASS if statuses and all(s == PASS for s in statuses) else (
-        FAIL if FAIL in statuses else "PARTIAL")
+    merged["status"] = (FAIL if FAIL in statuses or FAIL in outcomes
+                        else PASS if statuses and all(value == PASS for value in statuses)
+                        and all(value == PASS for value in outcomes)
+                        else "PARTIAL")
     merged["notes"] = (part_a.get("notes", "")
                        + "\n\nPART B (tasks.md T073): host-side limit enforcement on real "
                        "sandboxes, run by gates/G11/run_part_b.py using the launcher's own Phase 3 "
