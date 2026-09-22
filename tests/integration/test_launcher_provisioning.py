@@ -364,5 +364,130 @@ class TestCodexCredential(ProvisioningCase):
         self.assertFalse(os.path.exists(workdir))
 
 
+class TestResolvedBaseFallback(ProvisioningCase):
+    """The resolved-base check when `sbx create` does NOT echo the base it resolved.
+
+    The template store is then the authority, and it must prove the EXACT pinned identity - the
+    repository, the tag, and an image id that prefixes the pinned digest - exactly as the gates
+    prove it. Anything less, including an unreadable store, is an infrastructure abort before any
+    network policy is applied or anything is copied in.
+    """
+
+    CLAUDE = ("docker/sandbox-templates:claude-code-docker", "sha256:" + "9" * 12 + "a" * 52)
+    CODEX = ("docker/sandbox-templates:docker-agent-docker", "sha256:" + "6" * 12 + "b" * 52)
+
+    def setUp(self):
+        super().setUp()
+        # Real-shaped pins: both bases share one repository and differ only by tag and digest,
+        # which is exactly the case a repository-only comparison cannot tell apart.
+        self.versions["sandbox_bases"] = {
+            "claude": {"base": self.CLAUDE[0], "version": self.CLAUDE[1]},
+            "codex": {"base": self.CODEX[0], "version": self.CODEX[1]},
+        }
+        self.versions_path.write_text(json.dumps(self.versions, indent=2, sort_keys=True),
+                                      encoding="utf-8")
+        self.write_eligibility()
+        self.state["create_output"] = "sandbox created"  # the reference is not echoed
+        self.state["templates"] = {"images": [self.image(*self.CLAUDE), self.image(*self.CODEX)]}
+        self.write_state()
+
+    @staticmethod
+    def image(reference, digest, repository_prefix="docker.io/"):
+        repository, _, tag = reference.rpartition(":")
+        return {"id": digest[len("sha256:"):][:12], "repository": repository_prefix + repository,
+                "tag": tag, "flavor": tag}
+
+    def provision_fallback(self, backend="claude"):
+        instance = self.make(backend=backend)
+        instance.preconditions()
+        instance.provision()
+        return instance
+
+    def assert_aborts_before_policy(self, backend="claude", *fragments):
+        instance = self.make(backend=backend)
+        instance.preconditions()
+        with self.assertRaises(errors.InfraAbort) as caught:
+            instance.provision()
+        self.assertEqual(caught.exception.exit_code, 4)
+        message = str(caught.exception)
+        for fragment in fragments:
+            self.assertIn(fragment, message)
+        commands = [argv[:2] for argv in self.calls()]
+        self.assertNotIn(["policy", "allow"], commands, "no network policy after a bad base")
+        self.assertNotIn("cp", [argv[0] for argv in self.calls()], "nothing copied in")
+        instance.cleanup()
+        removed = json.loads((self.state_dir / "state.json").read_text(
+            encoding="utf-8")).get("removed", [])
+        self.assertTrue(removed, "the sandbox created from the wrong base is removed")
+        return message
+
+    def test_40_an_echoed_reference_never_consults_the_template_store(self):
+        self.state["create_output"] = f"created from {self.CLAUDE[0]}"
+        self.state["fail"] = {"template": 1}
+        self.write_state()
+        self.provision_fallback()
+        self.assertNotIn("template", [argv[0] for argv in self.calls()])
+
+    def test_41_the_fallback_accepts_the_exact_pinned_template(self):
+        for backend in ("claude", "codex"):
+            with self.subTest(backend=backend):
+                self.setUp()
+                instance = self.provision_fallback(backend)
+                self.assertIn(["template", "ls", "--json"], self.calls())
+                self.assertTrue(instance.sandbox_settings["mountless"])
+                self.assertEqual(instance.sandbox_settings["shared_skills"], "off")
+                self.assertFalse(instance.sandbox_settings["ssh_agent_forwarding"])
+
+    def test_42_the_fallback_applies_the_same_network_policy_as_the_primary_path(self):
+        fallback = self.provision_fallback().sandbox_settings["network_policy_digest"]
+        self.setUp()
+        self.state["create_output"] = f"created from {self.CLAUDE[0]}"
+        self.write_state()
+        primary = self.provision_fallback().sandbox_settings["network_policy_digest"]
+        self.assertEqual(fallback, primary)
+
+    def test_43_the_other_backends_base_in_the_same_repository_is_rejected(self):
+        self.state["templates"] = {"images": [self.image(*self.CODEX)]}
+        self.write_state()
+        self.assert_aborts_before_policy("claude", self.CLAUDE[0], self.CLAUDE[1])
+
+    def test_44_a_stale_image_for_the_pinned_tag_is_rejected(self):
+        stale = self.image(self.CLAUDE[0], "sha256:" + "0" * 64)
+        self.state["templates"] = {"images": [stale, self.image(*self.CODEX)]}
+        self.write_state()
+        message = self.assert_aborts_before_policy("claude", self.CLAUDE[1])
+        self.assertIn("000000000000", message)
+
+    def test_45_a_foreign_repository_with_the_pinned_tag_is_rejected(self):
+        forged = self.image("docker.io/evil/sandbox-templates:claude-code-docker",
+                            self.CLAUDE[1], repository_prefix="")
+        self.state["templates"] = {"images": [forged]}
+        self.write_state()
+        self.assert_aborts_before_policy("claude", "not found")
+
+    def test_46_an_unreadable_template_store_fails_closed(self):
+        self.state["fail"] = {"template": 1}
+        self.write_state()
+        self.assert_aborts_before_policy("claude", "template store")
+
+    def test_47_a_template_store_of_an_unknown_shape_fails_closed(self):
+        for shape in ([], {"unexpected": []}, {"images": "none"}):
+            with self.subTest(shape=shape):
+                self.setUp()
+                self.state["templates"] = shape
+                self.write_state()
+                self.assert_aborts_before_policy("claude", "not found")
+
+    def test_48_a_missing_pin_fails_closed(self):
+        del self.versions["sandbox_bases"]["claude"]
+        self.versions_path.write_text(json.dumps(self.versions, indent=2, sort_keys=True),
+                                      encoding="utf-8")
+        instance = self.make(backend="claude")
+        instance.versions = self.versions
+        with self.assertRaises(errors.InfraAbort) as caught:
+            instance._check_resolved_base("created from docker/sandbox-templates:anything")
+        self.assertIn("no pinned sandbox base", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

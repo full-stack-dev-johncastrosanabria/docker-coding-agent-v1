@@ -567,17 +567,30 @@ class Launcher:
     def _check_resolved_base(self, created_output):
         """The base sbx resolved must be the exact pinned one. Never substituted, never guessed."""
         pinned = ((self.versions.get("sandbox_bases") or {}).get(self.request.backend) or {})
-        reference = pinned.get("base")
-        if reference and reference not in (created_output or ""):
-            # sbx does not always echo the reference; the template store is then the authority.
-            try:
-                templates = self.sbx.templates()
-            except (SbxError, OSError):
-                templates = None
-            if templates is not None and reference and not json.dumps(templates).count(
-                    reference.rsplit(":", 1)[0]):
-                raise InfraAbort(
-                    f"the sandbox was not created from the pinned base {reference}")
+        reference, digest = pinned.get("base"), pinned.get("version")
+        if not reference:
+            raise InfraAbort(f"there is no pinned sandbox base for {self.request.backend}")
+        if reference in (created_output or ""):
+            return
+        # sbx does not always echo the reference; the template store is then the authority, and
+        # it has to prove the same identity the gates prove: repository, tag, and an image id that
+        # prefixes the pinned digest. Both V1 bases share one repository, so less than that could
+        # accept the other backend's base. An unreadable store proves nothing and fails closed.
+        try:
+            templates = self.sbx.templates()
+        except (SbxError, OSError) as exc:
+            raise InfraAbort(
+                f"sbx did not report the base it resolved and the template store could not be "
+                f"read to confirm the pinned base {reference} {digest}: {exc}") from exc
+        cached = _pinned_template(templates, reference)
+        if cached is None:
+            raise InfraAbort(
+                f"sbx did not report the base it resolved and the pinned base {reference} "
+                f"{digest} was not found in the template store")
+        if not _template_matches(cached, digest):
+            raise InfraAbort(
+                f"the template store's {reference} is image {cached.get('id')!r}, not the pinned "
+                f"{digest}: the sandbox was not created from the pinned base")
 
     def _deliver(self, bundle):
         request = self.request
@@ -896,6 +909,30 @@ def _classification_of(agent_report):
         return None
     value = (agent_report.get("classification") or {}).get("value")
     return value if value in ("direct", "planned") else None
+
+
+def _pinned_template(templates, reference):
+    """The `sbx template ls --json` entry with the pinned reference's exact repository and tag.
+
+    The store reports the repository fully qualified (docker.io/...), so both spellings match; a
+    tag alone identifies nothing. Mirrors gates/preflight.py `template_image`.
+    """
+    repository, _, tag = reference.rpartition(":")
+    if not repository or not isinstance(templates, dict):
+        return None
+    images = templates.get("images")
+    for image in images if isinstance(images, list) else ():
+        if (isinstance(image, dict) and image.get("tag") == tag
+                and image.get("repository") in (repository, f"docker.io/{repository}")):
+            return image
+    return None
+
+
+def _template_matches(cached, digest):
+    """The cached image id (a short digest) prefixes the full pinned digest."""
+    identifier = cached.get("id")
+    return (isinstance(identifier, str) and len(identifier) >= 12 and isinstance(digest, str)
+            and digest.startswith(f"sha256:{identifier}"))
 
 
 def _evidence_predates_limit(analysis, host_stop, launcher_checks):
