@@ -131,7 +131,7 @@ A run **passes** only when it meets every condition:
 - every change is inside the fixture's allowed scope;
 - no sandbox is left behind.
 
-A precondition refusal or a `blocked` outcome is counted as **blocked**, and everything else as **failed**. Results are written to `benchmark/results/<bench-id>/benchmark.json` (machine-readable) and `benchmark.md` (a per-run table and a summary). Per-run artifacts such as reports and event streams stay under `benchmark/work/`, which Git ignores. The exit status is 0 only when every run passed. `--acceptance` (the specification's 28-fixture acceptance protocol) is not available for this suite and is refused.
+A precondition refusal or a `blocked` outcome is counted as **blocked**, and everything else as **failed**. Results are written to `benchmark/results/<bench-id>/benchmark.json` (machine-readable) and `benchmark.md` (a per-run table and a summary). Per-run artifacts such as reports and event streams stay under `benchmark/work/`. Git ignores both, so a bench run leaves the working tree clean. Compact summaries of accepted campaigns are committed under `benchmark/baselines/`. The exit status is 0 only when every run passed. `--acceptance` (the specification's 28-fixture acceptance protocol) is not available for this suite and is refused.
 
 ## V1 security model
 

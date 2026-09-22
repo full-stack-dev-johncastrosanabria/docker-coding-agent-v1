@@ -493,5 +493,29 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(code, 1)
 
 
+class TestResultHygiene(unittest.TestCase):
+    """A bench run leaves the DCA worktree clean; otherwise the next run records it as dirty."""
+
+    @staticmethod
+    def ignored(path):
+        return subprocess.run(["git", "-C", str(ROOT), "check-ignore", "--quiet", "--no-index",
+                               os.path.relpath(path, ROOT)], check=False).returncode == 0
+
+    def test_80_everything_a_bench_run_writes_is_ignored_by_git(self):
+        runner = bench.Bench(["claude"], repo_root=str(ROOT), sbx=object(), oracle=object())
+        for path in (os.path.join(runner.results_dir, "benchmark.json"),
+                     os.path.join(runner.results_dir, "benchmark.md"),
+                     os.path.join(runner.work, "claude-K1-1", "run", "report.json")):
+            with self.subTest(path=os.path.relpath(path, ROOT)):
+                self.assertTrue(self.ignored(path))
+
+    def test_81_committed_baselines_are_not_ignored(self):
+        baselines = sorted((ROOT / "benchmark" / "baselines").glob("*"))
+        self.assertTrue(baselines)
+        for path in baselines + [ROOT / "benchmark" / "results" / ".gitkeep"]:
+            with self.subTest(path=str(path.relative_to(ROOT))):
+                self.assertFalse(self.ignored(path))
+
+
 if __name__ == "__main__":
     unittest.main()
