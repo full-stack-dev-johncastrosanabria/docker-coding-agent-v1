@@ -69,7 +69,7 @@ single direct→planned escalation actually happened.
 ## Risks and blockers
 
 - **risks**: things a reviewer should know that did not stop the work - a pre-existing failure you
-  left alone, a behaviour you could not cover, something surprising you chose not to change.
+  left alone, a behavior you could not cover, something surprising you chose not to change.
 - **blockers**: the specific things that stopped you, each concrete enough to act on. "It did not
   work" is not a blocker; "`make test` needs a database the sandbox has no network route to" is.
 

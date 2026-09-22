@@ -2,7 +2,7 @@
 #
 # ONE HARNESS AGENT, AND NOTHING ELSE. Claude Code is a harness: Docker Agent starts it and reads
 # its event stream, but does not supply its tools, its subagents or its instructions. So everything
-# that shapes Claude's behaviour lives where Claude actually reads it - the kit-installed managed
+# that shapes Claude's behavior lives where Claude actually reads it - the kit-installed managed
 # settings at /etc/claude-code (permissions, the dca-gate PreToolUse hook, the pinned env), the
 # managed CLAUDE.md (= runtime/instructions/root.md), and the managed subagents dca-researcher and
 # dca-reviewer. Declaring toolsets, sub_agents or an instruction_file here would describe controls

@@ -33,7 +33,7 @@
 # <KIT_DIR>/agents/instructions/, which is also the config that `docker agent debug config`,
 # `debug toolsets` and `debug skills` are run against - so what is validated is what ships.
 #
-# Native ceilings come from runtime/policy/limits.yaml `native_ceilings` and are static defence in
+# Native ceilings come from runtime/policy/limits.yaml `native_ceilings` and are static defense in
 # depth. They carry the PLANNED maxima, because a static config cannot know the classification in
 # advance; direct/planned semantics are enforced by the host launcher from `host_limits`.
 version: "15"
