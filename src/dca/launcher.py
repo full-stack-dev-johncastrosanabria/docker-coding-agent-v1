@@ -189,8 +189,12 @@ class Launcher:
     """Phases 1-3 of contracts/launcher-cli.md, in order."""
 
     def __init__(self, request, sbx=None, repo_root=None, eligibility_path=None,
-                 versions_path=None, artifact=None, clock=time.monotonic, kit_builder=None):
+                 versions_path=None, artifact=None, clock=time.monotonic, kit_builder=None,
+                 progress=None):
         self.request = request
+        # Display only: called as progress(phase, status, detail) at the lifecycle's own phase
+        # boundaries. It observes the run and never decides anything.
+        self.progress = progress
         self.repo_root = repo_root or _REPO_ROOT
         self.sbx = sbx if sbx is not None else Sbx()
         self.eligibility_path = eligibility_path or os.path.join(
@@ -217,6 +221,7 @@ class Launcher:
         self.classification = "direct"
         self.workdir = None
         self.kit_dir = None
+        self.removal_failed = None
 
     # --- phase 1: preconditions -----------------------------------------------------------
 
@@ -520,6 +525,8 @@ class Launcher:
         # Step 1: the source bundle, from the NAMED ref. Failure here creates no sandbox at all.
         self.bundle_sha256 = source_module.create_source_bundle(
             request.repo, self.source_ref, self.source_commit, bundle)
+        self._report_progress("bundle", "PASS", f"{_short_ref(self.source_ref)} "
+                                                f"@ {self.source_commit[:12]}")
 
         kit = os.path.join(self.workdir, "kit")
         try:
@@ -562,6 +569,7 @@ class Launcher:
             "ssh_agent_forwarding": False,
             "network_policy_digest": _digest_of({"allow": sorted(allow), "deny": sorted(deny)}),
         }
+        self._report_progress("sandbox", "READY", self.sandbox)
         return self.sandbox
 
     def _check_resolved_base(self, created_output):
@@ -854,7 +862,9 @@ class Launcher:
     def cleanup(self):
         """Always attempted, whatever happened. Disposal is mandatory."""
         if self.sandbox:
-            self.sbx.remove(self.sandbox)
+            result = self.sbx.remove(self.sandbox)
+            if isinstance(result, tuple) and result and result[0] not in (0, None):
+                self.removal_failed = self.sandbox
             self.sandbox = None
         if self.workdir:
             shutil.rmtree(self.workdir, ignore_errors=True)
@@ -872,18 +882,40 @@ class Launcher:
 
         blocked = self.policy_disposition()
         if blocked is not None:
+            self._report_progress("preconditions", "BLOCKED", "policy disposition")
             self.write_outputs(blocked)
             return report_module.exit_status(blocked)
+        self._report_progress("preconditions", "PASS")
 
         try:
             self.provision()
+            self._report_progress("agent", "RUNNING")
             analysis, host_stop, _exit_status, _stderr = self.execute_agent()
+            self._report_progress("agent", "STOPPED" if host_stop else "DONE",
+                                  f"host limit: {host_stop['reason']}" if host_stop else None)
             agent_report = self.collect_agent_evidence()
             self.classification = _classification_of(agent_report) or self.classification
             launcher_checks = self.final_verification()
+            passed = sum(1 for check in launcher_checks if check["result"] == "pass")
+            self._report_progress(
+                "verification",
+                "NONE" if not launcher_checks else (
+                    "PASS" if passed == len(launcher_checks) else "FAIL"),
+                f"{passed}/{len(launcher_checks)} check(s) passed" if launcher_checks
+                else "no verification command was given")
             change_set = self.retrieve()
+            self._report_progress("retrieval", "PASS",
+                                  f"{len(change_set['files'])} file(s) changed"
+                                  if change_set["branch"] else "no changes")
         finally:
+            had_sandbox = self.sandbox is not None
             self.cleanup()
+            if self.removal_failed:
+                self._report_progress("cleanup", "FAIL",
+                                      f"run `sbx rm --force {self.removal_failed}`")
+            else:
+                self._report_progress("cleanup", "PASS", "sandbox removed" if had_sandbox
+                                      else "no sandbox was created")
 
         final = report_module.build(
             run_id=request.run_id, backend=request.backend, trust_level=request.trust,
@@ -900,6 +932,10 @@ class Launcher:
                                                              launcher_checks))
         self.write_outputs(final)
         return report_module.exit_status(final)
+
+    def _report_progress(self, phase, status, detail=None):
+        if self.progress is not None:
+            self.progress(phase, status, detail)
 
     def write_outputs(self, final):
         os.makedirs(self.request.out, exist_ok=True)
