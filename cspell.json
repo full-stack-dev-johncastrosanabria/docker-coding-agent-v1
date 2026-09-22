@@ -11,15 +11,20 @@
     "npmjs",
     "oneline",
     "pypi",
+    "pyproject",
+    "pytest",
     "pythonhosted",
     "realpath",
     "rumpl",
+    "setuptools",
     "sideload",
     "stdlib",
     "taskid",
+    "tomllib",
     "toolsets",
     "Unparseable",
-    "usermod"
+    "usermod",
+    "venv"
   ],
   "ignorePaths": [
     "**/work/**",
