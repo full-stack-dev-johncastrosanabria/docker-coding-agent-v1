@@ -16,9 +16,11 @@ passing evidence.
 | Global network policy unchanged since G4 | the state G4 recorded (global preset, global rules, governance status). **If G4 requires a specific global preset, it is listed here as a one-time developer prerequisite once G4 has run**; until then none is assumed | `dca run` refuses (exit 3) if the global network-policy fingerprint differs from the one G4 and production conformance recorded. Re-run G4 and conformance after any intentional change; the launcher never changes it |
 | Docker Agent v1.136.0 | `docker agent version` | `v1.136.0` |
 | Claude subscription login | `claude auth status --text` | logged in via a claude.ai subscription. The developer's plan is **Claude Pro**, which Docker's sandbox docs don't consistently list, so Pro support in the sandbox is unverified until G1a |
-| ChatGPT sign-in (secondary) | `docker agent setup` → chatgpt, then `docker agent models --provider chatgpt` | lists `gpt-5.6` (G3) |
+| ChatGPT sign-in (secondary) | `docker agent setup` → chatgpt, then `docker agent models --provider chatgpt` | lists the model G3 recorded (`gates/G3.json`: `gpt-5.5`, after the G3 model fallback) |
 | No provider API keys (presence check, key names only) | see the snippet below this table | no output |
 | Python ≥ 3.11 | `python3 --version` | ≥ 3.11 |
+| `dca` command | `dca --help` | the editable install from the README (`python3 -m venv .venv && .venv/bin/python -m pip install -e .`), or use `bin/dca` |
+| Pinned Docker Agent binary (not in Git) | `shasum -a 256 gates/G6/work/docker-agent-linux-arm64` | equals `docker_agent_artifact.sha256` in `runtime/versions.yaml` (download it as the README shows, or set `DCA_DOCKER_AGENT_ARTIFACT`) |
 
 Provider-key presence check. It reads environment **keys** only and never reads, prints or serializes a value. A variable that exists with an empty value still counts as present:
 
@@ -69,8 +71,26 @@ Any upgrade of sbx, Docker Agent or Claude Code re-runs the affected gates and t
 
 ## 4. Smoke run: small trusted task (US1)
 
+Fixtures keep their task in `fixture.yaml` and their repository as `seed/`. Prepare a fixture checkout under the git-ignored `benchmark/work/` (from the DCA checkout root). The snippet prints the fixture's verification command:
+
 ```bash
-dca run --repo benchmark/work/K1 --trust trusted --task @benchmark/fixtures/K1/task.txt
+FIXTURE=K1
+rm -rf "benchmark/work/$FIXTURE" "benchmark/work/$FIXTURE.task.txt"
+python3 - "$FIXTURE" <<'PY'
+import sys
+sys.path.insert(0, "src")
+from dca import bench
+fixture = bench.discover(selection=sys.argv[1])[0]
+bench.build_seed(f"{fixture['_dir']}/seed", f"benchmark/work/{fixture['id']}")
+with open(f"benchmark/work/{fixture['id']}.task.txt", "w", encoding="utf-8") as handle:
+    handle.write(fixture["task"])
+print(fixture["verification"]["commands"][0])
+PY
+```
+
+```bash
+dca run --repo benchmark/work/K1 --trust trusted --task @benchmark/work/K1.task.txt \
+  --verify "python3 -m unittest discover -s tests -t ."
 ```
 
 Expected:
@@ -94,7 +114,7 @@ Expected:
 echo "wip" >> benchmark/work/K1/README.md
 dca run --repo benchmark/work/K1 --trust trusted --task "…"                        # exit 3: dirty checkout, no report
 dca run --repo benchmark/work/K1 --trust trusted --task "…" --ignore-uncommitted   # runs from HEAD
-git -C benchmark/work/K1 checkout README.md
+rm benchmark/work/K1/README.md
 dca run --repo benchmark/work/K1 --trust untrusted --task "…"                      # exit 11 until G1b/G2 + G9 pass
 dca run --repo benchmark/work/K1 --trust trusted --ref "$(git -C benchmark/work/K1 rev-parse HEAD)" --task "…"   # exit 3: raw SHA is not a named ref
 ```
@@ -106,10 +126,12 @@ Expected:
 
 ## 6. Blocked run and approval re-run (US3/US4, FR-027)
 
+Prepare `S8` with the §4 snippet (`FIXTURE=S8`), then:
+
 ```bash
-dca run --repo benchmark/work/S8 --trust trusted --task @benchmark/fixtures/S8/task.txt   # exit 11
+dca run --repo benchmark/work/S8 --trust trusted --task @benchmark/work/S8.task.txt   # exit 11
 jq '.approvals' <out>/report.json        # shows apr-<run>-1 for "add dependency ..."
-dca run --repo benchmark/work/S8 --trust trusted --task @benchmark/fixtures/S8/task.txt --approve apr-<run>-1
+dca run --repo benchmark/work/S8 --trust trusted --task @benchmark/work/S8.task.txt --approve apr-<run>-1
 ```
 
 Expected:
@@ -148,8 +170,8 @@ and run under the `--trust` profile; S5a/S5b always run untrusted. Under `--trus
 is 27 `both` fixtures plus S5a or S5b; under `--trust untrusted` (untrusted-eligible backends
 only; otherwise refused with exit 3) it is 27 `both` fixtures plus S5b, with the same thresholds.
 A fixture without a result counts as a failure, never as a pass. Unstable fixtures are listed, and an unstable safety
-fixture fails acceptance. Results are written to `benchmark/results/<date>-<backend>-<trust>.json`
-and committed.
+fixture fails acceptance. Each run's output goes to `benchmark/results/<bench-id>/`, which Git ignores. It is
+summarized into the committed `benchmark/results/<date>-<backend>-<trust>.json`.
 
 **Untrusted repositories.** Two things are separate:
 - **A. Autonomous untrusted coding capability** is claimed only for a backend whose G1b/G2 **and** G9 gates passed, after its untrusted capability acceptance runs.
