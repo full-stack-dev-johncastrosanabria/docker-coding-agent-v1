@@ -46,6 +46,28 @@ The accepted evidence: one full suite per backend. Claude ran at `27d1fd6`. Code
 
 - `bench-2026-09-22T03-57-30Z-e2c1`: every Codex run ended `blocked` (dca exit 11, primary reason "the agent produced no valid completion report"). `2ffaf02` then stopped the native deny rules blocking the run scratch directory, and `624a1a0` kept the agent's stderr as redacted run evidence. The Codex rerun at `f5e06ae` passed 10/10. This run is kept only as history.
 
+## Focused post-fix reruns (hardening regression)
+
+Hardening-regression runs after the direct/planned clarification in `runtime/instructions/root.md` (`53206d7`), at `ce41223`. They are reported separately and do not replace the campaign above. Only the affected fixtures ran (M1 and M2, on both backends), plus K7 on both backends as a direct control: the multi-file fixture closest to the new boundary, included to show that the clarified rule does not push additive work into planned mode.
+
+Every planned run wrote `plan.md` (recorded as `plan_ref`) before its first workspace file edit, and was reviewed with `review.performed` and `review.identical` both true. Both K7 runs stayed `direct`. `dca_tree_clean` is true for both benches.
+
+| Backend | Bench id | DCA commit | Runs | Passed | Failed | Blocked | Mean (s) | Median (s) | Cleanup failures | Class mismatches |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| claude | `bench-2026-09-22T19-15-09Z-b784` | `ce41223` | 2 | 2 | 0 | 0 | 198.2 | 198.2 | 0 | 0 |
+| codex | `bench-2026-09-22T19-15-09Z-b784` | `ce41223` | 2 | 2 | 0 | 0 | 206.2 | 206.2 | 0 | 0 |
+| claude | `bench-2026-09-22T19-29-03Z-8b5c` | `ce41223` | 1 | 1 | 0 | 0 | 96.2 | 96.2 | 0 | 0 |
+| codex | `bench-2026-09-22T19-29-03Z-8b5c` | `ce41223` | 1 | 1 | 0 | 0 | 124.8 | 124.8 | 0 | 0 |
+
+| Backend | Fixture | Result | Outcome | Duration (s) | Class (expected) | Review | Oracle | Cleanup |
+|---|---|---|---|---:|---|---|---|---|
+| claude | M1 | passed | succeeded | 228.3 | planned (planned) | True | pass | ok |
+| claude | M2 | passed | succeeded | 168.0 | planned (planned) | True | pass | ok |
+| codex | M1 | passed | succeeded | 190.3 | planned (planned) | True | pass | ok |
+| codex | M2 | passed | succeeded | 222.1 | planned (planned) | True | pass | ok |
+| claude | K7 | passed | succeeded | 96.2 | direct (direct) | - | pass | ok |
+| codex | K7 | passed | succeeded | 124.8 | direct (direct) | - | pass | ok |
+
 ## Notes
 
-- M1 and M2 expect `planned`, but both backends classified them `direct` in the campaign. Classification mismatches are counted, not scored (tests/unit/test_bench.py test_61), so they did not affect pass/fail.
+- In the campaign, M1 and M2 expected `planned` but both backends classified them `direct`. Classification mismatches are counted, not scored (tests/unit/test_bench.py test_61), so they did not affect pass/fail. The cause was contract ambiguity: root.md's direct and planned descriptions overlapped, with no precedence rule and no definition of the planned criteria. `53206d7` states the precedence (any planned criterion makes a task planned) and defines the criteria. In the focused reruns all four M1/M2 runs classified `planned`, and K7 stayed `direct`.

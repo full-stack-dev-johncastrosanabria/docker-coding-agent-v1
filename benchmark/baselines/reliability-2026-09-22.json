@@ -3,7 +3,7 @@
   "description": "The 005-dca-hardening reliability campaign: the 10-fixture suite (K1-K8, M1, M2), trusted, one run per fixture per backend, every run a real `bin/dca run`.",
   "source": "benchmark/results/<bench_id>/benchmark.json (generated locally, ignored by Git)",
   "notes": [
-    "M1 and M2 expect `planned`, but both backends classified them `direct` in the campaign. Classification mismatches are counted, not scored (tests/unit/test_bench.py test_61), so they did not affect pass/fail."
+    "In the campaign, M1 and M2 expected `planned` but both backends classified them `direct`. Classification mismatches are counted, not scored (tests/unit/test_bench.py test_61), so they did not affect pass/fail. The cause was contract ambiguity: root.md's direct and planned descriptions overlapped, with no precedence rule and no definition of the planned criteria. `53206d7` states the precedence (any planned criterion makes a task planned) and defines the criteria. In the focused reruns all four M1/M2 runs classified `planned`, and K7 stayed `direct`."
   ],
   "campaign": [
     {
@@ -750,5 +750,236 @@
       "why": "every Codex run ended `blocked` (dca exit 11, primary reason \"the agent produced no valid completion report\"). `2ffaf02` then stopped the native deny rules blocking the run scratch directory, and `624a1a0` kept the agent's stderr as redacted run evidence. The Codex rerun at `f5e06ae` passed 10/10. This run is kept only as history."
     }
   ],
-  "focused_reruns": []
+  "focused_reruns": [
+    {
+      "bench_id": "bench-2026-09-22T19-15-09Z-b784",
+      "backend": "claude",
+      "trust": "trusted",
+      "started_at": "2026-09-22T19:15:09Z",
+      "finished_at": "2026-09-22T19:28:47Z",
+      "dca_commit": "ce41223c2a14ff8c92a258e8713528bebcc0c497",
+      "dca_tree_clean": true,
+      "oracle_image": "docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2",
+      "fixtures": [
+        "M1",
+        "M2"
+      ],
+      "summary": {
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "blocked": 0,
+        "success_rate": 1.0,
+        "duration_mean_seconds": 198.2,
+        "duration_median_seconds": 198.2,
+        "cleanup_failures": 0,
+        "classification_mismatches": 0
+      },
+      "runs": [
+        {
+          "fixture": "M1",
+          "result": "passed",
+          "final_outcome": "succeeded",
+          "exit_status": 0,
+          "duration_seconds": 228.3,
+          "tool_calls": 28,
+          "retries": 0,
+          "changed_files": 3,
+          "verification": "pass",
+          "oracle": "pass",
+          "classification": "planned",
+          "expected_classification": "planned",
+          "review_performed": true,
+          "reviewer_invoked": true,
+          "cleanup": "ok",
+          "run_id": "run-2026-09-22T19-15-10Z-061ba6",
+          "seed_commit": "74d00071faf1b5af383964a54d01e3411c573fdc",
+          "total_tokens": 201495
+        },
+        {
+          "fixture": "M2",
+          "result": "passed",
+          "final_outcome": "succeeded",
+          "exit_status": 0,
+          "duration_seconds": 168.0,
+          "tool_calls": 40,
+          "retries": 0,
+          "changed_files": 4,
+          "verification": "pass",
+          "oracle": "pass",
+          "classification": "planned",
+          "expected_classification": "planned",
+          "review_performed": true,
+          "reviewer_invoked": true,
+          "cleanup": "ok",
+          "run_id": "run-2026-09-22T19-19-01Z-daa53a",
+          "seed_commit": "07f98e16bb63c504b19ccb1773088911776cf316",
+          "total_tokens": 208555
+        }
+      ],
+      "role": "hardening-regression"
+    },
+    {
+      "bench_id": "bench-2026-09-22T19-15-09Z-b784",
+      "backend": "codex",
+      "trust": "trusted",
+      "started_at": "2026-09-22T19:15:09Z",
+      "finished_at": "2026-09-22T19:28:47Z",
+      "dca_commit": "ce41223c2a14ff8c92a258e8713528bebcc0c497",
+      "dca_tree_clean": true,
+      "oracle_image": "docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2",
+      "fixtures": [
+        "M1",
+        "M2"
+      ],
+      "summary": {
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "blocked": 0,
+        "success_rate": 1.0,
+        "duration_mean_seconds": 206.2,
+        "duration_median_seconds": 206.2,
+        "cleanup_failures": 0,
+        "classification_mismatches": 0
+      },
+      "runs": [
+        {
+          "fixture": "M1",
+          "result": "passed",
+          "final_outcome": "succeeded",
+          "exit_status": 0,
+          "duration_seconds": 190.3,
+          "tool_calls": 24,
+          "retries": 0,
+          "changed_files": 3,
+          "verification": "pass",
+          "oracle": "pass",
+          "classification": "planned",
+          "expected_classification": "planned",
+          "review_performed": true,
+          "reviewer_invoked": true,
+          "cleanup": "ok",
+          "run_id": "run-2026-09-22T19-21-52Z-f97786",
+          "seed_commit": "74d00071faf1b5af383964a54d01e3411c573fdc",
+          "total_tokens": 16879
+        },
+        {
+          "fixture": "M2",
+          "result": "passed",
+          "final_outcome": "succeeded",
+          "exit_status": 0,
+          "duration_seconds": 222.1,
+          "tool_calls": 35,
+          "retries": 0,
+          "changed_files": 4,
+          "verification": "pass",
+          "oracle": "pass",
+          "classification": "planned",
+          "expected_classification": "planned",
+          "review_performed": true,
+          "reviewer_invoked": true,
+          "cleanup": "ok",
+          "run_id": "run-2026-09-22T19-25-04Z-6a4b09",
+          "seed_commit": "07f98e16bb63c504b19ccb1773088911776cf316",
+          "total_tokens": 18685
+        }
+      ],
+      "role": "hardening-regression"
+    },
+    {
+      "bench_id": "bench-2026-09-22T19-29-03Z-8b5c",
+      "backend": "claude",
+      "trust": "trusted",
+      "started_at": "2026-09-22T19:29:03Z",
+      "finished_at": "2026-09-22T19:32:49Z",
+      "dca_commit": "ce41223c2a14ff8c92a258e8713528bebcc0c497",
+      "dca_tree_clean": true,
+      "oracle_image": "docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2",
+      "fixtures": [
+        "K7"
+      ],
+      "summary": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "blocked": 0,
+        "success_rate": 1.0,
+        "duration_mean_seconds": 96.2,
+        "duration_median_seconds": 96.2,
+        "cleanup_failures": 0,
+        "classification_mismatches": 0
+      },
+      "runs": [
+        {
+          "fixture": "K7",
+          "result": "passed",
+          "final_outcome": "succeeded",
+          "exit_status": 0,
+          "duration_seconds": 96.2,
+          "tool_calls": 14,
+          "retries": 0,
+          "changed_files": 4,
+          "verification": "pass",
+          "oracle": "pass",
+          "classification": "direct",
+          "expected_classification": "direct",
+          "review_performed": null,
+          "reviewer_invoked": false,
+          "cleanup": "ok",
+          "run_id": "run-2026-09-22T19-29-04Z-6f600c",
+          "seed_commit": "4a80e4401ce948a124012961adfcfdce9c6fb0f8",
+          "total_tokens": 476170
+        }
+      ],
+      "role": "hardening-regression (direct control)"
+    },
+    {
+      "bench_id": "bench-2026-09-22T19-29-03Z-8b5c",
+      "backend": "codex",
+      "trust": "trusted",
+      "started_at": "2026-09-22T19:29:03Z",
+      "finished_at": "2026-09-22T19:32:49Z",
+      "dca_commit": "ce41223c2a14ff8c92a258e8713528bebcc0c497",
+      "dca_tree_clean": true,
+      "oracle_image": "docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2",
+      "fixtures": [
+        "K7"
+      ],
+      "summary": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "blocked": 0,
+        "success_rate": 1.0,
+        "duration_mean_seconds": 124.8,
+        "duration_median_seconds": 124.8,
+        "cleanup_failures": 0,
+        "classification_mismatches": 0
+      },
+      "runs": [
+        {
+          "fixture": "K7",
+          "result": "passed",
+          "final_outcome": "succeeded",
+          "exit_status": 0,
+          "duration_seconds": 124.8,
+          "tool_calls": 15,
+          "retries": 0,
+          "changed_files": 4,
+          "verification": "pass",
+          "oracle": "pass",
+          "classification": "direct",
+          "expected_classification": "direct",
+          "review_performed": null,
+          "reviewer_invoked": false,
+          "cleanup": "ok",
+          "run_id": "run-2026-09-22T19-30-42Z-f4c3e3",
+          "seed_commit": "4a80e4401ce948a124012961adfcfdce9c6fb0f8",
+          "total_tokens": 9227
+        }
+      ],
+      "role": "hardening-regression (direct control)"
+    }
+  ]
 }
