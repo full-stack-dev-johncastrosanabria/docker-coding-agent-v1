@@ -56,14 +56,16 @@ except ImportError:  # loaded by path in tests and in the sandbox
 
 # --- the pinned runtime's typed outer events ------------------------------------------------------
 
-#: The 19 types G11 part A OBSERVED the pinned docker_agent v1.136.0 emit across this repository's
-#: real captures, plus the three native-ceiling types research R19 identified. The set is
+#: The types observed from the pinned docker_agent v1.136.0 across G11 part A and the live
+#: Codex T062 production capture, plus the three native-ceiling types research R19 identified. The set is
 #: empirical: the binary's Go string table is grouped by length and interleaves unrelated
 #: constants, so it cannot yield a trustworthy list, and documentation is not evidence.
 OBSERVED_EVENTS = frozenset({
     "agent_choice",
     "agent_choice_reasoning",
     "agent_info",
+    "agent_switching",
+    "budget_usage",
     "hook_blocked",
     "hook_finished",
     "hook_started",
@@ -73,10 +75,12 @@ OBSERVED_EVENTS = frozenset({
     "partial_tool_call",
     "stream_started",
     "stream_stopped",
+    "sub_session_completed",
     "team_info",
     "token_usage",
     "tool_call",
     "tool_call_confirmation",
+    "tool_call_output",
     "tool_call_response",
     "toolset_info",
     "user_message",

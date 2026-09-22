@@ -375,8 +375,6 @@ def main(argv=None):
     try:
         for backend in BACKENDS:
             if backend not in selected:
-                backends[backend] = {"status": NOT_RUN,
-                                     "reason": "backend unavailable or not selected"}
                 continue
             backends[backend] = run_backend(backend, document, versions, work, options.artifact)
     finally:
@@ -409,9 +407,8 @@ def main(argv=None):
             entry.pop("not_run_reason", None)
         merged.setdefault("backends", {})[backend] = entry
 
-    # The DOCUMENT is a final PASS only when every backend has actually been through part B. A
-    # backend that was not selected keeps its part A PASS, and reading that as a completed G11
-    # would publish criteria 5-8 as proven for a backend they were never run on.
+    # Preserve an unselected backend's existing evidence, including completed part B criteria.
+    # Its entry remains PARTIAL when it has only part A; a selective rerun cannot upgrade it.
     outcomes = [outcome["status"] for outcome in backends.values()]
     statuses = [entry.get("status") for entry in (merged.get("backends") or {}).values()]
     merged["status"] = (FAIL if FAIL in statuses or FAIL in outcomes

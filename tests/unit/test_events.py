@@ -178,6 +178,16 @@ class TestCaptures(unittest.TestCase):
 
 
 class TestFailClosed(unittest.TestCase):
+    def test_observed_codex_subagent_events_do_not_add_steps(self):
+        extra = [event("budget_usage", budgets=[]),
+                 event("agent_switching", from_agent="root", to_agent="reviewer"),
+                 event("tool_call_output", tool_call_id="one", output="review output"),
+                 event("sub_session_completed", sub_session={"id": "review"})]
+        result = events.analyze(stream(call("one", "git_status"), *extra), exit_status=0)
+        self.assertEqual(result.stream, events.COMPLETE)
+        self.assertEqual(result.steps, 1)
+        self.assertEqual(result.unknown_types, [])
+
     def test_10_an_unrecognized_event_type_is_malformed_not_ignored(self):
         result = events.analyze(stream(event("brand_new_event", detail="x")), exit_status=0)
         self.assertEqual(result.stream, events.MALFORMED)

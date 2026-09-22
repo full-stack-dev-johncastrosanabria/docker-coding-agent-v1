@@ -54,8 +54,57 @@
       "status": "PASS"
     },
     "codex": {
-      "not_run_reason": "codex behaviour conformance not yet executed in this session; the Codex live path is deferred (per-backend by contract, this does not affect claude)",
-      "status": "NOT-RUN"
+      "criteria": [
+        {
+          "description": "T062.1 - the effective network restrictions, the pinned base and the global network-policy fingerprint hold with the FINAL production assets, on every available trust profile",
+          "evidence_ref": "27 foundation + 0 behaviour checks PASS",
+          "id": "PC.1",
+          "result": "PASS"
+        },
+        {
+          "description": "T062.2 - no SSH agent reaches the sandbox: no socket, no SSH_AGENT_PID, and ssh-add cannot connect",
+          "evidence_ref": "2 foundation + 0 behaviour checks PASS",
+          "id": "PC.2",
+          "result": "PASS"
+        },
+        {
+          "description": "T062.3 - shared skills are off and the skill root holds EXACTLY the four runtime skills; the kit manifest validates in the VM and every skill file matches its entry; tampering with a skill file, adding an unlisted one, or breaking the gate makes the preflight refuse the run and the gate deny skill loads (class 26)",
+          "evidence_ref": "6 foundation + 5 behaviour checks PASS",
+          "id": "PC.3",
+          "result": "PASS"
+        },
+        {
+          "description": "T062.4 (Claude) - a hostile repository cannot widen the managed permission rules, add a hook or override the pinned environment; the production dca-gate runs under /usr/bin/python3 -I, loads shellparse only from /opt/dca/lib, denies the marker action, and exits 2 when its module or interpreter is missing",
+          "evidence_ref": "not a codex requirement",
+          "id": "PC.4",
+          "result": "NOT-APPLICABLE"
+        },
+        {
+          "description": "T062.5 (Claude) - the managed agents and skills load and are not shadowed: the verification skill Claude actually loaded is byte-identical to the kit-installed trusted copy, no hostile body was loaded, the non-allowlisted repository skill is denied (class 26), and both managed subagents really ran",
+          "evidence_ref": "not a codex requirement",
+          "id": "PC.5",
+          "result": "NOT-APPLICABLE"
+        },
+        {
+          "description": "T062.6 (Codex) - the production policy pipeline under --safety strict: allowed operations execute with the approval recorded by the pre_tool_use hook, real root->researcher and root->reviewer delegations happen, a class-2 sensitive read is denied with DCA_DENY, a natively denied action stays denied under a gate stub that would allow it, an in-VM user config that sets safety/yolo/permissions makes the preflight refuse, and a broken gate blocks the tool call",
+          "evidence_ref": "0 foundation + 11 behaviour checks PASS",
+          "id": "PC.6",
+          "result": "PASS"
+        },
+        {
+          "description": "T062.7 (Codex) - the effective capabilities inside the VM: root has the filesystem, shell, delegation and skill tools and can delegate to both subagents; the researcher is read-only; the reviewer has the three git review tools and no shell or write tool; a reviewer mutation is denied (class 27) and the candidate's workspace fingerprint stays identical",
+          "evidence_ref": "0 foundation + 7 behaviour checks PASS",
+          "id": "PC.7",
+          "result": "PASS"
+        },
+        {
+          "description": "T062.8 (Codex) - skill-source integrity against a hostile repository that ships same-named verification skills at every root and nested scan position: debug skills lists exactly the four runtime skills from <KIT_DIR>/skills at both working directories, the loaded bytes are the trusted ones, no hostile marker appears in the stream, and the non-allowlisted repository skill is unavailable",
+          "evidence_ref": "0 foundation + 5 behaviour checks PASS",
+          "id": "PC.8",
+          "result": "PASS"
+        }
+      ],
+      "status": "PASS"
     }
   },
   "criteria": [
@@ -74,13 +123,13 @@
   ],
   "gate": "PRODUCTION-CONFORMANCE",
   "network_policy_fingerprint": "sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697",
-  "not_run_reason": "codex: NOT-RUN",
+  "not_run_reason": null,
   "notes": "Composed by gates/production/publish.py from gates/production/work/foundation.json and behavior-<backend>.json. Per-backend by contract: a backend that is NOT-RUN or FAIL here never blocks another backend's trusted eligibility.",
   "provenance": {
     "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
   },
-  "run_at": "2026-09-21T21:15:48Z",
-  "status": "NOT-RUN",
+  "run_at": "2026-09-22T01:29:04Z",
+  "status": "PASS",
   "versions": {
     "docker_agent": "v1.136.0",
     "docker_agent_config_version": 15,

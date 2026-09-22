@@ -1,28 +1,25 @@
 # Gate review — architectural eligibility
 
-Generated `2026-09-21T21:36:47Z` from the committed evidence in `gates/`, bound to
+Generated `2026-09-22T02:04:04Z` from the committed evidence in `gates/`, bound to
 `runtime/versions.yaml` digest `sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088`.
 Re-run with `python3 gates/review.py`; T062 and T073 re-run it as their evidence lands.
 
 ## Decision
 
-**Trusted-only V1 remains viable and Phase 3/4 implementation may proceed.** No common
-gate fails, both backends have a proven execution path, and both are architecturally
-viable for the **trusted** profile. **Untrusted execution stays blocked on both backends**
+**Trusted-only V1 is runtime eligible on both backends.** No common gate fails, both
+backends have a proven execution path and production conformance.
+**Untrusted execution stays blocked on both backends**
 and no stop rule fired.
 
-`trusted_eligible` is `false` for both backends in `gates/eligibility.json`, and that is
-expected rather than a finding: the accepted contract makes that flag mean *final runtime
-readiness*, which additionally requires production conformance (**T062**) and G11 part B
-(**T073**). Neither exists yet. Architectural eligibility for the trusted profile — the
-question T024 actually decides — is established.
+Final runtime readiness requires production conformance (**T062**) and G11 part B
+(**T073**) for each backend. The table below reports those derived eligibility flags.
 
 ## 1–3. Availability and eligibility
 
 | Backend | Available | Trusted-eligible (final) | Untrusted-eligible | Architecturally viable, trusted profile |
 |---|---|---|---|---|
 | claude | yes | yes | **no** | yes |
-| codex | yes | not yet | **no** | yes |
+| codex | yes | yes | **no** | yes |
 
 ## 4. Why Claude is trusted-only
 
@@ -60,33 +57,16 @@ override G2** — untrusted eligibility needs both.
 - `in_vm_refresh_required=false`, so `auth.openai.com` is not
   promoted.
 
-## 8. Remaining before an end-to-end `dca run`
+## 8. Runtime evidence
 
-- Phase 3/4 implementation (the policy core and the launcher), which this review unblocks.
-- **T073 / G11 part B**: host step limits, retry cycles, wall-clock stop semantics and
-  FR-023a. `gates/G11.json` is **PARTIAL** and stays that way until then;
-  criteria 1–4 are proven for both backends, criteria 5–8 are not yet exercised.
+- **T073 / G11 part B**: document status **PASS**.
+  claude: **PASS**; criteria 5–8 proven.
+  codex: **PASS**; criteria 5–8 proven.
 
-## 9. Remaining before final production acceptance
+## 9. Production conformance
 
-- **T062 / production conformance** — `gates/PRODUCTION-CONFORMANCE.json` does not exist,
-  so both backends record `production_conformance: NOT-RUN`.
-- **T073 / G11 part B**, as above.
-- Re-running `python3 gates/review.py` after each, which flips the typed flags without
-  anyone editing this file.
-
-### Sequencing hazard to check before T062 is accepted
-
-`trusted_eligible` reads G11 from `gates/G11.json` `backends.<name>.status`, which part A
-already set to `PASS`; the document-level `PARTIAL` is not what the flag consults. T073
-depends on T062, so production conformance lands **first** — and at that moment this
-review would compute `trusted_eligible: true` for both backends while G11 criteria 5–8
-are still unproven. Execution is still blocked in practice, because `dca run` refuses
-while G11 is not final PASS (launcher-cli precondition 7), so this is a reporting
-inconsistency rather than an exploitable gap. It is recorded here rather than fixed:
-changing it means amending accepted T020 evidence or the accepted T005 contract, which is
-out of scope for this review. The narrow fix is for part A to record the per-backend G11
-status as `PARTIAL` until part B completes it, which is what T073 already says it does.
+- **claude T062**: **PASS**.
+- **codex T062**: **PASS**.
 
 ## 10. Accepted architectural risks and fallbacks
 
@@ -122,7 +102,7 @@ status as `PARTIAL` until part B completes it, which is what T073 already says i
 | G3 | PASS | codex |
 | G2 | FAIL | codex |
 | G9 | PASS | codex |
-| G11 | PASS — part A only; `gates/G11.json` is PARTIAL until T073 | codex |
-| PRODUCTION-CONFORMANCE | NOT-RUN | codex |
+| G11 | PASS | codex |
+| PRODUCTION-CONFORMANCE | PASS | codex |
 
 G4 network policy fingerprint: `sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697`

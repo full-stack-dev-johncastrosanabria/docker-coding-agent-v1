@@ -338,8 +338,11 @@ def run_debug_surfaces(instance, rows, out):
                for label, item in listings.items()}
     checked(rows, "codex.skill_paths_under_kit",
             not any(off_kit.values()) and
-            all(f"{KIT_DIR}/skills" in item["raw"] for item in listings.values()),
-            {"off_kit": off_kit})
+            all(item["exit"] == 0 and item["listed"] == want
+                for item in listings.values()),
+            {"off_kit": off_kit,
+             "note": "debug skills lists names, not paths; the foundation verifies the kit "
+                     "directory and the live stream verifies loaded trusted bytes"})
     hostile = {label: [marker for marker in HOSTILE_MARKERS if marker in item["raw"]]
                for label, item in listings.items()}
     checked(rows, "codex.no_hostile_skill_listed", not any(hostile.values()), hostile)
@@ -444,12 +447,22 @@ def assert_live_run(instance, backend, rows, out, analysis, host_stop, exit_stat
 
     reviewer_prints = [entry for entry in fingerprints if entry.get("agent") in
                        ("reviewer", "dca-reviewer")]
-    digests = {entry.get("fingerprint") or entry.get("digest") or entry.get("sha256")
-               for entry in reviewer_prints}
+    reviewer_groups = []
+    for index, entry in enumerate(fingerprints):
+        if entry not in reviewer_prints or entry.get("event") != "subagent_stop":
+            continue
+        before = next((item for item in reversed(fingerprints[:index])
+                       if item.get("event") == "on_agent_switch" and
+                       item.get("agent") == "root"), None)
+        after = next((item for item in fingerprints[index + 1:]
+                      if item.get("event") == "on_agent_switch" and
+                      item.get("agent") == "root"), None)
+        reviewer_groups.append([item.get("fingerprint") if item else None
+                                for item in (before, entry, after)])
     checked(rows, "run.reviewer_left_workspace_identical",
-            len(reviewer_prints) >= 2 and len(digests) == 1,
-            {"records": len(reviewer_prints), "distinct_digests": len(digests),
-             "events": [entry.get("event") for entry in reviewer_prints]})
+            bool(reviewer_groups) and all(group[0] and len(set(group)) == 1
+                                          for group in reviewer_groups),
+            {"reviewer_sessions": len(reviewer_groups), "fingerprints": reviewer_groups})
     probe_file = sh(instance, f"test -e {WORKSPACE}/reviewer-probe.txt && echo present "
                               "|| echo absent")
     checked(rows, "run.reviewer_probe_absent", "absent" in probe_file["out"],
@@ -702,7 +715,12 @@ def main():
     finally:
         instance.cleanup()
         result["sandbox_removed"] = instance.sandbox is None
-        result["remaining_sandboxes"] = len(instance.sbx.list_sandboxes())
+        try:
+            result["remaining_sandboxes"] = len(instance.sbx.list_sandboxes())
+        except Exception as exc:  # a failed cleanup audit cannot turn a failed probe into PASS
+            result["remaining_sandboxes"] = None
+            checked(rows, "cleanup.audit", False,
+                    {"error": f"{type(exc).__name__}: {exc}"})
         checked(rows, "cleanup.sandbox_removed",
                 result["sandbox_removed"] and result["remaining_sandboxes"] == 0,
                 {"removed": result["sandbox_removed"],

@@ -107,23 +107,20 @@ class GateReview(unittest.TestCase):
 
         The rule, not the day's gate state: a backend whose production conformance is not PASS is
         never trusted-eligible, and a backend that is trusted-eligible has it PASS. Asserting a
-        fixed NOT-RUN for both backends would make this test fail the moment T062 does its job,
-        which is the opposite of what it is for. The assertion is kept non-vacuous by requiring at
-        least one backend on each side to exist before the subtests run.
+        fixed NOT-RUN for both backends would make this test fail the moment T062 does its job.
+        Mutating each backend's status in isolation exercises the refusal after both passed.
         """
         self._run()
         document = self._document()
         conformance = {backend: document["backends"][backend]["production_conformance"]
                        for backend in ("claude", "codex")}
-        self.assertTrue(any(value != "PASS" for value in conformance.values()),
-                        f"no backend is left un-conformant, so the refusal side is untested: "
-                        f"{conformance}")
+        self.assertEqual(conformance, {"claude": "PASS", "codex": "PASS"})
         for backend, value in conformance.items():
             with self.subTest(backend=backend):
-                if value != "PASS":
-                    self.assertFalse(document["backends"][backend]["trusted_eligible"])
-                elif document["backends"][backend]["trusted_eligible"]:
-                    self.assertEqual(value, "PASS")
+                denied = json.loads(json.dumps(document))
+                denied["backends"][backend]["production_conformance"] = "NOT-RUN"
+                self.assertFalse(rules.compute(denied)[backend]["trusted_eligible"])
+                self.assertTrue(document["backends"][backend]["trusted_eligible"])
 
     def test_05_the_document_is_bound_to_the_current_pins(self):
         self._run()
@@ -217,18 +214,19 @@ class GateReview(unittest.TestCase):
         self.assertIn("inconclusive", text)
         self.assertNotIn("capability_reproduced=observed", text)
 
-    def test_14_the_summary_marks_a_per_backend_g11_pass_as_part_a_only(self):
-        """An unannotated G11 PASS would read as the whole gate, which is PARTIAL until T073."""
+    def test_14_the_summary_records_completed_g11_part_b(self):
         self._run()
         text = (self.gates / "SUMMARY.md").read_text(encoding="utf-8")
-        self.assertEqual(self._evidence("G11")["status"], "PARTIAL")
-        self.assertIn("part A only", text)
-        self.assertIn("T073", text)
+        evidence = self._evidence("G11")
+        self.assertEqual(evidence["status"], "PASS")
+        for backend in ("claude", "codex"):
+            self.assertTrue(review._part_b_ran(evidence, backend))
+        self.assertIn("criteria 5–8", text)
 
     def test_15_the_summary_records_the_phase_decision_and_the_codex_facts(self):
         self._run()
         text = (self.gates / "SUMMARY.md").read_text(encoding="utf-8")
-        self.assertIn("Phase 3/4 implementation may proceed", text)
+        self.assertIn("runtime eligible on both backends", text)
         self.assertIn("token-file-trusted-only", text)
         self.assertIn("gpt-5.5", text)
 

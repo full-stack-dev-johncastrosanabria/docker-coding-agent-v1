@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-21T21:36:47Z",
+  "generated_at": "2026-09-22T02:04:04Z",
   "pinned_versions": {
     "docker_agent": "v1.136.0",
     "docker_agent_config_version": 15,
@@ -47,7 +47,7 @@
     },
     "codex": {
       "available": true,
-      "trusted_eligible": false,
+      "trusted_eligible": true,
       "untrusted_eligible": false,
       "credential_mechanism": "token-file-trusted-only",
       "gate_status": {
@@ -56,7 +56,7 @@
         "G9": "PASS",
         "G11": "PASS"
       },
-      "production_conformance": "NOT-RUN",
+      "production_conformance": "PASS",
       "fallbacks_applied": [
         "G3: model gpt-5.5",
         "G2: credential mechanism token-file-trusted-only"
