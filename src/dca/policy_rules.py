@@ -44,7 +44,18 @@ GATE_ONLY = {
 }
 
 #: Paths that ARE the agent's own policy, limits, instructions and gate state (class 25).
-SELF_PATHS = ("/opt/dca/**", "/run/dca/**", "/etc/claude-code/**")
+#:
+#: `actions.yaml` states class 25 as `/run/dca/**`, but the gate decides the run scratch dir
+#: `/run/dca/out/` first (class 6, ALLOW): it is where the root MUST write `context.json`, `plan.md`
+#: and `report.agent.json`. A static glob cannot say "except /run/dca/out", so the native rules name
+#: every other thing the launcher puts under /run/dca instead. Anything else there is still class 5
+#: or 25 at the gate; a native `/run/dca/**` rejected the required scratch writes before the gate saw
+#: them (dca bench, Codex K1: `write_file` of /run/dca/out/context.json denied, run blocked).
+SELF_PATHS = (
+    "/opt/dca/**", "/etc/claude-code/**",
+    "/run/dca/run.json", "/run/dca/grants.json", "/run/dca/task.txt",
+    "/run/dca/grants/**", "/run/dca/state/**", "/run/dca/cagent/**",
+)
 
 #: Shell command shapes for the DENY classes that name an action rather than a path. Deliberately
 #: narrow: each pattern denies something that is unambiguously the denied class, because a

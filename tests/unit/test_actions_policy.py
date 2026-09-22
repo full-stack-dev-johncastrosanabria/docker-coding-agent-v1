@@ -201,5 +201,56 @@ class ActionsPolicyMetadata(unittest.TestCase):
                 self.assertIn(tool, read_only)
 
 
+class TestNativeRulesNeverDenyScratchWrites(unittest.TestCase):
+    """Regression (dca bench, Codex K1): a native deny rule broader than the gate.
+
+    The gate decides the scratch dir first (class 6, ALLOW), and the root is REQUIRED to write
+    context.json, plan.md and report.agent.json there. A native `/run/dca/**` rule rejected that
+    write before the gate ran, and the run ended blocked. Native rules may be stricter than the gate
+    only where the gate also denies; they must never reject what the gate is designed to allow.
+    """
+
+    SCRATCH_WRITES = ("/run/dca/out/context.json", "/run/dca/out/plan.md",
+                      "/run/dca/out/report.agent.json", "/run/dca/out/notes/tmp.txt")
+    LAUNCHER_FILES = ("/run/dca/run.json", "/run/dca/grants.json", "/run/dca/task.txt",
+                      "/run/dca/state/gate.log.jsonl", "/run/dca/cagent/chatgpt-auth.json",
+                      "/opt/dca/policy/actions.yaml", "/etc/claude-code/managed-settings.json")
+
+    @classmethod
+    def setUpClass(cls):
+        import fnmatch
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("dca_policy_rules_scratch",
+                                                      ROOT / "src" / "dca" / "policy_rules.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.fnmatch = staticmethod(fnmatch.fnmatchcase)
+        cls.codex = [rule.split(":path=", 1) for rule in module.codex_deny_rules()
+                     if ":path=" in rule]
+        cls.claude = [rule[:-1].split("(", 1) for rule in module.claude_deny_rules()
+                      if rule.endswith(")") and "(/" in rule]
+
+    def denied(self, rules, tool, path):
+        # `*` and `**` both match across separators here, which is the BROADEST reading of either
+        # backend's glob syntax - so "not denied" below holds under the narrower readings too.
+        return [glob for name, glob in rules if name == tool and self.fnmatch(path, glob)]
+
+    def test_no_native_rule_rejects_a_scratch_write(self):
+        for path in self.SCRATCH_WRITES:
+            for tool in ("write_file", "edit_file", "create_directory"):
+                with self.subTest(backend="codex", tool=tool, path=path):
+                    self.assertEqual(self.denied(self.codex, tool, path), [])
+            for tool in ("Write", "Edit"):
+                with self.subTest(backend="claude", tool=tool, path=path):
+                    self.assertEqual(self.denied(self.claude, tool, path), [])
+
+    def test_the_launchers_own_files_stay_natively_denied(self):
+        for path in self.LAUNCHER_FILES:
+            with self.subTest(backend="codex", path=path):
+                self.assertTrue(self.denied(self.codex, "write_file", path))
+            with self.subTest(backend="claude", path=path):
+                self.assertTrue(self.denied(self.claude, "Write", path))
+
+
 if __name__ == "__main__":
     unittest.main()
