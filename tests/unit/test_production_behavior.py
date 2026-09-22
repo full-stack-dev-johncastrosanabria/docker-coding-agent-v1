@@ -1,9 +1,16 @@
-"""T062 behaviour harness: pairing reviewer sessions from each backend's fingerprint records."""
+"""T062 behaviour harness: reviewer-session pairing, and how a run's evidence is finalized."""
 
+import contextlib
 import importlib.util
+import io
+import json
 from pathlib import Path
+import shutil
 import sys
+import tempfile
+import types
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -67,6 +74,73 @@ class ReviewerSessions(unittest.TestCase):
             record("dca-reviewer", "SubagentStop", "sha256:a"),
         ]
         self.assertEqual(behavior.reviewer_sessions(records), [[None, "sha256:a"]])
+
+
+class Finalization(unittest.TestCase):
+    """The evidence document says PASS only when every probe actually ran."""
+
+    def setUp(self):
+        self.work = Path(tempfile.mkdtemp(prefix="dca-behavior-"))
+        self.addCleanup(shutil.rmtree, self.work, ignore_errors=True)
+
+    def run_main(self, probes):
+        class Launcher:
+            source_commit = "0" * 40
+
+            def __init__(self, request):
+                self.sandbox = None
+                self.sbx = types.SimpleNamespace(list_sandboxes=lambda: [])
+
+            def prepare_gate_run(self):
+                pass
+
+            def provision(self):
+                self.sandbox = "dca-run-test"
+
+            def execute_agent(self, timeout):
+                analysis = types.SimpleNamespace(counters=dict, run_integrity=dict)
+                return analysis, None, 0, ""
+
+            def cleanup(self):
+                self.sandbox = None
+
+        stubs = {"WORK": self.work, "Launcher": Launcher,
+                 "RunRequest": lambda **kw: types.SimpleNamespace(run_id="run-test", **kw),
+                 "build_fixture": lambda backend: self.work / "fixture",
+                 "run_gate_probes": probes, "sh": lambda *args: {"out": ""},
+                 "assert_live_run": lambda *args: None,
+                 "inspect_claude": lambda *args: {"ok": True, "loaded": {}},
+                 "run_failclosed": lambda *args: None}
+        for name, value in stubs.items():
+            patcher = mock.patch.object(behavior, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        with mock.patch.object(sys, "argv", ["behavior.py", "--backend", "claude"]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            try:
+                behavior.main()
+            except KeyboardInterrupt:
+                pass
+        return json.loads((self.work / "behavior-claude.json").read_text())
+
+    def test_a_run_that_reaches_every_probe_can_pass(self):
+        def probes(instance, backend, rows, out):
+            behavior.checked(rows, "gate.decisions", True, {})
+
+        document = self.run_main(probes)
+        self.assertEqual(document["status"], "PASS")
+        self.assertNotIn("harness.completed", [row["id"] for row in document["checks"]])
+
+    def test_an_interrupted_run_is_written_as_fail_not_pass(self):
+        def probes(instance, backend, rows, out):
+            behavior.checked(rows, "gate.decisions", True, {})
+            raise KeyboardInterrupt
+
+        document = self.run_main(probes)
+        self.assertEqual(document["status"], "FAIL")
+        results = {row["id"]: row["result"] for row in document["checks"]}
+        self.assertEqual(results["harness.completed"], "FAIL")
+        self.assertEqual(results["cleanup.sandbox_removed"], "PASS")
 
 
 if __name__ == "__main__":

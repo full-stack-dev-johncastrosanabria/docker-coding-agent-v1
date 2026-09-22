@@ -690,6 +690,7 @@ def main():
     result = {"backend": backend, "trust": "trusted", "run_id": request.run_id,
               "run_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
               "source_commit": None, "sandbox": None, "checks": rows}
+    completed = False
     try:
         instance.prepare_gate_run()
         result["source_commit"] = instance.source_commit
@@ -729,11 +730,17 @@ def main():
             run_native_deny(instance, rows, out)
 
         run_failclosed(instance, backend, rows, out)
+        completed = True
     except Exception as exc:  # noqa: BLE001 - a harness failure is a FAIL, never a silent pass
         checked(rows, "harness.execution", False,
                 {"error": f"{type(exc).__name__}: {exc}",
                  "traceback": traceback.format_exc().splitlines()[-12:]})
     finally:
+        if not completed:
+            # KeyboardInterrupt and SystemExit bypass the `except` above. Without this row the
+            # probes that did run would score an interrupted run as PASS.
+            checked(rows, "harness.completed", False,
+                    {"detail": "the run stopped before every probe ran"})
         instance.cleanup()
         result["sandbox_removed"] = instance.sandbox is None
         try:
