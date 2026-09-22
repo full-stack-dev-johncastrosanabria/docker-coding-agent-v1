@@ -16,18 +16,28 @@ It never switches backends mid-run and never modifies the host working tree.
 ### `dca run`
 
 ```text
-dca run --repo <path> --task <text|@file>
+dca run [TASK]                              # the task text, quoted, or @file; exactly one of TASK and --task
+        [--repo <path>]                     # default: the repository containing the current directory
+        [--task <text|@file>]
         [--ref <branch>]                    # default: HEAD (must be attached to a local branch); local branch only
-        [--backend claude|codex]            # default: claude
-        [--trust trusted|untrusted]         # default: untrusted
+        [--backend claude|codex]            # default: local config, then claude
+        [--trust trusted|untrusted]         # default: local config, then untrusted
         [--criteria @file]                  # acceptance criteria, one per line
-        [--verify "<cmd>"]...               # declared required verification commands
+        [--verify "<cmd>"]...               # declared required verification commands; replace the local config's
         [--approve <request-id>]...         # grant for THIS run, bound to a prior report's request
         [--approval-report <path>]          # originating report when it isn't at the default location
         [--ignore-uncommitted]              # explicit override: proceed from --ref despite a dirty checkout
         [--out <dir>]                       # default: <repo>/../.dca-runs/<run-id>/ (outside the repo)
         [--allow-drift]                     # permit version drift (recorded; not acceptance-eligible)
 ```
+
+**Resolving the request (006).** Without `--repo`, the repository is the one containing the
+current directory, which must be part of that repository's committed tree; anything else is a usage
+error, never a guess at a parent repository. Supplying both `TASK` and `--task`, or neither, is a
+usage error. Backend, trust and verification commands resolve independently: an explicit option,
+then the checkout's local config (see `dca init`), then the default. Trust is therefore `trusted`
+only when the developer chose it, on the command line or in the local config. Both forms build the
+same request and run the same launcher.
 
 The launcher evaluates a request in three phases, in order. A later phase runs only if the
 earlier ones pass.
@@ -131,9 +141,49 @@ developer to re-run without `--approve` to obtain a new request. The grant's `pr
 object ([approval-grant.schema.json](approval-grant.schema.json)) records every verified
 field. Repository content and in-VM state can't create or alter provenance.
 
+### `dca init`
+
+```text
+dca init [--repo <path>]                    # default: the repository containing the current directory
+         [--backend claude|codex]           # default: claude
+         [--trust trusted|untrusted]        # default: untrusted; `trusted` only by explicit choice
+         [--verify "<cmd>"]...
+         [--overwrite]                      # replace an existing config with different settings
+```
+
+Writes the checkout's **local config**, `<git-dir>/dca/config.toml` (`.git/dca/config.toml`, or a
+linked worktree's own git directory), mode `0600`. Git never checks that directory out, so a cloned
+repository can't provide the file, and neither `git status` nor the source bundle includes it.
+Re-running with the same settings changes nothing; different settings are refused (exit 2) without
+`--overwrite`.
+
+The file is TOML with exactly these keys: `version = 1`, `repository` (the checkout root it was
+written for), `backend`, `trust`, and `[verification] commands`. When `dca run` reads it, the
+following fail closed with exit 2 before any launcher phase:
+
+- an unknown key;
+- an invalid value;
+- a `repository` other than the current checkout;
+- a symlink;
+- a file writable by group or others.
+
+It can't express policy, network, safety, limits, credentials or hooks.
+
 ### `dca verify`
 
-Runs the `scripts/verify.sh` checks. It exits non-zero on any failure and never prints tokens.
+```text
+dca verify [--repo <path>]                  # default: the repository containing the current directory, if any
+```
+
+Runs the `scripts/verify.sh` checks and presents their named results grouped for the developer
+(Docker Sandboxes, network policy, version pins, runtime assets, gate evidence, environment, each
+backend), each failure with its reason and a next step. It also reports:
+
+- the selected checkout's state and its local config;
+- any `dca-*` sandbox left behind;
+- whether untrusted runs are blocked.
+
+It exits non-zero on any `verify.sh` failure or an invalid local config, and never prints tokens.
 
 ### `dca bench`
 
@@ -183,7 +233,7 @@ fail-closed, expected `blocked`) and S5b (untrusted egress/G9) applies to each b
 | 10 | Run finalized, `final_outcome = failed` | yes |
 | 11 | Valid request whose correct policy outcome is `blocked`: untrusted execution with no backend satisfying the required gates; approval required with no grant; required safe prerequisite unavailable; a required check that can't run; a host-enforced limit or a native Docker Agent ceiling termination without prior success evidence; malformed/abnormal run. The report lists the human action | yes |
 | 3 | Precondition failure before any task disposition: sbx unavailable, incompatible or drifted version, backend authentication unavailable, dirty checkout without override, provider API-key contamination, SSH forwarding active, required gate evidence missing, invalid or stale (`gates/eligibility.json`; e.g. G4 effective network policy not passed; the backend unavailable, its final G11 or its production conformance not PASS), global network-policy fingerprint drift, stale or invalid approval; for `dca bench`, `--trust untrusted` on a backend that isn't untrusted-eligible | no (diagnostic only) |
-| 2 | Usage error (invalid arguments) | no |
+| 2 | Usage error: invalid arguments, no task or two tasks, no repository to detect, or an invalid local config | no |
 | 4 | Infrastructure abort: no task disposition and never `succeeded`. Three cases: (a) the **source bundle** can't be created or validated (before any sandbox); (b) **provisioning** fails before the agent starts (`sbx create`, network policy, `sbx cp`, in-VM clone, kit/gate preflight); (c) **retrieval** fails after the agent ran (task-branch bundle export, copy, verify or import), so no trustworthy change set exists. The launcher does best-effort `sbx rm`, keeps only safe diagnostic and event artifacts, and never creates a partial `dca/<run-id>` branch. Never reported as a task `blocked` outcome | no (diagnostic only) |
 
 ## Outputs

@@ -63,11 +63,13 @@ def factory(status=0, raises=None):
     return build
 
 
-def invoke(argv, status=0, raises=None):
+def invoke(argv, status=0, raises=None, config=None):
+    """`config` stands in for the checkout's local config, so no developer's own file leaks in."""
     Recorded.instances = []
     out, err = io.StringIO(), io.StringIO()
     with redirect_stdout(out), redirect_stderr(err):
-        code = cli.main(argv, launcher_factory=factory(status, raises))
+        code = cli.main(argv, launcher_factory=factory(status, raises),
+                        config_loader=lambda repo: config)
     return code, out.getvalue(), err.getvalue()
 
 
@@ -103,18 +105,22 @@ class TestFlagSurface(unittest.TestCase):
         self.assertEqual(options.approve, ["apr-a-1", "apr-a-2"])
 
     def test_04_trust_defaults_to_untrusted(self):
-        self.assertEqual(cli.build_parser().parse_args(BASE).trust, "untrusted")
+        # The parser leaves it unset so the local config can be consulted; with neither, the
+        # resolved default is still untrusted (FR-029a).
+        self.assertIsNone(cli.build_parser().parse_args(BASE).trust)
         code, _, _ = invoke(BASE)
         self.assertEqual(code, 0)
         self.assertEqual(Recorded.instances[0].request.trust, "untrusted")
 
     def test_05_backend_defaults_to_claude(self):
-        self.assertEqual(cli.build_parser().parse_args(BASE).backend, "claude")
+        invoke(BASE)
+        self.assertEqual(Recorded.instances[0].request.backend, "claude")
 
-    def test_06_a_missing_required_flag_is_a_usage_error(self):
-        code, _, err = invoke(["run", "--task", "x"])
+    def test_06_a_missing_task_is_a_usage_error(self):
+        code, _, err = invoke(["run", "--repo", str(ROOT)])
         self.assertEqual(code, 2)
-        self.assertIn("--repo", err)
+        self.assertIn("a task is required", err)
+        self.assertEqual(Recorded.instances, [])
 
     def test_07_an_unknown_backend_is_a_usage_error(self):
         code, _, _ = invoke(BASE + ["--backend", "gemini"])

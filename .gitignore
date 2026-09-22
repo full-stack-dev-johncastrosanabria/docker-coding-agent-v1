@@ -14,6 +14,10 @@ benchmark/results/bench-*/
 # Python bytecode
 __pycache__/
 *.py[cod]
+# Local installs (`pip install -e .`)
+.venv/
+*.egg-info/
+build/
 # Throwaway repositories created by unit tests
 tests/**/work/
 tests/integration/work/

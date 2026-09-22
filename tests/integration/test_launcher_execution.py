@@ -442,5 +442,22 @@ class TestEndings(ExecutionCase):
                 self.assertEqual(analysis.run_integrity()["stream"], "complete")
 
 
+class TestProgress(ExecutionCase):
+    def test_40_provisioning_reports_the_bundle_and_the_ready_sandbox(self):
+        base = self.versions["sandbox_bases"]["claude"]["base"]
+        self.state["create_output"] = f"created from {base}"
+        self.write_state()
+        instance = self.make()
+        seen = []
+        instance.progress = lambda *event: seen.append(event)
+        instance.preconditions()
+        instance.provision()
+        self.assertEqual([(phase, status) for phase, status, _ in seen],
+                         [("bundle", "PASS"), ("sandbox", "READY")])
+        self.assertIn(instance.source_commit[:12], seen[0][2])
+        self.assertEqual(seen[1][2], instance.sandbox)
+        instance.cleanup()
+
+
 if __name__ == "__main__":
     unittest.main()
