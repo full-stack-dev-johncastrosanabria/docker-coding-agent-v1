@@ -21,6 +21,20 @@ reason.
 - **planned**: several coordinated changes, unclear root cause, cross-component impact, or a
   contract change.
 
+A task is **planned** when any planned criterion applies, however few files it touches; it is
+**direct** only when none does. The reason names the planned criterion that applies, or says that
+none does.
+
+- A **contract change** alters what existing code relies on: it removes or renames a function,
+  class, field or file that other code uses, changes a signature, or changes what an existing
+  operation accepts, refuses or raises. Making code do what its documentation or tests already
+  say, and additions that existing callers can ignore, are not contract changes.
+- **Several coordinated changes** are edits that are only correct together because they enforce
+  one rule: every caller of something that is removed or changed, or new state that restricts
+  what an existing operation may do.
+- An **unclear root cause** is a failure you cannot trace to its cause by reading the failing
+  check and the code it exercises.
+
 If a direct task turns out to exceed direct-task bounds, **escalate to planned exactly once**,
 rewrite the Context Record with `escalated_from: direct`, and continue. There is no second
 escalation and no de-escalation.

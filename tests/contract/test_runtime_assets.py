@@ -164,6 +164,32 @@ class TestRootInstruction(unittest.TestCase):
     def test_36_it_states_that_the_host_recomputes_the_outcome(self):
         self.assertIn("the host recomputes the final outcome", self.body)
 
+    def test_37_any_planned_criterion_makes_the_task_planned(self):
+        # The two descriptions overlap (a few files can still be a contract change); without a
+        # precedence rule both backends resolved the overlap toward direct.
+        self.assertIn("a task is **planned** when any planned criterion applies, however few "
+                      "files it touches; it is **direct** only when none does", self.body)
+        self.assertIn("the reason names the planned criterion that applies, or says that none "
+                      "does", self.body)
+
+    def test_38_it_defines_a_contract_change_and_what_is_not_one(self):
+        for phrase in ("a **contract change** alters what existing code relies on",
+                       "removes or renames a function, class, field or file that other code uses",
+                       "changes what an existing operation accepts, refuses or raises",
+                       "making code do what its documentation or tests already say, and additions "
+                       "that existing callers can ignore, are not contract changes"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.body)
+
+    def test_39_it_defines_coordinated_changes_and_an_unclear_root_cause(self):
+        for phrase in ("**several coordinated changes** are edits that are only correct together",
+                       "every caller of something that is removed or changed",
+                       "new state that restricts what an existing operation may do",
+                       "an **unclear root cause** is a failure you cannot trace to its cause by "
+                       "reading the failing check and the code it exercises"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.body)
+
 
 class TestSubagentInstructions(unittest.TestCase):
     def test_40_the_researcher_is_read_only_and_never_delegates(self):
