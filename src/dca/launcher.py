@@ -717,6 +717,11 @@ class Launcher:
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.sbx.calls.append({"argv": argv, "status": None, "streaming": True})
 
+        # stderr is drained on its own thread: read only after stdout closed, an agent that wrote
+        # more than a pipe buffer of it would block forever. Only a bounded tail is kept.
+        stderr_tail = _StderrTail(proc.stderr)
+        stderr_tail.start()
+
         accountant = events_module.StreamAccountant(self.request.verify)
         host_stop = None
         captured = []
@@ -743,8 +748,11 @@ class Launcher:
                     text = line.decode("utf-8", "replace")
                     captured.append(text)
                     sink.write(text)
-        stderr = proc.stderr.read().decode("utf-8", "replace")
         exit_status = proc.wait()
+        stderr = stderr_tail.text()
+        with open(os.path.join(self.request.out, "agent.stderr.txt"), "w",
+                  encoding="utf-8") as handle:
+            handle.write(redact_credentials(stderr))
         if host_stop is None and deadline and self.clock() - started >= deadline:
             host_stop = {"reason": "wall_clock", "at_step": accountant.steps}
 
@@ -902,6 +910,48 @@ class Launcher:
 
 
 # --- small helpers ------------------------------------------------------------------------------
+
+#: How much of the agent's stderr is kept (the tail): enough for the error that ended a run.
+AGENT_STDERR_LIMIT = 65536
+
+_CREDENTIAL_PATTERNS = (
+    re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"),        # JWTs
+    re.compile(r"\b(?:sk|rk|pk)-[A-Za-z0-9_-]{8,}"),                          # API keys
+    re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}"),            # auth headers
+    re.compile(r"(?i)(\"?(?:access|refresh|id)_token\"?\s*[:=]\s*\"?)[^\s\",]+"),
+)
+
+
+def redact_credentials(text):
+    """Agent stderr is diagnostic evidence, and evidence must never carry a credential."""
+    for pattern in _CREDENTIAL_PATTERNS:
+        text = pattern.sub(lambda m: (m.group(1) + " " if m.lastindex else "") + "<redacted>",
+                           text)
+    return text
+
+
+class _StderrTail:
+    """Read a pipe to EOF on a daemon thread, keeping only the last AGENT_STDERR_LIMIT bytes."""
+
+    def __init__(self, pipe):
+        import threading
+        self._pipe = pipe
+        self._buffer = bytearray()
+        self._thread = threading.Thread(target=self._drain, daemon=True)
+
+    def start(self):
+        self._thread.start()
+
+    def _drain(self):
+        for chunk in iter(lambda: self._pipe.read(8192), b""):
+            self._buffer += chunk
+            if len(self._buffer) > 2 * AGENT_STDERR_LIMIT:
+                del self._buffer[:-AGENT_STDERR_LIMIT]
+
+    def text(self):
+        self._thread.join(timeout=10)
+        return bytes(self._buffer[-AGENT_STDERR_LIMIT:]).decode("utf-8", "replace")
+
 
 
 def _classification_of(agent_report):

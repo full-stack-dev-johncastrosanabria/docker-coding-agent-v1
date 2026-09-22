@@ -351,6 +351,29 @@ class TestHostLimits(ExecutionCase):
         self.assertIn("tool_call", path.read_text(encoding="utf-8"))
 
 
+    def test_28_the_agents_stderr_is_kept_for_diagnosis_with_credentials_redacted(self):
+        """Regression (dca bench, Codex): runs that died before any event left nothing to read."""
+        jwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl"
+        self.state["exec_stderr"] = (f"error: model request failed: 401\n"
+                                     f"Authorization: Bearer {jwt}\nkey sk-proj-abcdef123456\n")
+        self.record_stream(stream(terminal=False), exit_status=1)
+        instance = self.provisioned()
+        instance.execute_agent(timeout=60)
+        text = (Path(instance.request.out) / "agent.stderr.txt").read_text(encoding="utf-8")
+        self.assertIn("model request failed: 401", text)
+        self.assertNotIn(jwt, text)
+        self.assertNotIn("sk-proj-abcdef123456", text)
+
+    def test_29_agent_stderr_is_capped(self):
+        self.state["exec_stderr"] = "x" * 200000 + "\nlast line\n"
+        self.record_stream(stream(tool_call("one")), exit_status=0)
+        instance = self.provisioned()
+        instance.execute_agent(timeout=60)
+        text = (Path(instance.request.out) / "agent.stderr.txt").read_text(encoding="utf-8")
+        self.assertLessEqual(len(text), launcher.AGENT_STDERR_LIMIT + 200)
+        self.assertTrue(text.rstrip().endswith("last line"))
+
+
 # --- the three bad endings, kept distinct --------------------------------------------------------
 
 

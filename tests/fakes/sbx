@@ -152,6 +152,9 @@ def main(argv):
             next((m for m in sorted(state.get("streams") or {}) if m in script), ""), 0))
         record(argv, exit_status)
         if stream_path:
+            if state.get("exec_stderr"):
+                sys.stderr.write(state["exec_stderr"])
+                sys.stderr.flush()
             delay = float(state.get("stream_delay", 0) or 0)
             with open(stream_path, encoding="utf-8") as handle:
                 for line in handle:
