@@ -134,9 +134,10 @@ def untrusted_hint(source):
     how = {"default": "Trust defaulted to untrusted: neither --trust nor the local config set it.",
            "local config": "Trust is untrusted in this checkout's local config.",
            "command line": "Trust was set to untrusted on the command line."}.get(source, "")
+    init = "dca init --trust trusted" + (" --overwrite" if source == "local config" else "")
     return (f"  {how} DCA V1 runs only trusted profiles; untrusted execution is blocked.\n"
             "  If you trust this repository's content, opt in explicitly for one run with\n"
-            "  `--trust trusted`, or for this checkout with `dca init --trust trusted --overwrite`.")
+            f"  `--trust trusted`, or for this checkout with `{init}`.")
 
 
 # --- dca verify ---------------------------------------------------------------------------------

@@ -266,7 +266,8 @@ def command_run(options, launcher_factory=None, config_loader=None):
                  f"exit {exc.exit_code})",
                  [str(exc), "no completion report was written and no dca/<run-id> branch was "
                             "created.",
-                  "Cleanup: " + (display.sandbox_state() or "cleanup did not report")])
+                  "Cleanup: " + (display.sandbox_state() or "cleanup did not report")],
+                 after_progress=bool(display.reported))
         return exc.exit_code
     for line in console.summary(request, status, display, time.monotonic() - started,
                                 settings["trust"][1]):
@@ -274,8 +275,8 @@ def command_run(options, launcher_factory=None, config_loader=None):
     return status
 
 
-def _stopped(headline, details):
-    print(f"\ndca: {headline}", file=sys.stderr)
+def _stopped(headline, details, after_progress=False):
+    print(("\n" if after_progress else "") + f"dca: {headline}", file=sys.stderr)
     for detail in details:
         print(f"  {detail}", file=sys.stderr)
 

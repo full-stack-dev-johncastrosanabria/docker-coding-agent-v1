@@ -580,7 +580,9 @@ class TestRunOutput(Case):
         self.assertIn("DCA BLOCKED", text)
         self.assertIn("Reason         untrusted runs are not eligible", text)
         self.assertIn("Trust defaulted to untrusted", text)
-        self.assertIn("dca init --trust trusted --overwrite", text)
+        self.assertIn("`dca init --trust trusted`", text)
+        configured = "\n".join(console.summary(request, 11, display, 3, "local config"))
+        self.assertIn("`dca init --trust trusted --overwrite`", configured)
         self.assertIn("Cleanup        no sandbox was created", text)
 
     def test_64_a_precondition_failure_names_the_phase_and_keeps_the_contract_wording(self):
