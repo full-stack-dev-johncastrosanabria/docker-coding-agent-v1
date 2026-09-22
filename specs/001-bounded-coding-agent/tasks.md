@@ -765,7 +765,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
 ## Phase 7: Benchmark infrastructure (order item 7, shared)
 
-- [ ] T074 **Impl (decided)** Define the canonical fixture format and deterministic tooling **before any fixture is written**.
+- [X] T074 **Impl (decided)** *(005-dca-hardening: `benchmark/FORMAT.md`, `dca.bench.build_seed`; the seed identity is a deterministic commit SHA built from `seed/`, not a committed bundle, because bundle bytes are not stable across git versions. Seed determinism is covered in `tests/unit/test_bench.py`.)* Define the canonical fixture format and deterministic tooling **before any fixture is written**.
   - **`benchmark/FORMAT.md`**:
     - **Seed**: plain-text source tree `benchmark/fixtures/<id>/seed/`, built into `repo.bundle` (the fixture-schema `seed` default) by `benchmark/tools/build_seed.py` as a single-branch `main` repo. Commit metadata is fixed (author/committer name and email; `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE` = `2000-01-01T00:00:00Z`) and file ordering is sorted, so identical sources give an identical bundle SHA-256.
     - **Golden changes**: unified-diff patches `golden/good.patch` and `golden/bad/<name>.patch` (fixture-schema `golden.good` / `golden.bad` paths).
@@ -775,7 +775,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **Tests**: `tests/unit/test_bench_tools.py`, covering byte-identical rebuilds, a patch that fails to apply → error, and deterministic apply.
 
   Depends: T002. Evidence: `test_bench_tools.py` passes; two rebuilds of a sample seed have equal SHA-256.
-- [ ] T075 **Test** Write `tests/unit/test_bench.py`. Cover:
+- [ ] T075 **Test** *(005-dca-hardening: `tests/unit/test_bench.py` covers discovery and schema validation, selection, scoring (outcome, report schema, oracle, scope, cleanup), metrics, results JSON/Markdown, `--trust untrusted` refusal and `--acceptance` refusal, for the 10-fixture reliability suite. The 28-applicable counting matrix, thresholds, instability detection and FR-001 ordering checks belong to the acceptance suite and remain open.)* Write `tests/unit/test_bench.py`. Cover:
   - discovery with fixture-schema validation;
   - **29 physical → 28 applicable per backend run**, with S5a/S5b chosen via `gate_condition` from the **synthetic eligibility fixtures** (T005);
   - **Selection and counting matrix** (M7; launcher-cli "Trust resolution and counting"), with each cell a test:
@@ -792,8 +792,8 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - results JSON.
 
   Depends: T005, T007, T074. Evidence: fails before T076, passes after.
-- [ ] T076 **Impl (decided)** Write `src/dca/bench.py` and wire `dca bench` (replacing the T072 placeholder). Depends: T075, T072. Evidence: T075 passes.
-- [ ] T077 [P] **Impl (decided)** Write `tests/oracles/run_oracles.py` and `tests/oracles/test_oracles.py`, using the T074 format: every fixture's `oracle.sh` must pass on `golden/good.patch` and fail on every `golden/bad/*.patch`, with no model or sandbox. Also add a seed-determinism check that rebuilds every `repo.bundle` from `seed/` and compares SHA-256. Depends: T074. Evidence: runs green on an empty fixture set; later fixture tasks add cases.
+- [X] T076 **Impl (decided)** *(005-dca-hardening: reliability runner; each fixture is a real `bin/dca run`. `--acceptance` is refused until T075's acceptance matrix and T078 exist.)* Write `src/dca/bench.py` and wire `dca bench` (replacing the T072 placeholder). Depends: T075, T072. Evidence: T075 passes.
+- [X] T077 [P] **Impl (decided)** *(005-dca-hardening: the determinism check lives in `tests/unit/test_bench.py`, because seeds are built rather than committed.)* Write `tests/oracles/run_oracles.py` and `tests/oracles/test_oracles.py`, using the T074 format: every fixture's `oracle.sh` must pass on `golden/good.patch` and fail on every `golden/bad/*.patch`, with no model or sandbox. Also add a seed-determinism check that rebuilds every `repo.bundle` from `seed/` and compares SHA-256. Depends: T074. Evidence: runs green on an empty fixture set; later fixture tasks add cases.
 - [ ] T078 **Impl (decided)** Write `benchmark/thresholds.yaml` with the R24 values. It **must be committed before any acceptance run** (FR-039). Depends: T075. Evidence: T075 loads it; `git log` shows the commit before T097.
 
 ---

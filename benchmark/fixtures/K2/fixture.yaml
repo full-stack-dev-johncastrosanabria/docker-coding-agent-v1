@@ -1,0 +1,20 @@
+{
+  "id": "K2",
+  "category": "small",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "slugify() in src/slugify.js produces slugs with stray hyphens for titles that begin or end with punctuation or spaces, for example 'Hello, World!' becomes 'hello-world-'. Fix it so it matches its doc comment. The tests run with `node --test`.",
+  "acceptance_criteria": [
+    "slugify never returns a slug that starts or ends with a hyphen",
+    "runs of non-alphanumeric characters still collapse to a single hyphen",
+    "the existing tests pass without being weakened"
+  ],
+  "verification": {"type": "deterministic", "commands": ["node --test"]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "direct",
+  "allowed_change_scope": ["src/slugify.js", "test/*.js"],
+  "prohibited_checks": ["no-test-weakening"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/weakened-test.patch", "golden/bad/trailing-only.patch"]}
+}

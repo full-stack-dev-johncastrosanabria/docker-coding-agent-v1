@@ -252,10 +252,26 @@ class TestDispatch(unittest.TestCase):
                             repo_root=str(WORK / "no-such-root"))
         self.assertNotEqual(code, 0, "a missing verify.sh must not be reported as success")
 
-    def test_43_bench_is_explicitly_not_implemented_yet(self):
-        code, _, err = invoke(["bench"])
+    def test_43_bench_dispatches_to_the_benchmark_with_its_options(self):
+        seen = []
+        original = cli.bench_module.command
+        cli.bench_module.command = lambda options, repo_root=None: seen.append(options) or 0
+        try:
+            code, _, _ = invoke(["bench", "--backend", "both", "--fixtures", "K*", "--repeat", "2"])
+        finally:
+            cli.bench_module.command = original
+        self.assertEqual(code, 0)
+        self.assertEqual((seen[0].backend, seen[0].fixtures, seen[0].repeat, seen[0].trust),
+                         ("both", "K*", 2, "trusted"))
+
+    def test_44_bench_acceptance_is_refused_as_a_precondition_before_anything_runs(self):
+        code, _, err = invoke(["bench", "--acceptance"])
+        self.assertEqual(code, 3)
+        self.assertIn("28-fixture", err)
+
+    def test_45_bench_rejects_an_unknown_backend(self):
+        code, _, _ = invoke(["bench", "--backend", "gemini"])
         self.assertEqual(code, 2)
-        self.assertIn("benchmark", err.lower())
 
 
 if __name__ == "__main__":

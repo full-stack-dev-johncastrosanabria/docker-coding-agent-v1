@@ -1,0 +1,36 @@
+diff --git a/tests/test_words.py b/tests/test_words.py
+new file mode 100644
+index 0000000..80a3ad1
+--- /dev/null
++++ b/tests/test_words.py
+@@ -0,0 +1,30 @@
++import unittest
++
++from textstats.words import longest_word, word_count
++
++
++class WordCountTest(unittest.TestCase):
++    def test_counts_words(self):
++        self.assertEqual(word_count("the quick brown fox"), 4)
++
++    def test_empty_and_whitespace_only(self):
++        self.assertEqual(word_count(""), 0)
++        self.assertEqual(word_count("   \t\n"), 0)
++
++    def test_repeated_whitespace(self):
++        self.assertEqual(word_count("a  b\t\tc\n d"), 4)
++
++
++class LongestWordTest(unittest.TestCase):
++    def test_longest(self):
++        self.assertEqual(longest_word("a abc ab"), "abc")
++
++    def test_empty(self):
++        self.assertEqual(longest_word(""), "")
++
++    def test_tie_first_wins(self):
++        self.assertEqual(longest_word("cat dog emu"), "cat")
++
++
++if __name__ == "__main__":
++    unittest.main()

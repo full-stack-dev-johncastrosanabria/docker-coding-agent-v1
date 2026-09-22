@@ -40,9 +40,11 @@ def _sideload(name, filename):
 
 
 try:
+    from . import bench as bench_module
     from . import launcher as launcher_module
     from .errors import InfraAbort, PreconditionError, UsageError
 except ImportError:  # loaded by path in tests
+    bench_module = _sideload("dca_bench", "bench.py")
     launcher_module = _sideload("dca_launcher", "launcher.py")
     _errors = _sideload("dca_errors", "errors.py")
     InfraAbort, PreconditionError, UsageError = (
@@ -97,13 +99,19 @@ def build_parser():
 
     commands.add_parser("verify", help="run the repository verification checks")
 
-    bench = commands.add_parser("bench", help="run the deterministic benchmark")
-    bench.add_argument("--backend", default="claude", choices=["claude", "codex"])
+    bench = commands.add_parser(
+        "bench", help="run the benchmark fixtures through real dca runs",
+        description="Run every selected fixture in benchmark/fixtures/ through a real `dca run` "
+                    "(real sandbox, real model backend) and write benchmark.json and "
+                    "benchmark.md under benchmark/results/<bench-id>/.")
+    bench.add_argument("--backend", default="claude", choices=["claude", "codex", "both"])
     bench.add_argument("--trust", default="trusted", choices=["trusted", "untrusted"])
-    bench.add_argument("--fixtures", default=None, help="glob selecting fixtures")
+    bench.add_argument("--fixtures", default=None,
+                       help="comma-separated fixture id globs, e.g. 'K*' or 'K1,M2'")
     bench.add_argument("--repeat", type=int, default=1, help="runs per fixture (acceptance: 3)")
     bench.add_argument("--acceptance", action="store_true",
-                       help="acceptance mode: requires committed thresholds and passed gates")
+                       help="acceptance mode (28-fixture suite and committed thresholds; "
+                            "refused for this reliability suite)")
     return parser
 
 
@@ -161,10 +169,8 @@ def command_verify(_options, repo_root=None):
     return subprocess.run(["sh", script], check=False).returncode
 
 
-def command_bench(_options):
-    print("dca bench: the benchmark runner arrives with the benchmark fixtures (tasks.md T076).",
-          file=sys.stderr)
-    return 2
+def command_bench(options, repo_root=None):
+    return bench_module.command(options, repo_root=repo_root)
 
 
 def main(argv=None, launcher_factory=None, repo_root=None):
@@ -176,7 +182,7 @@ def main(argv=None, launcher_factory=None, repo_root=None):
             return command_run(options, launcher_factory)
         if options.command == "verify":
             return command_verify(options, repo_root)
-        return command_bench(options)
+        return command_bench(options, repo_root)
     except UsageError as exc:
         print(f"dca: {exc}", file=sys.stderr)
         return exc.exit_code

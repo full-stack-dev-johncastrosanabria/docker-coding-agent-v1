@@ -33,7 +33,7 @@
 # <KIT_DIR>/agents/instructions/, which is also the config that `docker agent debug config`,
 # `debug toolsets` and `debug skills` are run against - so what is validated is what ships.
 #
-# Native ceilings come from runtime/policy/limits.yaml `native_ceilings` and are static defence in
+# Native ceilings come from runtime/policy/limits.yaml `native_ceilings` and are static defense in
 # depth. They carry the PLANNED maxima, because a static config cannot know the classification in
 # advance; direct/planned semantics are enforced by the host launcher from `host_limits`.
 version: "15"
@@ -69,8 +69,12 @@ permissions:
     - "create_directory:path=**/id_rsa"
     - "create_directory:path=/etc/claude-code/**"
     - "create_directory:path=/opt/dca/**"
-    - "create_directory:path=/run/dca/**"
+    - "create_directory:path=/run/dca/cagent/**"
+    - "create_directory:path=/run/dca/grants.json"
     - "create_directory:path=/run/dca/grants/**"
+    - "create_directory:path=/run/dca/run.json"
+    - "create_directory:path=/run/dca/state/**"
+    - "create_directory:path=/run/dca/task.txt"
     - "edit_file:path=**/*.key"
     - "edit_file:path=**/*.p12"
     - "edit_file:path=**/*.pem"
@@ -90,8 +94,12 @@ permissions:
     - "edit_file:path=**/id_rsa"
     - "edit_file:path=/etc/claude-code/**"
     - "edit_file:path=/opt/dca/**"
-    - "edit_file:path=/run/dca/**"
+    - "edit_file:path=/run/dca/cagent/**"
+    - "edit_file:path=/run/dca/grants.json"
     - "edit_file:path=/run/dca/grants/**"
+    - "edit_file:path=/run/dca/run.json"
+    - "edit_file:path=/run/dca/state/**"
+    - "edit_file:path=/run/dca/task.txt"
     - "fetch*"
     - "open_url*"
     - "read_file:path=**/*.key"
@@ -132,8 +140,12 @@ permissions:
     - "remove_directory:path=**/id_rsa"
     - "remove_directory:path=/etc/claude-code/**"
     - "remove_directory:path=/opt/dca/**"
-    - "remove_directory:path=/run/dca/**"
+    - "remove_directory:path=/run/dca/cagent/**"
+    - "remove_directory:path=/run/dca/grants.json"
     - "remove_directory:path=/run/dca/grants/**"
+    - "remove_directory:path=/run/dca/run.json"
+    - "remove_directory:path=/run/dca/state/**"
+    - "remove_directory:path=/run/dca/task.txt"
     - "run_skill*"
     - "shell:cmd=aws deploy*"
     - "shell:cmd=aws ecs update-service*"
@@ -188,8 +200,12 @@ permissions:
     - "write_file:path=**/id_rsa"
     - "write_file:path=/etc/claude-code/**"
     - "write_file:path=/opt/dca/**"
-    - "write_file:path=/run/dca/**"
+    - "write_file:path=/run/dca/cagent/**"
+    - "write_file:path=/run/dca/grants.json"
     - "write_file:path=/run/dca/grants/**"
+    - "write_file:path=/run/dca/run.json"
+    - "write_file:path=/run/dca/state/**"
+    - "write_file:path=/run/dca/task.txt"
 
 agents:
   root:

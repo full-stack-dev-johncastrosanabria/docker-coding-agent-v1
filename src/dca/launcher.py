@@ -567,17 +567,30 @@ class Launcher:
     def _check_resolved_base(self, created_output):
         """The base sbx resolved must be the exact pinned one. Never substituted, never guessed."""
         pinned = ((self.versions.get("sandbox_bases") or {}).get(self.request.backend) or {})
-        reference = pinned.get("base")
-        if reference and reference not in (created_output or ""):
-            # sbx does not always echo the reference; the template store is then the authority.
-            try:
-                templates = self.sbx.templates()
-            except (SbxError, OSError):
-                templates = None
-            if templates is not None and reference and not json.dumps(templates).count(
-                    reference.rsplit(":", 1)[0]):
-                raise InfraAbort(
-                    f"the sandbox was not created from the pinned base {reference}")
+        reference, digest = pinned.get("base"), pinned.get("version")
+        if not reference:
+            raise InfraAbort(f"there is no pinned sandbox base for {self.request.backend}")
+        if reference in (created_output or ""):
+            return
+        # sbx does not always echo the reference; the template store is then the authority, and
+        # it has to prove the same identity the gates prove: repository, tag, and an image id that
+        # prefixes the pinned digest. Both V1 bases share one repository, so less than that could
+        # accept the other backend's base. An unreadable store proves nothing and fails closed.
+        try:
+            templates = self.sbx.templates()
+        except (SbxError, OSError) as exc:
+            raise InfraAbort(
+                f"sbx did not report the base it resolved and the template store could not be "
+                f"read to confirm the pinned base {reference} {digest}: {exc}") from exc
+        cached = _pinned_template(templates, reference)
+        if cached is None:
+            raise InfraAbort(
+                f"sbx did not report the base it resolved and the pinned base {reference} "
+                f"{digest} was not found in the template store")
+        if not _template_matches(cached, digest):
+            raise InfraAbort(
+                f"the template store's {reference} is image {cached.get('id')!r}, not the pinned "
+                f"{digest}: the sandbox was not created from the pinned base")
 
     def _deliver(self, bundle):
         request = self.request
@@ -704,6 +717,11 @@ class Launcher:
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.sbx.calls.append({"argv": argv, "status": None, "streaming": True})
 
+        # stderr is drained on its own thread: read only after stdout closed, an agent that wrote
+        # more than a pipe buffer of it would block forever. Only a bounded tail is kept.
+        stderr_tail = _StderrTail(proc.stderr)
+        stderr_tail.start()
+
         accountant = events_module.StreamAccountant(self.request.verify)
         host_stop = None
         captured = []
@@ -730,8 +748,11 @@ class Launcher:
                     text = line.decode("utf-8", "replace")
                     captured.append(text)
                     sink.write(text)
-        stderr = proc.stderr.read().decode("utf-8", "replace")
         exit_status = proc.wait()
+        stderr = stderr_tail.text()
+        with open(os.path.join(self.request.out, "agent.stderr.txt"), "w",
+                  encoding="utf-8") as handle:
+            handle.write(redact_credentials(stderr))
         if host_stop is None and deadline and self.clock() - started >= deadline:
             host_stop = {"reason": "wall_clock", "at_step": accountant.steps}
 
@@ -890,12 +911,78 @@ class Launcher:
 
 # --- small helpers ------------------------------------------------------------------------------
 
+#: How much of the agent's stderr is kept (the tail): enough for the error that ended a run.
+AGENT_STDERR_LIMIT = 65536
+
+_CREDENTIAL_PATTERNS = (
+    re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"),        # JWTs
+    re.compile(r"\b(?:sk|rk|pk)-[A-Za-z0-9_-]{8,}"),                          # API keys
+    re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}"),            # auth headers
+    re.compile(r"(?i)(\"?(?:access|refresh|id)_token\"?\s*[:=]\s*\"?)[^\s\",]+"),
+)
+
+
+def redact_credentials(text):
+    """Agent stderr is diagnostic evidence, and evidence must never carry a credential."""
+    for pattern in _CREDENTIAL_PATTERNS:
+        text = pattern.sub(lambda m: (m.group(1) + " " if m.lastindex else "") + "<redacted>",
+                           text)
+    return text
+
+
+class _StderrTail:
+    """Read a pipe to EOF on a daemon thread, keeping only the last AGENT_STDERR_LIMIT bytes."""
+
+    def __init__(self, pipe):
+        import threading
+        self._pipe = pipe
+        self._buffer = bytearray()
+        self._thread = threading.Thread(target=self._drain, daemon=True)
+
+    def start(self):
+        self._thread.start()
+
+    def _drain(self):
+        for chunk in iter(lambda: self._pipe.read(8192), b""):
+            self._buffer += chunk
+            if len(self._buffer) > 2 * AGENT_STDERR_LIMIT:
+                del self._buffer[:-AGENT_STDERR_LIMIT]
+
+    def text(self):
+        self._thread.join(timeout=10)
+        return bytes(self._buffer[-AGENT_STDERR_LIMIT:]).decode("utf-8", "replace")
+
+
 
 def _classification_of(agent_report):
     if not isinstance(agent_report, dict):
         return None
     value = (agent_report.get("classification") or {}).get("value")
     return value if value in ("direct", "planned") else None
+
+
+def _pinned_template(templates, reference):
+    """The `sbx template ls --json` entry with the pinned reference's exact repository and tag.
+
+    The store reports the repository fully qualified (docker.io/...), so both spellings match; a
+    tag alone identifies nothing. Mirrors gates/preflight.py `template_image`.
+    """
+    repository, _, tag = reference.rpartition(":")
+    if not repository or not isinstance(templates, dict):
+        return None
+    images = templates.get("images")
+    for image in images if isinstance(images, list) else ():
+        if (isinstance(image, dict) and image.get("tag") == tag
+                and image.get("repository") in (repository, f"docker.io/{repository}")):
+            return image
+    return None
+
+
+def _template_matches(cached, digest):
+    """The cached image id (a short digest) prefixes the full pinned digest."""
+    identifier = cached.get("id")
+    return (isinstance(identifier, str) and len(identifier) >= 12 and isinstance(digest, str)
+            and digest.startswith(f"sha256:{identifier}"))
 
 
 def _evidence_predates_limit(analysis, host_stop, launcher_checks):

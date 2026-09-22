@@ -1,0 +1,19 @@
+{
+  "id": "K5",
+  "category": "small",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "Update the shipped service configuration in service/config.json: raise timeout_seconds to 45, set log_level to \"warning\", and turn the audit feature on. Leave every other setting unchanged, and do not change the loader in service/settings.py.",
+  "acceptance_criteria": [
+    "service/config.json has timeout_seconds 45, log_level \"warning\" and features.audit true",
+    "every other setting keeps its previous value",
+    "load_settings() still validates the shipped configuration"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "direct",
+  "allowed_change_scope": ["service/config.json", "tests/*.py"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/invalid-log-level.patch", "golden/bad/unrequested-change.patch"]}
+}

@@ -15,7 +15,7 @@ or the command its CI runs. Use that. It is what the developer already trusts, a
 launcher will re-execute on the final state.
 
 Prefer, in order: the repository's own declared command → the test that covers the changed
-behaviour → a narrower check that still exercises it. Do not invent a new checking mechanism when
+behavior → a narrower check that still exercises it. Do not invent a new checking mechanism when
 one exists.
 
 Mark as `required` every check that must pass for the task to be done. A check nothing depends on
@@ -28,9 +28,9 @@ Then the approach is `alternative`, and you must document **before the first wor
 - `definition`: exactly how the change will be shown to work - the command, comparison or
   observation, stated precisely enough that someone else could repeat it;
 - `limitation`: what this does not prove, in the form "deterministic verification for the affected
-  behaviour was unavailable, so ...".
+  behavior was unavailable, so ...".
 
-An alternative approach chosen after the edit is not an approach, it is a rationalisation.
+An alternative approach chosen after the edit is not an approach, it is a rationalization.
 
 ## 3. If neither can be established
 

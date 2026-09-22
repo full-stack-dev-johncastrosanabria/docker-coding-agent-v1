@@ -1,0 +1,16 @@
+diff --git a/mathutil/clamp.py b/mathutil/clamp.py
+index 1c85228..e51d3a0 100644
+--- a/mathutil/clamp.py
++++ b/mathutil/clamp.py
+@@ -7,4 +7,10 @@ def clamp(value, low, high):
+     Values below low give low, values above high give high, anything in between is returned
+     unchanged. Raises ValueError if low > high.
+     """
+-    raise NotImplementedError("clamp")
++    if value < low:
++        return low
++    if value > high:
++        return high
++    if low > high:
++        raise ValueError("inverted range")
++    return value

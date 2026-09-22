@@ -384,6 +384,40 @@ def inspect_claude(instance, before_file, out):
     return document
 
 
+REVIEWER_AGENTS = ("reviewer", "dca-reviewer")
+
+
+def reviewer_sessions(fingerprints):
+    """The workspace fingerprints bracketing each reviewer session, one list per session.
+
+    The two backends record a delegation differently. Codex fires `subagent_stop` for the
+    reviewer between two root `on_agent_switch` records; Claude fires the reviewer's own
+    `SubagentStart` and `SubagentStop`. A session whose bracketing record is missing keeps a
+    None in its place, so the caller can never read a half-observed session as identical.
+    """
+    sessions = []
+    for index, entry in enumerate(fingerprints):
+        if entry.get("agent") not in REVIEWER_AGENTS:
+            continue
+        if entry.get("event") == "subagent_stop":
+            before = next((item for item in reversed(fingerprints[:index])
+                           if item.get("event") == "on_agent_switch" and
+                           item.get("agent") == "root"), None)
+            after = next((item for item in fingerprints[index + 1:]
+                          if item.get("event") == "on_agent_switch" and
+                          item.get("agent") == "root"), None)
+            group = (before, entry, after)
+        elif entry.get("event") == "SubagentStop":
+            before = next((item for item in reversed(fingerprints[:index])
+                           if item.get("event") == "SubagentStart" and
+                           item.get("agent") == entry.get("agent")), None)
+            group = (before, entry)
+        else:
+            continue
+        sessions.append([item.get("fingerprint") if item else None for item in group])
+    return sessions
+
+
 def assert_live_run(instance, backend, rows, out, analysis, host_stop, exit_status, stderr):
     gate_log = read_jsonl(instance, f"{STATE_DIR}/gate.log.jsonl")
     fingerprints = read_jsonl(instance, f"{STATE_DIR}/fingerprints.jsonl")
@@ -445,20 +479,7 @@ def assert_live_run(instance, backend, rows, out, analysis, host_stop, exit_stat
              "denied_classes": sorted({entry.get("class") for entry in denied},
                                       key=lambda value: (value is None, value))})
 
-    reviewer_prints = [entry for entry in fingerprints if entry.get("agent") in
-                       ("reviewer", "dca-reviewer")]
-    reviewer_groups = []
-    for index, entry in enumerate(fingerprints):
-        if entry not in reviewer_prints or entry.get("event") != "subagent_stop":
-            continue
-        before = next((item for item in reversed(fingerprints[:index])
-                       if item.get("event") == "on_agent_switch" and
-                       item.get("agent") == "root"), None)
-        after = next((item for item in fingerprints[index + 1:]
-                      if item.get("event") == "on_agent_switch" and
-                      item.get("agent") == "root"), None)
-        reviewer_groups.append([item.get("fingerprint") if item else None
-                                for item in (before, entry, after)])
+    reviewer_groups = reviewer_sessions(fingerprints)
     checked(rows, "run.reviewer_left_workspace_identical",
             bool(reviewer_groups) and all(group[0] and len(set(group)) == 1
                                           for group in reviewer_groups),
@@ -669,6 +690,7 @@ def main():
     result = {"backend": backend, "trust": "trusted", "run_id": request.run_id,
               "run_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
               "source_commit": None, "sandbox": None, "checks": rows}
+    completed = False
     try:
         instance.prepare_gate_run()
         result["source_commit"] = instance.source_commit
@@ -708,11 +730,17 @@ def main():
             run_native_deny(instance, rows, out)
 
         run_failclosed(instance, backend, rows, out)
+        completed = True
     except Exception as exc:  # noqa: BLE001 - a harness failure is a FAIL, never a silent pass
         checked(rows, "harness.execution", False,
                 {"error": f"{type(exc).__name__}: {exc}",
                  "traceback": traceback.format_exc().splitlines()[-12:]})
     finally:
+        if not completed:
+            # KeyboardInterrupt and SystemExit bypass the `except` above. Without this row the
+            # probes that did run would score an interrupted run as PASS.
+            checked(rows, "harness.completed", False,
+                    {"detail": "the run stopped before every probe ran"})
         instance.cleanup()
         result["sandbox_removed"] = instance.sandbox is None
         try:

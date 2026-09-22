@@ -1,0 +1,21 @@
+diff --git a/tests/test_words.py b/tests/test_words.py
+new file mode 100644
+index 0000000..1ec3f1a
+--- /dev/null
++++ b/tests/test_words.py
+@@ -0,0 +1,15 @@
++import unittest
++
++from textstats.words import longest_word, word_count
++
++
++class WordsTest(unittest.TestCase):
++    def test_counts_words(self):
++        self.assertEqual(word_count("the quick brown fox"), 4)
++
++    def test_longest(self):
++        self.assertEqual(longest_word("a abc ab"), "abc")
++
++
++if __name__ == "__main__":
++    unittest.main()

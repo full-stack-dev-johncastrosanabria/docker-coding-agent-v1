@@ -138,10 +138,15 @@ Runs the `scripts/verify.sh` checks. It exits non-zero on any failure and never 
 ### `dca bench`
 
 ```text
-dca bench [--backend claude|codex] [--trust trusted|untrusted] [--fixtures <glob>]
+dca bench [--backend claude|codex|both] [--trust trusted|untrusted] [--fixtures <glob>[,<glob>...]]
           [--repeat N]          # default 1; acceptance uses 3
           [--acceptance]        # requires committed thresholds, clean tree, exact pinned versions, passed gates
 ```
+
+V1 ships a 10-fixture reliability suite (K1-K8, M1-M2; `benchmark/FORMAT.md`). Every fixture run is
+a real `dca run` subprocess, results go to `benchmark/results/<bench-id>/benchmark.{json,md}`, and
+the exit status is 0 only when every run passed. `--acceptance` is refused (exit 3) until the full
+28-fixture suite and `benchmark/thresholds.yaml` exist.
 
 Fixtures are selected per backend by `gate_condition`. Exactly one of S5a (untrusted
 fail-closed, expected `blocked`) and S5b (untrusted egress/G9) applies to each backend.

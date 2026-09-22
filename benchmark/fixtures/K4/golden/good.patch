@@ -1,0 +1,29 @@
+diff --git a/receipts/lines.py b/receipts/lines.py
+index 0ce6730..c2aa91b 100644
+--- a/receipts/lines.py
++++ b/receipts/lines.py
+@@ -1,16 +1,21 @@
+ """Fixed-width receipt lines. Amounts are integer cents, shown as a right-aligned decimal."""
+ 
+ 
++def format_amount(cents):
++    """The amount alone, right-aligned: 305 -> '     3.05'."""
++    return f"{cents // 100:>6}.{cents % 100:02d}"
++
++
+ def format_item(name, cents):
+-    return f"{name:<20}{cents // 100:>6}.{cents % 100:02d}"
++    return f"{name:<20}{format_amount(cents)}"
+ 
+ 
+ def format_tax(cents):
+-    return f"{'TAX':<20}{cents // 100:>6}.{cents % 100:02d}"
++    return f"{'TAX':<20}{format_amount(cents)}"
+ 
+ 
+ def format_total(cents):
+-    return f"{'TOTAL':<20}{cents // 100:>6}.{cents % 100:02d}"
++    return f"{'TOTAL':<20}{format_amount(cents)}"
+ 
+ 
+ def receipt(items, tax_cents):

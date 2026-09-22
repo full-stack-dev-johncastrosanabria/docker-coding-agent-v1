@@ -1,0 +1,10 @@
+{
+  "name": "orders",
+  "port": 8080,
+  "timeout_seconds": 30,
+  "log_level": "info",
+  "features": {
+    "audit": false,
+    "metrics": true
+  }
+}

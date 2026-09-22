@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""A fake `dca run` for the `dca bench` tests (tests/unit/test_bench.py).
+
+It stands in for the real launcher at the process boundary `dca bench` uses, and nowhere else:
+it receives the same argv, and it leaves behind what a real run leaves - a `dca/<run-id>` branch in
+the fixture repository and a schema-valid `report.json` plus `events.jsonl` in `--out` - built with
+the real `dca.report` module, so a test cannot pass on a report shape production never writes.
+
+Behavior is scripted per invocation through `$DCA_FAKE_RUN` (JSON):
+
+  * `mode`: `succeeded` (default), `failed`, `precondition` (exit 3, no report), `invalid-report`;
+  * `patch`: a unified diff applied to the task branch;
+  * `leak`: also register a `dca-<run-id>` sandbox in the fake sbx state and never remove it;
+  * `delegate`: sub-agents named in the event stream, e.g. ["researcher", "reviewer"].
+"""
+
+import argparse
+import importlib.util
+import json
+import os
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _load(name, filename):
+    spec = importlib.util.spec_from_file_location(name, os.path.join(ROOT, "src", "dca", filename))
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+events = _load("dca_events", "events.py")
+report = _load("dca_report", "report.py")
+
+RUN_ID = "run-2026-09-21T04-05-06Z-a1b2c3"
+
+
+def git(repo, *args):
+    env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
+               GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid")
+    return subprocess.run(["git", "-C", repo, *args], check=True, env=env,
+                          stdout=subprocess.PIPE).stdout.decode().strip()
+
+
+def stream(delegate):
+    lines = [{"type": "stream_started", "session_id": "s"}]
+    for number, role in enumerate(delegate):
+        lines.append({"type": "tool_call", "agent_name": "root", "tool_call": {
+            "id": f"call-{number}", "type": "function",
+            "function": {"name": "Task", "arguments": json.dumps({"subagent_type": f"dca-{role}"})}}})
+    lines.append({"type": "stream_stopped", "session_id": "s", "reason": "normal"})
+    return "".join(json.dumps(line) + "\n" for line in lines)
+
+
+def main(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("command")
+    for flag in ("--repo", "--task", "--backend", "--trust", "--criteria", "--out"):
+        parser.add_argument(flag)
+    parser.add_argument("--verify", action="append", default=[])
+    options = parser.parse_args(argv)
+    script = json.loads(os.environ.get("DCA_FAKE_RUN", "{}"))
+    mode = script.get("mode", "succeeded")
+
+    if script.get("leak"):
+        state_path = os.path.join(os.environ["DCA_FAKE_SBX_DIR"], "state.json")
+        with open(state_path, encoding="utf-8") as handle:
+            state = json.load(handle)
+        state.setdefault("sandboxes", []).append({"name": f"dca-{RUN_ID}"})
+        with open(state_path, "w", encoding="utf-8") as handle:
+            json.dump(state, handle)
+
+    if mode == "precondition":
+        print("dca: precondition failed: backend 'codex' cannot be run", file=sys.stderr)
+        return 3
+
+    repo, branch = options.repo, f"dca/{RUN_ID}"
+    base = git(repo, "rev-parse", "HEAD")
+    git(repo, "checkout", "-q", "-b", branch)
+    if script.get("patch"):
+        git(repo, "apply", "--index", script["patch"])
+        git(repo, "commit", "-q", "-m", "fake run")
+    head = git(repo, "rev-parse", "HEAD")
+    names = git(repo, "diff", "--name-only", base, head).split()
+    git(repo, "checkout", "-q", "main")
+
+    os.makedirs(options.out, exist_ok=True)
+    text = stream(script.get("delegate", []))
+    with open(os.path.join(options.out, "events.jsonl"), "w", encoding="utf-8") as handle:
+        handle.write(text)
+    result = "pass" if mode == "succeeded" else "fail"
+    check = {"id": options.verify[0], "command_or_method": options.verify[0], "required": True,
+             "executed_by": "launcher", "after_last_change": True, "result": result}
+    built = report.build(
+        run_id=RUN_ID, backend=options.backend, trust_level=options.trust,
+        task_fingerprint="sha256:" + "0" * 64,
+        source={"ref": "refs/heads/main", "commit": base, "bundle_sha256": "a" * 64,
+                "uncommitted_ignored": False},
+        sandbox_settings={"mountless": True, "shared_skills": "off", "ssh_agent_forwarding": False,
+                          "network_policy_digest": "sha256:" + "b" * 64},
+        analysis=events.analyze(text, exit_status=0),
+        agent_report={"outcome": mode if mode != "invalid-report" else "succeeded",
+                      "classification": {"value": "direct", "reason": "one file"},
+                      "verification": {"type": "deterministic", "checks": [dict(check)]},
+                      "acceptance_criteria": [{"text": "done", "status": "satisfied"}],
+                      "risks": [], "blockers": []},
+        change_set={"branch": branch if names else None, "base_commit": base, "head_commit": head,
+                    "files": [{"path": name, "status": "modified"} for name in names]},
+        limits_configured={"steps": 120, "retries": 3, "wall_clock_seconds": 1200,
+                           "tokens": 3000000},
+        versions={"docker_agent": "v1.136.0", "claude_code": "2.1.278", "sbx": "v0.43.0",
+                  "drift": False},
+        launcher_checks=[check])
+    if mode == "invalid-report":
+        built["final_outcome"] = "maybe"
+        with open(os.path.join(options.out, "report.json"), "w", encoding="utf-8") as handle:
+            json.dump(built, handle)
+        return 0
+    report.write(built, options.out)
+    return {"succeeded": 0, "failed": 10}.get(built["final_outcome"], 11)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

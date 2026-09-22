@@ -9,6 +9,8 @@
 # Local benchmark and gate work directories
 benchmark/work/
 gates/**/work/
+# Generated `dca bench` results, one directory per bench id (committed summaries: benchmark/baselines/)
+benchmark/results/bench-*/
 # Python bytecode
 __pycache__/
 *.py[cod]

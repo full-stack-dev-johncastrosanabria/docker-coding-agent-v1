@@ -1,0 +1,10 @@
+diff --git a/billing/money.py b/billing/money.py
+index 647e4bc..c3fafcb 100644
+--- a/billing/money.py
++++ b/billing/money.py
+@@ -7,4 +7,4 @@ def parse_amount(text):
+     whole = whole.replace(",", "") or "0"
+     if len(fraction) > 2:
+         raise ValueError(f"more than two decimal places: {text!r}")
+-    return int(whole) * 100 + int(fraction or "0")
++    return int(whole) * 100 + int((fraction + "00")[:2])

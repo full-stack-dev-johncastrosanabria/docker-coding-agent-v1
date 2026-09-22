@@ -1,0 +1,28 @@
+{
+  "version": "0.2",
+  "language": "en-US",
+  "words": [
+    "allowset",
+    "cagent",
+    "claudeusercontent",
+    "keygen",
+    "mountless",
+    "netrc",
+    "npmjs",
+    "oneline",
+    "pypi",
+    "pythonhosted",
+    "realpath",
+    "rumpl",
+    "sideload",
+    "stdlib",
+    "taskid",
+    "toolsets",
+    "Unparseable",
+    "usermod"
+  ],
+  "ignorePaths": [
+    "**/work/**",
+    "benchmark/fixtures/*/repo.bundle"
+  ]
+}

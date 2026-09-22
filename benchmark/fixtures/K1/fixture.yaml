@@ -1,0 +1,20 @@
+{
+  "id": "K1",
+  "category": "small",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "Fix the rounding bug in apply_discount in shop/pricing.py. The discounted price must be rounded half up to whole cents, as the docstring says. The test suite in tests/ currently fails.",
+  "acceptance_criteria": [
+    "apply_discount returns the discounted price rounded half up to whole integer cents",
+    "a percent outside 0..100 still raises ValueError",
+    "the existing tests pass without being weakened"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "direct",
+  "allowed_change_scope": ["shop/pricing.py", "tests/*.py"],
+  "prohibited_checks": ["no-test-weakening"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/weakened-test.patch", "golden/bad/bankers-rounding.patch"]}
+}

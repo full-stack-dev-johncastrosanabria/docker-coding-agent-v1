@@ -1,0 +1,19 @@
+{
+  "id": "K3",
+  "category": "small",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "textstats/words.py has no tests. Add unit tests in tests/test_words.py (standard-library unittest) for word_count and longest_word, covering the behavior their docstrings promise: empty and whitespace-only input, multiple spaces between words, and ties in longest_word. Do not change textstats/words.py.",
+  "acceptance_criteria": [
+    "tests/test_words.py exists and runs under python3 -m unittest",
+    "the tests cover empty input, repeated whitespace and ties as the docstrings describe",
+    "textstats/words.py is unchanged"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "direct",
+  "allowed_change_scope": ["tests/*.py"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/shallow-tests.patch", "golden/bad/edits-implementation.patch"]}
+}

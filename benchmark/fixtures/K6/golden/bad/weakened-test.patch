@@ -1,0 +1,13 @@
+diff --git a/tests/test_invoice.py b/tests/test_invoice.py
+index 03d75f7..c3fe365 100644
+--- a/tests/test_invoice.py
++++ b/tests/test_invoice.py
+@@ -9,7 +9,7 @@ class InvoiceTotalTest(unittest.TestCase):
+ 
+     def test_mixed_amounts(self):
+         lines = [("pen", "1.5", 2), ("book", "12.25", 1), ("desk", "1,000", 1)]
+-        self.assertEqual(invoice_total(lines), 300 + 1225 + 100000)
++        self.assertEqual(invoice_total(lines), 105 * 2 + 1225 + 100000)
+ 
+ 
+ if __name__ == "__main__":

@@ -16,7 +16,7 @@ The map's scope follows the classification, not your curiosity:
 - **direct → `minimal`**: the files the change touches, the tests that cover them, and the
   conventions those files already follow.
 - **planned → `component`**: the same, widened to the component boundary the change crosses - its
-  public surface, its callers, and the tests that pin its behaviour.
+  public surface, its callers, and the tests that pin its behavior.
 
 Record, in the Context Record: `target_files`, `related_tests`, `conventions`, and `scope`.
 
@@ -41,7 +41,7 @@ findings rather than the material it read.
 ## 3. Repository-wide exploration is the exception
 
 Explore repository-wide **only** when the task cannot be scoped without it - for example a
-cross-cutting rename, or a behaviour whose location is genuinely unknown after targeted search.
+cross-cutting rename, or a behavior whose location is genuinely unknown after targeted search.
 When you do, record it:
 
 ```json

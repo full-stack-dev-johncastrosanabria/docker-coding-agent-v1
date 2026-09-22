@@ -1,0 +1,67 @@
+diff --git a/contacts/display.py b/contacts/display.py
+index b2cf60b..18003d2 100644
+--- a/contacts/display.py
++++ b/contacts/display.py
+@@ -2,4 +2,5 @@
+ 
+ 
+ def format_contact(contact):
+-    return f"{contact.name} ({contact.phone})"
++    line = f"{contact.name} ({contact.phone})"
++    return f"{line} <{contact.email}>" if contact.email else line
+diff --git a/contacts/model.py b/contacts/model.py
+index 16fd250..fdb6781 100644
+--- a/contacts/model.py
++++ b/contacts/model.py
+@@ -1,9 +1,11 @@
+ """The contact record."""
+ 
+ from dataclasses import dataclass
++from typing import Optional
+ 
+ 
+ @dataclass(frozen=True)
+ class Contact:
+     name: str
+     phone: str
++    email: Optional[str] = None
+diff --git a/contacts/serialize.py b/contacts/serialize.py
+index d63405e..fa3269d 100644
+--- a/contacts/serialize.py
++++ b/contacts/serialize.py
+@@ -4,8 +4,8 @@ from contacts.model import Contact
+ 
+ 
+ def to_dict(contact):
+-    return {"name": contact.name, "phone": contact.phone}
++    return {"name": contact.name, "phone": contact.phone, "email": contact.email}
+ 
+ 
+ def from_dict(data):
+-    return Contact(name=data["name"], phone=data["phone"])
++    return Contact(name=data["name"], phone=data["phone"], email=data.get("email"))
+diff --git a/tests/test_email.py b/tests/test_email.py
+new file mode 100644
+index 0000000..24fc296
+--- /dev/null
++++ b/tests/test_email.py
+@@ -0,0 +1,19 @@
++import unittest
++
++from contacts.display import format_contact
++from contacts.model import Contact
++from contacts.serialize import from_dict, to_dict
++
++
++class EmailTest(unittest.TestCase):
++    def test_round_trip_with_email(self):
++        contact = Contact(name="Ada", phone="1", email="ada@example.com")
++        self.assertEqual(from_dict(to_dict(contact)), contact)
++
++    def test_display_with_email(self):
++        self.assertEqual(format_contact(Contact(name="Ada", phone="1", email="a@b.c")),
++                         "Ada (1) <a@b.c>")
++
++
++if __name__ == "__main__":
++    unittest.main()
