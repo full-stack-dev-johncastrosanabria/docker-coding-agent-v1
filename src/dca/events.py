@@ -37,6 +37,7 @@ because the host is the authority on direct/planned semantics.
 
 import json
 import os
+import re
 
 try:
     from . import shellparse
@@ -243,6 +244,10 @@ def _target_paths(arguments):
         value = arguments.get(key)
         if isinstance(value, str) and value:
             paths.append(value)
+    # Multi-target tools (Codex's create_directory) name every target in a `paths` list.
+    listed = arguments.get("paths")
+    if isinstance(listed, list):
+        paths += [item for item in listed if isinstance(item, str) and item]
     return paths
 
 
@@ -252,23 +257,67 @@ def _under_scratch(path, scratch_dir):
     return normalized == scratch or normalized.startswith(scratch + os.sep)
 
 
+#: Redirections that write no file: to /dev/null, or duplicating or closing a descriptor.
+_HARMLESS_REDIRECTION = re.compile(r"(?:\d*|&)>>?\s*/dev/null\b|\d*>&(?:\d+|-)")
+
+#: Arguments with which an otherwise inspecting program writes, deletes or runs something.
+#: Short options match inside a cluster (`sort -uo out`); long ones also match `--opt=value`.
+_WRITING_ARGUMENTS = {
+    "sort": ("-o", "--output"),
+    "tree": ("-o",),
+    "file": ("-C", "--compile"),
+    "rg": ("--pre",),
+    "find": ("-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0",
+             "-fprintf", "-fls"),
+}
+
+
+def _redirects_to_a_file(command):
+    """True when `command` sends output anywhere but /dev/null.
+
+    The text is checked as written, so a `>` inside quotes or a heredoc body also counts. That
+    over-reports on purpose: an early first mutation can only make the Context Record look late,
+    and an extra mutation can only make a retry count sooner - never hide a write.
+    """
+    return ">" in _HARMLESS_REDIRECTION.sub(" ", command)
+
+
+def _writes_by_argument(program, words):
+    for word in words:
+        for option in _WRITING_ARGUMENTS.get(program, ()):
+            if option.startswith("--"):
+                if word == option or word.startswith(option + "="):
+                    return True
+            elif len(option) == 2:
+                if word.startswith("-") and not word.startswith("--") and option[1] in word[1:]:
+                    return True
+            elif word == option:
+                return True
+    # `uniq INPUT OUTPUT` writes OUTPUT.
+    return program == "uniq" and len([word for word in words if not word.startswith("-")]) > 1
+
+
 def shell_is_read_only(command):
-    """True only when EVERY segment of `command` is known inspection.
+    """True only when EVERY segment of `command` is known inspection that writes no file.
 
     An unparseable command is not read-only. That mirrors the policy gate's class 28: a command the
-    host cannot analyse is never given the benefit of the doubt.
+    host cannot analyse is never given the benefit of the doubt. Neither is one that redirects
+    output to a file or passes an inspecting program an argument that makes it write.
     """
     parsed = shellparse.parse(command)
-    if not parsed.ok or not parsed.segments:
+    if not parsed.ok or not parsed.segments or _redirects_to_a_file(command):
         return False
     for segment in parsed.segments:
         program = (segment.program or "").rsplit("/", 1)[-1]
+        words = list(segment.argv[1:])
         if program == "git":
-            argv = [word for word in segment.argv[1:] if not word.startswith("-")]
+            argv = [word for word in words if not word.startswith("-")]
             if not argv or argv[0] not in READ_ONLY_GIT:
                 return False
+            if any(word == "--output" or word.startswith("--output=") for word in words):
+                return False
             continue
-        if program not in READ_ONLY_PROGRAMS:
+        if program not in READ_ONLY_PROGRAMS or _writes_by_argument(program, words):
             return False
     return True
 

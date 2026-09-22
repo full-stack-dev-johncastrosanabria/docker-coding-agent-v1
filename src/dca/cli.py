@@ -102,7 +102,8 @@ def build_parser():
                     "positional argument or --task; unset options come from the checkout's local "
                     "config (dca init), then from the safe defaults.")
     run.add_argument("task_text", nargs="?", metavar="TASK",
-                     help="the task text in quotes, or @file to read it from a file")
+                     help="the task text in quotes, or @file to read it from a file; a one-word "
+                          "task that starts with '-' goes after --, e.g. dca run -- -fix")
     run.add_argument("--repo", default=None,
                      help="path to the git repository (default: the repository containing the "
                           "current directory; never mounted)")

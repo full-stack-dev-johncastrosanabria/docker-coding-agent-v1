@@ -336,7 +336,7 @@ class Launcher:
             if not os.path.isfile(credential) or os.path.getsize(credential) == 0:
                 raise PreconditionError(
                     "no ChatGPT sign-in is present for the codex backend. Sign in with "
-                    "`docker agent login chatgpt` and re-run. (No token value was read.)")
+                    "`docker agent setup` (select ChatGPT) and re-run. (No token value was read.)")
         else:
             status = shutil.which("claude")
             if status is None:
