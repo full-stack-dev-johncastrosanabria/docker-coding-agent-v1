@@ -1,0 +1,19 @@
+{
+  "id": "K8",
+  "category": "small",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "Implement clamp() in mathutil/clamp.py according to its docstring. It currently raises NotImplementedError. The tests in tests/test_clamp.py describe the expected behavior.",
+  "acceptance_criteria": [
+    "clamp returns value limited to the inclusive range [low, high]",
+    "clamp raises ValueError when low > high",
+    "the tests in tests/test_clamp.py pass"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "direct",
+  "allowed_change_scope": ["mathutil/clamp.py", "tests/*.py"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/no-validation.patch", "golden/bad/exclusive-bounds.patch"]}
+}

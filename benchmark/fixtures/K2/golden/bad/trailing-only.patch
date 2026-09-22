@@ -1,0 +1,14 @@
+diff --git a/src/slugify.js b/src/slugify.js
+index 448cc3c..73ede65 100644
+--- a/src/slugify.js
++++ b/src/slugify.js
+@@ -10,7 +10,8 @@ function slugify(title) {
+     .trim()
+     .replace(/[^a-z0-9]+/g, ' ')
+     .split(' ')
+-    .join('-');
++    .join('-')
++    .replace(/-$/, '');
+ }
+ 
+ module.exports = { slugify };

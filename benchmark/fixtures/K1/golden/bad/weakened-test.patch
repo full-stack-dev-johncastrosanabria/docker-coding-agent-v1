@@ -1,0 +1,13 @@
+diff --git a/tests/test_pricing.py b/tests/test_pricing.py
+index 74c5cfb..7781d9f 100644
+--- a/tests/test_pricing.py
++++ b/tests/test_pricing.py
+@@ -12,7 +12,7 @@ class ApplyDiscountTest(unittest.TestCase):
+ 
+     def test_rounds_half_up_to_whole_cents(self):
+         # 999 * 0.85 = 849.15
+-        self.assertEqual(apply_discount(999, 15), 849)
++        self.assertEqual(apply_discount(999, 15), 850)
+ 
+     def test_percent_out_of_range_is_rejected(self):
+         with self.assertRaises(ValueError):

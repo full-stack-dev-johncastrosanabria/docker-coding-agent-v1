@@ -1,0 +1,21 @@
+{
+  "id": "K7",
+  "category": "small",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "Add an optional email field to contacts. Contact (contacts/model.py) gets email, defaulting to None. to_dict (contacts/serialize.py) must always include an \"email\" key (None when unset), and from_dict must accept dictionaries with or without \"email\". format_contact (contacts/display.py) must append \" <email>\" when an email is set, for example \"Ada Lovelace (555-0100) <ada@example.com>\", and stay unchanged otherwise. Add tests for the new behavior.",
+  "acceptance_criteria": [
+    "Contact has an optional email field defaulting to None",
+    "to_dict always includes email; from_dict accepts data with or without it",
+    "format_contact appends \" <email>\" only when an email is set",
+    "existing behavior for contacts without an email is unchanged and tests cover the new field"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "direct",
+  "allowed_change_scope": ["contacts/*.py", "tests/*.py"],
+  "prohibited_checks": ["no-test-weakening"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/display-not-updated.patch", "golden/bad/email-required-on-load.patch"]}
+}

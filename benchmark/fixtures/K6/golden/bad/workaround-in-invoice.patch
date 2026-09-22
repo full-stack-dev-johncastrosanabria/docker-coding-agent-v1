@@ -1,0 +1,18 @@
+diff --git a/billing/invoice.py b/billing/invoice.py
+index 64d4664..88e12e0 100644
+--- a/billing/invoice.py
++++ b/billing/invoice.py
+@@ -3,6 +3,12 @@
+ from billing.money import parse_amount
+ 
+ 
++def _cents(amount):
++    if "." in amount and len(amount.split(".")[1]) == 1:
++        amount += "0"
++    return parse_amount(amount)
++
++
+ def invoice_total(lines):
+     """Total in cents of (description, amount text, quantity) lines."""
+-    return sum(parse_amount(amount) * quantity for _, amount, quantity in lines)
++    return sum(_cents(amount) * quantity for _, amount, quantity in lines)

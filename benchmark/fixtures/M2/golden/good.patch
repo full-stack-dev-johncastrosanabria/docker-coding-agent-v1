@@ -1,0 +1,74 @@
+diff --git a/app/events.py b/app/events.py
+index 388a7af..7d290ef 100644
+--- a/app/events.py
++++ b/app/events.py
+@@ -1,8 +1,8 @@
+ """Calendar events."""
+ 
+-from app.util import legacy_parse_date
++from app.dates import parse_iso_date
+ 
+ 
+ def event_days(events):
+     """Sorted distinct dates of {'title', 'date'} events."""
+-    return sorted({legacy_parse_date(event["date"]) for event in events})
++    return sorted({parse_iso_date(event["date"]) for event in events})
+diff --git a/app/export.py b/app/export.py
+index 5c5f2f5..1b3ce49 100644
+--- a/app/export.py
++++ b/app/export.py
+@@ -1,9 +1,9 @@
+ """CSV export."""
+ 
+-from app import util
++from app.dates import parse_iso_date
+ 
+ 
+ def export_rows(rows):
+     """'date,amount' lines, oldest first, dates normalized to ISO."""
+-    ordered = sorted(rows, key=lambda row: util.legacy_parse_date(row["date"]))
+-    return [f"{util.legacy_parse_date(row['date']).isoformat()},{row['amount']}" for row in ordered]
++    ordered = sorted(rows, key=lambda row: parse_iso_date(row["date"]))
++    return [f"{parse_iso_date(row['date']).isoformat()},{row['amount']}" for row in ordered]
+diff --git a/app/reports.py b/app/reports.py
+index 5b6e750..d80b277 100644
+--- a/app/reports.py
++++ b/app/reports.py
+@@ -1,14 +1,14 @@
+ """Monthly reports."""
+ 
+ from app.util import chunks
+-from app.util import legacy_parse_date as parse
++from app.dates import parse_iso_date
+ 
+ 
+ def by_month(rows):
+     """{(year, month): count} for {'date'} rows."""
+     counts = {}
+     for row in rows:
+-        day = parse(row["date"])
++        day = parse_iso_date(row["date"])
+         counts[(day.year, day.month)] = counts.get((day.year, day.month), 0) + 1
+     return counts
+ 
+diff --git a/app/util.py b/app/util.py
+index b5b5512..f099b5e 100644
+--- a/app/util.py
++++ b/app/util.py
+@@ -1,16 +1,5 @@
+ """Assorted helpers."""
+ 
+-import datetime
+-
+-
+-def legacy_parse_date(text):
+-    """Deprecated: accepts 'YYYY-MM-DD' and 'DD/MM/YYYY'. Use app.dates.parse_iso_date."""
+-    text = text.strip()
+-    if "/" in text:
+-        day, month, year = (int(part) for part in text.split("/"))
+-        return datetime.date(year, month, day)
+-    return datetime.date.fromisoformat(text)
+-
+ 
+ def chunks(items, size):
+     """Consecutive lists of at most `size` items."""

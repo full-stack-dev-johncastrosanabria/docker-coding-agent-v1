@@ -113,6 +113,26 @@ bin/dca run \
 
 If the run succeeds, the final check passes, the result is available on the reported `dca/<run-id>` branch, and `report.json` plus `report.md` explain the changes and verification. DCA removes the sandbox. Review the result branch before deciding whether to merge it; the active branch in the target checkout stays as it was.
 
+## Benchmark reliability
+
+`dca bench` measures how consistently DCA completes a set of small, deterministic coding tasks. Each fixture in [benchmark/fixtures/](benchmark/fixtures/) is a tiny repository with a task, a verification command and a hidden oracle ([format](benchmark/FORMAT.md)). The suite covers Python and JavaScript bug fixes, adding tests, a refactor, a config change, diagnosing a failing test, a multi-file change, a direct task, and two planned tasks.
+
+```sh
+bin/dca bench --backend claude            # every fixture, once, on Claude trusted
+bin/dca bench --backend both --fixtures 'K1,M*' --repeat 2
+```
+
+**Every fixture run is a real production `dca run`**: the same eligibility checks, policy, sandbox, host limits, verification, retrieval and cleanup, against the real model backend. Provider availability, rate limits, quota and cost therefore affect a benchmark exactly as they affect a normal run. A full suite on one backend is 10 sandbox runs.
+
+A run **passes** only when it meets every condition:
+
+- the completion report is schema-valid and `succeeded`;
+- the fixture's oracle accepts the delivered branch. The oracle runs hidden tests and restores the original tests, and it executes offline in the pinned sandbox base image, never on the host;
+- every change is inside the fixture's allowed scope;
+- no sandbox is left behind.
+
+A precondition refusal or a `blocked` outcome is counted as **blocked**, and everything else as **failed**. Results are written to `benchmark/results/<bench-id>/benchmark.json` (machine-readable) and `benchmark.md` (a per-run table and a summary). Per-run artifacts such as reports and event streams stay under `benchmark/work/`, which Git ignores. The exit status is 0 only when every run passed. `--acceptance` (the specification's 28-fixture acceptance protocol) is not available for this suite and is refused.
+
 ## V1 security model
 
 - **Trusted backends:** Claude and Codex trusted runs have passed the project's production conformance and end-to-end paths. Untrusted execution is intentionally blocked by the current eligibility policy.
@@ -133,6 +153,6 @@ These controls describe the validated trusted V1 paths. They are not a claim tha
 | Network | Default-deny; access is limited by backend and profile. |
 | Installation | Run from the repository; no package installer. |
 | Pull requests | No automatic PR creation or merge workflow. |
-| Benchmark CLI | `dca bench` is a placeholder and exits with status 2. |
+| Benchmark | `dca bench` runs a 10-fixture reliability suite; the 28-fixture `--acceptance` protocol is not implemented. |
 
 For exact runtime pins and eligibility, consult [runtime/versions.yaml](runtime/versions.yaml) and [gates/eligibility.json](gates/eligibility.json).

@@ -1,0 +1,20 @@
+{
+  "id": "K4",
+  "category": "small",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "Refactor receipts/lines.py to remove the duplicated amount formatting. Add one helper, format_amount(cents), that returns the right-aligned amount on its own (for example format_amount(305) == '     3.05'), and make format_item, format_tax and format_total all use it. The output of every function must stay exactly the same.",
+  "acceptance_criteria": [
+    "receipts/lines.py defines format_amount(cents) returning the right-aligned amount",
+    "format_item, format_tax and format_total all call format_amount and no longer format amounts themselves",
+    "every existing output is byte-for-byte unchanged and the existing tests pass"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "direct",
+  "allowed_change_scope": ["receipts/lines.py", "tests/*.py"],
+  "prohibited_checks": ["no-test-weakening"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/duplication-kept.patch", "golden/bad/output-drift.patch"]}
+}

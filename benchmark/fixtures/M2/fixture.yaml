@@ -1,0 +1,21 @@
+{
+  "id": "M2",
+  "category": "medium",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "Retire legacy_parse_date from app/util.py. Every caller in the app package must use app.dates.parse_iso_date instead, and legacy_parse_date must then be deleted. Callers only ever receive ISO dates (YYYY-MM-DD), so behavior for ISO input must not change; non-ISO input may now raise ValueError. Find every call site before changing anything: not all of them use the name directly. Do not change app/dates.py, and keep the other helpers in app/util.py.",
+  "acceptance_criteria": [
+    "no module in the app package references legacy_parse_date and app/util.py no longer defines it",
+    "every former caller uses app.dates.parse_iso_date and behaves the same for ISO dates",
+    "app/dates.py and the other helpers in app/util.py are unchanged",
+    "all existing tests pass"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "planned",
+  "allowed_change_scope": ["app/*.py", "tests/*.py"],
+  "prohibited_checks": ["no-test-weakening", "reviewer-byte-identical"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/aliased-call-site-missed.patch", "golden/bad/compatibility-shim-kept.patch"]}
+}

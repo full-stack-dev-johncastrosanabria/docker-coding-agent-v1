@@ -1,0 +1,19 @@
+{
+  "id": "K6",
+  "category": "small",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "The test suite fails: tests/test_invoice.py::test_mixed_amounts reports a wrong invoice total. Diagnose the root cause and fix it in the source code. Do not change the tests.",
+  "acceptance_criteria": [
+    "the root cause of the wrong total is identified and fixed where it originates",
+    "the tests in tests/ pass without being changed"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "direct",
+  "allowed_change_scope": ["billing/*.py", "tests/*.py"],
+  "prohibited_checks": ["no-test-weakening"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/weakened-test.patch", "golden/bad/workaround-in-invoice.patch"]}
+}
