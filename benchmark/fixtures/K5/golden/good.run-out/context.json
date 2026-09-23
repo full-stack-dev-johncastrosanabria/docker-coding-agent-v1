@@ -1,0 +1,13 @@
+{
+  "_comment": "The Context Record fields K5's oracle reads.",
+  "classification": {
+    "value": "direct",
+    "reason": "one loop in one script"
+  },
+  "verification_approach": {
+    "type": "alternative",
+    "checks": [],
+    "definition": "Run python3 notes.py on a scratch notes file containing empty lines, whitespace-only lines and an indented note, and on the default notes.txt, and compare the printed output line by line with the expected numbering and text.",
+    "limitation": "Deterministic verification for the affected behavior was unavailable: the repository has no test suite, so the evidence is the observed output of these runs."
+  }
+}

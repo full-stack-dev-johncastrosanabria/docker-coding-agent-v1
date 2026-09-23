@@ -1,0 +1,21 @@
+{
+  "id": "K4",
+  "category": "small",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "When a total does not divide evenly, split_amount in splitter/amounts.py gives the leftover cents to the first parts, one cent each: 100 cents in 3 parts is [34, 33, 33]. Neither the README nor the tests say so. Document this rule in the \"Splitting amounts\" section of README.md and add a unit test that pins it. Do not change the code.",
+  "acceptance_criteria": [
+    "the \"Splitting amounts\" section of README.md states that the leftover cents go to the first parts, one cent each",
+    "a new unit test pins the rule, so it would fail if the leftover cents went to any other parts",
+    "splitter/amounts.py and the rest of README.md are unchanged",
+    "the existing tests pass without being weakened"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "direct",
+  "allowed_change_scope": ["README.md", "tests/*.py"],
+  "prohibited_checks": ["no-test-weakening"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/docs-only.patch", "golden/bad/weak-test.patch", "golden/bad/code-changed.patch"]}
+}

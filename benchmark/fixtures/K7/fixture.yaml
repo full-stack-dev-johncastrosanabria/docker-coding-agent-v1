@@ -1,0 +1,21 @@
+{
+  "id": "K7",
+  "category": "small",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "Add a lint rule that reports every line longer than 100 characters, with the message \"line too long (N > 100)\", where N is the line's length. Give it the next free rule code, and add it the way the existing rules are added.",
+  "acceptance_criteria": [
+    "lint() reports every line longer than 100 characters with the message \"line too long (N > 100)\"; a line of exactly 100 characters is not reported",
+    "the rule is added the way the existing rules are added: where it lives, how it is registered, how its code is chosen and what it returns",
+    "the registry and the lint entry point are unchanged",
+    "the existing tests pass without being weakened"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "direct",
+  "allowed_change_scope": ["checks/rules.py", "tests/*.py"],
+  "prohibited_checks": ["no-test-weakening"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/special-cased-in-lint.patch", "golden/bad/tuple-findings.patch", "golden/bad/foreign-code.patch"]}
+}

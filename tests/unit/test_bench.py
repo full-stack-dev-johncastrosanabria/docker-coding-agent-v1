@@ -48,6 +48,12 @@ eligibility = _load("dca_eligibility", ROOT / "src" / "dca" / "eligibility.py")
 rules = _load("dca_eligibility_rules", ROOT / "gates" / "eligibility_rules.py")
 
 EXPECTED_IDS = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
+SMALL_ACCEPTANCE_IDS = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8"]
+
+
+def reliability_suite():
+    """The committed reliability fixtures (R1-R10); the acceptance fixtures have their own tests."""
+    return [f for f in bench.discover() if bench.RELIABILITY_ID.match(f["id"])]
 
 
 def record(**overrides):
@@ -62,14 +68,14 @@ FIXTURE = {"expected_disposition": "succeeded"}
 
 
 class TestFixtureSuite(unittest.TestCase):
-    """The committed suite: schema-valid, deterministic, and the shape the benchmark promises."""
+    """The committed reliability suite: schema-valid, deterministic, and the shape it promises."""
 
     def test_01_every_fixture_is_discovered_in_natural_order_and_is_schema_valid(self):
         fixtures = bench.discover()
-        self.assertEqual([f["id"] for f in fixtures], EXPECTED_IDS)
+        self.assertEqual([f["id"] for f in fixtures], SMALL_ACCEPTANCE_IDS + EXPECTED_IDS)
 
     def test_02_small_fixtures_are_direct_and_medium_fixtures_are_planned(self):
-        for fixture in bench.discover():
+        for fixture in reliability_suite():
             with self.subTest(fixture=fixture["id"]):
                 expected = "direct" if fixture["category"] == "small" else "planned"
                 self.assertEqual(fixture["expected_classification"], expected)
@@ -77,7 +83,7 @@ class TestFixtureSuite(unittest.TestCase):
                 self.assertEqual(fixture["expected_disposition"], "succeeded")
 
     def test_03_every_fixture_has_hidden_evidence_and_deterministic_verification(self):
-        for fixture in bench.discover():
+        for fixture in reliability_suite():
             with self.subTest(fixture=fixture["id"]):
                 self.assertEqual(fixture["verification"]["type"], "deterministic")
                 self.assertTrue(fixture["verification"]["commands"])
@@ -413,6 +419,7 @@ class TestBenchRuns(unittest.TestCase):
         self.assertEqual(len({r["seed_commit"] for r in document["runs"]}), 1)
 
 
+
 class TestSummary(unittest.TestCase):
     def test_60_rates_durations_and_counts(self):
         rows = [dict(record(), backend="claude", result=bench.PASSED, duration_seconds=10),
@@ -529,14 +536,16 @@ class TestReliabilityNamespace(unittest.TestCase):
         self.dir.mkdir(parents=True)
 
     def test_90_the_reliability_suite_is_exactly_r1_to_r10(self):
-        self.assertEqual([f["id"] for f in bench.discover()],
+        self.assertEqual([f["id"] for f in reliability_suite()],
                          [f"R{i}" for i in range(1, 11)])
+        self.assertEqual([f["id"] for f in bench.acceptance_fixtures(bench.discover())],
+                         SMALL_ACCEPTANCE_IDS, "no reliability fixture counts as acceptance")
 
-    def test_91_no_committed_fixture_uses_an_acceptance_id(self):
-        for directory in sorted((ROOT / "benchmark" / "fixtures").iterdir()):
-            if directory.is_dir():
-                with self.subTest(fixture=directory.name):
-                    self.assertRegex(directory.name, r"^R([1-9]|10)$")
+    def test_91_the_committed_acceptance_fixtures_are_exactly_the_ones_created_so_far(self):
+        # T079/T080 created K1-K8; M*, F* and S* arrive with T082-T094, never under an R name.
+        names = sorted(d.name for d in (ROOT / "benchmark" / "fixtures").iterdir() if d.is_dir())
+        self.assertEqual([n for n in names if not re.fullmatch(r"R([1-9]|10)", n)],
+                         sorted(SMALL_ACCEPTANCE_IDS))
 
     def test_92_the_baseline_keeps_its_historical_ids_and_maps_them(self):
         baseline = json.loads(self.BASELINE.read_text())
@@ -1093,6 +1102,106 @@ class TestOracleInterface(AcceptanceCase):
         self.assertEqual(verdict, "fail")
         self.assertEqual(bench.oracle_violations(detail),
                          [{"invariant": "SC-006", "detail": "canary in report.md"}])
+
+
+class TestSmallAcceptanceFixtures(unittest.TestCase):
+    """T079/T080: the eight small acceptance fixtures, checked before any provider run.
+
+    tests/oracles/test_oracles.py proves each oracle on its golden patches; this checks the rest
+    of what a campaign relies on: the US1 contract fields, runnable required checks, a stable seed,
+    the starting condition each task describes, and reference solutions inside their scope.
+    """
+
+    def setUp(self):
+        self.fixtures = {f["id"]: f for f in bench.acceptance_fixtures(bench.discover())}
+        self.dir = WORK / "small-acceptance"
+        shutil.rmtree(self.dir, ignore_errors=True)
+        self.dir.mkdir(parents=True)
+
+    def seed(self, fid, name="repo"):
+        return bench.build_seed(str(Path(self.fixtures[fid]["_dir"]) / "seed"), str(self.dir / name))
+
+    def test_170_k1_to_k8_are_small_direct_fixtures_that_always_apply(self):
+        self.assertEqual(list(self.fixtures), SMALL_ACCEPTANCE_IDS)
+        for fid, fixture in self.fixtures.items():
+            with self.subTest(fixture=fid):
+                self.assertEqual((fixture["category"], fixture["trust_level"],
+                                  fixture["gate_condition"], fixture["expected_disposition"],
+                                  fixture["expected_classification"]),
+                                 ("small", "both", "always", "succeeded", "direct"))
+                text = " ".join([fixture["task"], *fixture["acceptance_criteria"]]).lower()
+                self.assertNotRegex(text, r"claude|codex|anthropic|openai", "provider-neutral")
+        self.assertIn("no-new-dependency-without-grant", self.fixtures["K6"]["prohibited_checks"])
+
+    def test_171_verification_is_deterministic_except_k5_which_has_no_established_check(self):
+        for fid, fixture in self.fixtures.items():
+            with self.subTest(fixture=fid):
+                if fid == "K5":     # FR-014a: alternative verification, nothing to re-execute
+                    self.assertEqual(fixture["verification"], {"type": "alternative"})
+                else:
+                    self.assertEqual(fixture["verification"]["type"], "deterministic")
+                    self.assertTrue(fixture["verification"]["commands"])
+
+    def test_172_every_fixture_carries_its_oracle_and_goldens(self):
+        for fid, fixture in self.fixtures.items():
+            directory = Path(fixture["_dir"])
+            with self.subTest(fixture=fid):
+                self.assertTrue((directory / fixture["oracle"]).is_file())
+                self.assertTrue((directory / fixture["golden"]["good"]).is_file())
+                self.assertGreaterEqual(len(fixture["golden"]["bad"]), 2)
+                for patch in fixture["golden"]["bad"]:
+                    self.assertTrue((directory / patch).is_file(), patch)
+                self.assertFalse((directory / "seed" / "hidden").exists())
+                for report in directory.glob("golden/**/*.run-out/*.json"):
+                    json.loads(report.read_text())
+        # The report-side checks (FR-019, FR-014a, SC-010) are validated by golden run outputs.
+        for fid in ("K1", "K5", "K8"):
+            with self.subTest(run_out=fid):
+                self.assertTrue((Path(self.fixtures[fid]["_dir"]) / "golden" / "good.run-out"
+                                 / "report.json").is_file())
+
+    def test_173_every_seed_builds_to_one_stable_commit(self):
+        commits = {}
+        for fid in self.fixtures:
+            with self.subTest(fixture=fid):
+                commits[fid] = self.seed(fid, f"{fid}-a")
+                self.assertEqual(self.seed(fid, f"{fid}-b"), commits[fid])
+        self.assertEqual(len(set(commits.values())), len(commits))
+
+    def test_174_every_required_check_runs_on_the_seed(self):
+        for fid, fixture in self.fixtures.items():
+            for command in fixture["verification"].get("commands") or []:
+                with self.subTest(fixture=fid, command=command):
+                    self.seed(fid, fid)
+                    run = subprocess.run(command, shell=True, cwd=self.dir / fid,
+                                         capture_output=True, text=True,
+                                         env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+                    self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+
+    def test_175_k1_starts_with_exactly_one_unrelated_failing_test(self):
+        # FR-019: the pre-existing failure the baseline must record is there before any change.
+        self.seed("K1")
+        run = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+                             cwd=self.dir / "repo", capture_output=True, text=True,
+                             env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn("FAILED (failures=1)", run.stderr)
+        self.assertIn("test_year_boundary_uses_iso_week_year (tests.test_week", run.stderr)
+
+    def test_176_every_reference_solution_stays_inside_the_allowed_scope(self):
+        for fid, fixture in self.fixtures.items():
+            with self.subTest(fixture=fid):
+                patch = (Path(fixture["_dir"]) / fixture["golden"]["good"]).read_text()
+                paths = re.findall(r"^diff --git a/\S+ b/(\S+)$", patch, re.M)
+                self.assertTrue(paths)
+                self.assertEqual(bench.out_of_scope([{"path": p} for p in paths],
+                                                    fixture["allowed_change_scope"]), [])
+
+    def test_177_the_acceptance_count_now_holds_every_small_fixture(self):
+        # The full protocol stays refused until T082-T094 add the other 20 applicable fixtures.
+        with self.assertRaises(errors.PreconditionError) as caught:
+            bench.acceptance_plan(bench.discover(), "trusted", False, THRESHOLDS)
+        self.assertIn("'small': 8, 'medium': 0", str(caught.exception))
 
 
 if __name__ == "__main__":

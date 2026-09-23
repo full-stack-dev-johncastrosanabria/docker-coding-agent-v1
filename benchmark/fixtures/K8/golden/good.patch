@@ -1,0 +1,39 @@
+diff --git a/settings/values.py b/settings/values.py
+index c172029..4eef42d 100644
+--- a/settings/values.py
++++ b/settings/values.py
+@@ -2,10 +2,14 @@
+ 
+ 
+ def parse_bool(text):
+-    """"true" is True and "false" is False. Anything else raises ValueError."""
+-    if text == "true":
++    """True for "true", "yes" or "1"; False for "false", "no" or "0".
++
++    Letter case and surrounding whitespace are ignored. Anything else raises ValueError.
++    """
++    value = text.strip().lower()
++    if value in ("true", "yes", "1"):
+         return True
+-    if text == "false":
++    if value in ("false", "no", "0"):
+         return False
+     raise ValueError(f"not a boolean: {text!r}")
+ 
+diff --git a/tests/test_values.py b/tests/test_values.py
+index 3a8f1a0..ecf3cba 100644
+--- a/tests/test_values.py
++++ b/tests/test_values.py
+@@ -8,6 +8,12 @@ class TestParseBool(unittest.TestCase):
+         self.assertIs(parse_bool("true"), True)
+         self.assertIs(parse_bool("false"), False)
+ 
++    def test_yes_no_and_digits_in_any_case(self):
++        self.assertIs(parse_bool(" YES "), True)
++        self.assertIs(parse_bool("1"), True)
++        self.assertIs(parse_bool("No"), False)
++        self.assertIs(parse_bool("0"), False)
++
+     def test_anything_else_is_rejected(self):
+         for text in ("", "maybe", "2"):
+             with self.subTest(text=text), self.assertRaises(ValueError):

@@ -1,0 +1,20 @@
+diff --git a/checks/lint.py b/checks/lint.py
+index 56b99d1..22b6960 100644
+--- a/checks/lint.py
++++ b/checks/lint.py
+@@ -1,7 +1,7 @@
+ """lint(text): every finding of every registered rule, ordered by line and then by code."""
+ 
+ from checks import rules  # noqa: F401 - importing the module registers its rules
+-from checks.registry import RULES
++from checks.registry import RULES, Finding
+ 
+ 
+ def lint(text):
+@@ -9,4 +9,6 @@ def lint(text):
+     findings = []
+     for code in sorted(RULES):
+         findings += RULES[code](lines)
++    findings += [Finding("L003", number, f"line too long ({len(line)} > 100)")
++                 for number, line in enumerate(lines, 1) if len(line) > 100]
+     return sorted(findings, key=lambda finding: (finding.line, finding.code))

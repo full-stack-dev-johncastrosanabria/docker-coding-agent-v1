@@ -1,0 +1,29 @@
+diff --git a/report/table.py b/report/table.py
+index 8c8c107..686ad14 100644
+--- a/report/table.py
++++ b/report/table.py
+@@ -1,5 +1,7 @@
+ """Plain-text rendering for the weekly report."""
+ 
++from tabulate import tabulate
++
+ 
+ def format_cell(value):
+     """How one value is shown in a table: None as "-", a float with two decimals, else str()."""
+@@ -8,3 +10,9 @@ def format_cell(value):
+     if isinstance(value, float):
+         return f"{value:.2f}"
+     return str(value)
++
++
++def render_table(headers, rows):
++    """The table as text, via tabulate's plain format."""
++    cells = [[format_cell(value) for value in row] for row in rows]
++    return tabulate(cells, headers=headers, tablefmt="simple", disable_numparse=True) + "\n"
+diff --git a/requirements.txt b/requirements.txt
+index 5bbfe91..21f59ec 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1 +1,2 @@
+ # Runtime dependencies: none. The report runs on the Python standard library alone.
++tabulate==0.9.0

@@ -1,0 +1,18 @@
+{
+  "_comment": "Rejected: the repository establishes no deterministic check for this behavior, yet the run claims deterministic verification.",
+  "final_outcome": "succeeded",
+  "verification": {
+    "type": "deterministic",
+    "checks": [
+      {
+        "id": "observe notes.py output",
+        "command_or_method": "python3 notes.py /run/dca/out/scratch-notes.txt; python3 notes.py",
+        "required": true,
+        "executed_by": "agent",
+        "after_last_change": true,
+        "result": "pass",
+        "exit_status": 0
+      }
+    ]
+  }
+}

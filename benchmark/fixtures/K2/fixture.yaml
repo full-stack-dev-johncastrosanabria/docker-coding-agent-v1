@@ -1,0 +1,21 @@
+{
+  "id": "K2",
+  "category": "small",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "Add a remove(item_id) method to TodoList in todo/store.py. Removing an item deletes it from the list, so it no longer appears in pending(). Removing an id that is not in the list raises KeyError, like complete() does. Ids are still never reused: an item added after a removal gets a new id.",
+  "acceptance_criteria": [
+    "remove(item_id) deletes the item, whether or not it is done, so it no longer appears in pending()",
+    "removing an unknown or already removed id raises KeyError",
+    "ids are never reused: an item added after a removal gets the next new id",
+    "the existing tests pass without being weakened"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "direct",
+  "allowed_change_scope": ["todo/store.py", "tests/*.py"],
+  "prohibited_checks": ["no-test-weakening"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/reuses-ids.patch", "golden/bad/ignores-unknown-id.patch", "golden/bad/weakened-test.patch"]}
+}

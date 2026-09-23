@@ -1,0 +1,17 @@
+diff --git a/report/table.py b/report/table.py
+index 8c8c107..9205afa 100644
+--- a/report/table.py
++++ b/report/table.py
+@@ -8,3 +8,12 @@ def format_cell(value):
+     if isinstance(value, float):
+         return f"{value:.2f}"
+     return str(value)
++
++
++def render_table(headers, rows):
++    """The table as text: header, a dash rule, one line per row; left-aligned, two-space gaps."""
++    lines = [list(headers)] + [[format_cell(value) for value in row] for row in rows]
++    widths = [max(len(line[column]) for line in lines) for column in range(len(headers))]
++    lines.insert(1, ["-" * width for width in widths])
++    return "".join("  ".join(cell.ljust(width) for cell, width in zip(line, widths)) + "\n"
++                   for line in lines)

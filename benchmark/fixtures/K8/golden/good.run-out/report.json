@@ -1,0 +1,6 @@
+{
+  "_comment": "The completion-report fields K8's oracle reads in an acceptance run (RUN_OUT): a small task completed plan-free (SC-010).",
+  "final_outcome": "succeeded",
+  "classification": {"value": "direct", "reason": "one function in one module, with its tests"},
+  "plan_ref": null
+}

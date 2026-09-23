@@ -1,0 +1,16 @@
+diff --git a/notes.py b/notes.py
+index 9846ad7..10e24c8 100644
+--- a/notes.py
++++ b/notes.py
+@@ -9,8 +9,9 @@ import sys
+ def main(argv):
+     path = argv[1] if len(argv) > 1 else "notes.txt"
+     with open(path, encoding="utf-8") as handle:
+-        for number, line in enumerate(handle, 1):
+-            print(f"{number}. {line.rstrip()}")
++        notes = [line.strip() for line in handle if line.strip()]
++        for number, note in enumerate(notes, 1):
++            print(f"{number}. {note}")
+     return 0
+ 
+ 

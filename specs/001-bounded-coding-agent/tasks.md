@@ -808,14 +808,14 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
 > **Fixture IDs (resolved in 007).** The `K*` and `M*` IDs in T079–T083 name the acceptance fixtures those tasks create. None of them exists yet; T079, T080 and T082 create each one as specified. The 10-fixture reliability suite 005 committed under `K1`–`K8`, `M1`, `M2` is now `R1`–`R10` (K1–K8 → R1–R8, M1 → R9, M2 → R10), unchanged apart from the ID and never counted in the acceptance totals. Its baseline keeps the historical IDs with the mapping. See [docs/pre-freeze-closure.md](../../docs/pre-freeze-closure.md).
 
-- [ ] T079 [P] [US1] **Test** Create fixtures `benchmark/fixtures/K1`–`K4` in the T074 format (`fixture.yaml`, `seed/` (built to a deterministic commit; no committed bundle), `oracle.sh`, `golden/good.patch`, at least two `golden/bad/*.patch`, e.g. out-of-scope edit, weakened test):
+- [X] T079 [P] [US1] **Test** Create fixtures `benchmark/fixtures/K1`–`K4` in the T074 format (`fixture.yaml`, `seed/` (built to a deterministic commit; no committed bundle), `oracle.sh`, `golden/good.patch`, at least two `golden/bad/*.patch`, e.g. out-of-scope edit, weakened test):
   - **K1**: a bug fix. **FR-019**: the seed contains an unrelated test that already fails; the oracle and golden sets require the report's `verification.baseline` to record it as pre-existing, while a golden-bad candidate that introduces a new failure is rejected.
   - **K2**: add a behavior.
   - **K3**: a config change.
   - **K4**: docs plus a test.
 
   All have `gate_condition: always`, `expected_disposition: succeeded` and `expected_classification: direct`. Depends: T074, T077. Evidence: `tests/oracles/test_oracles.py` passes for K1–K4. (SC-001, SC-010)
-- [ ] T080 [P] [US1] **Test** Create fixtures `benchmark/fixtures/K5`–`K8`:
+- [X] T080 [P] [US1] **Test** Create fixtures `benchmark/fixtures/K5`–`K8`:
   - **K5**: no deterministic check, so FR-014a alternative verification applies, with the limitation recorded;
   - **K6**: must not add dependencies (FR-012);
   - **K7**: must follow a repository convention (FR-013);

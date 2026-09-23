@@ -46,3 +46,25 @@ node_oracle() {
     cp "$FIXTURE_DIR"/hidden/*.test.js "$WORK/test/"
     (cd "$WORK" && node --test 2>&1) >&2 || fail "the original or hidden tests fail"
 }
+
+# only_failing <test-id>...: the whole unittest suite runs in the scratch copy, and exactly these
+# tests fail - a failure that already existed before the change stays what it was, and nothing new
+# fails or errors (FR-019). Ids are unittest ids: tests.test_module.Class.test_name.
+only_failing() {
+    (cd "$WORK" && python3 - "$@" 2>&1 <<'PY'
+import sys
+import unittest
+
+expected = set(sys.argv[1:])
+suite = unittest.defaultTestLoader.discover("tests", top_level_dir=".")
+result = unittest.TextTestRunner(stream=sys.stderr, verbosity=1).run(suite)
+failing = {test.id() for test, _ in result.failures + result.errors}
+new, fixed = sorted(failing - expected), sorted(expected - failing)
+if new:
+    print("new failures: " + ", ".join(new))
+if fixed:
+    print("the pre-existing failure no longer fails: " + ", ".join(fixed))
+sys.exit(1 if new or fixed or not result.testsRun else 0)
+PY
+    ) >&2 || fail "the suite does not fail exactly where it failed before the change"
+}

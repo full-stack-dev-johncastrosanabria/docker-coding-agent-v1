@@ -1,0 +1,15 @@
+diff --git a/todo/store.py b/todo/store.py
+index c46334c..58ec2ff 100644
+--- a/todo/store.py
++++ b/todo/store.py
+@@ -21,6 +21,10 @@ class TodoList:
+         """Mark an item done. An unknown id raises KeyError."""
+         self._items[item_id]["done"] = True
+ 
++    def remove(self, item_id):
++        """Delete an item, done or not."""
++        self._items.pop(item_id, None)
++
+     def pending(self):
+         """Titles of the items not yet done, in the order they were added."""
+         return [item["title"] for item in self._items.values() if not item["done"]]

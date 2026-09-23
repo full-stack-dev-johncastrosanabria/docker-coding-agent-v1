@@ -1,0 +1,35 @@
+diff --git a/tests/test_store.py b/tests/test_store.py
+index 7487071..f74f31b 100644
+--- a/tests/test_store.py
++++ b/tests/test_store.py
+@@ -19,10 +19,6 @@ class TestTodoList(unittest.TestCase):
+         todos.complete(first)
+         self.assertEqual(todos.pending(), ["send invoice"])
+ 
+-    def test_completing_an_unknown_id_raises(self):
+-        with self.assertRaises(KeyError):
+-            TodoList().complete(7)
+-
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/todo/store.py b/todo/store.py
+index c46334c..f7f22b5 100644
+--- a/todo/store.py
++++ b/todo/store.py
+@@ -18,8 +18,13 @@ class TodoList:
+         return item_id
+ 
+     def complete(self, item_id):
+-        """Mark an item done. An unknown id raises KeyError."""
+-        self._items[item_id]["done"] = True
++        """Mark an item done. An unknown id is ignored."""
++        if item_id in self._items:
++            self._items[item_id]["done"] = True
++
++    def remove(self, item_id):
++        """Delete an item, done or not. An unknown id raises KeyError."""
++        del self._items[item_id]
+ 
+     def pending(self):
+         """Titles of the items not yet done, in the order they were added."""

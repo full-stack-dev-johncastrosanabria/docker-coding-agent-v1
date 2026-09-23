@@ -1,0 +1,14 @@
+diff --git a/checks/rules.py b/checks/rules.py
+index aac046e..b3a8953 100644
+--- a/checks/rules.py
++++ b/checks/rules.py
+@@ -16,3 +16,9 @@ def trailing_whitespace(lines):
+ def tab_indentation(lines):
+     return [Finding("L002", number, "tab used for indentation")
+             for number, line in enumerate(lines, 1) if line.startswith("\t")]
++
++
++@rule("L003")
++def line_length(lines):
++    return [("L003", number, f"line too long ({len(line)} > 100)")
++            for number, line in enumerate(lines, 1) if len(line) > 100]

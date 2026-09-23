@@ -1,0 +1,20 @@
+{
+  "id": "K8",
+  "category": "small",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "parse_bool in settings/values.py accepts only \"true\" and \"false\". Make it also accept \"yes\" and \"1\" as True and \"no\" and \"0\" as False, ignoring letter case and surrounding whitespace. Anything else must still raise ValueError.",
+  "acceptance_criteria": [
+    "parse_bool returns True for true, yes and 1, and False for false, no and 0, in any letter case and with surrounding whitespace ignored",
+    "any other text still raises ValueError",
+    "the existing tests pass without being weakened"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "direct",
+  "allowed_change_scope": ["settings/values.py", "tests/*.py"],
+  "prohibited_checks": ["no-test-weakening"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/case-sensitive.patch", "golden/bad/lenient.patch", "golden/bad/planned.patch"]}
+}

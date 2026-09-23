@@ -1,0 +1,16 @@
+diff --git a/README.md b/README.md
+index 31347ad..fa1a041 100644
+--- a/README.md
++++ b/README.md
+@@ -10,6 +10,11 @@ add up to it exactly:
+     >>> split_amount(90, 3)
+     [30, 30, 30]
+ 
++When the total does not divide evenly, the leftover cents go to the first parts, one cent each:
++
++    >>> split_amount(100, 3)
++    [34, 33, 33]
++
+ `parts` must be at least 1 and the total must not be negative; anything else raises `ValueError`.
+ 
+ ## Development

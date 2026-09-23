@@ -1,0 +1,29 @@
+diff --git a/checks/rules.py b/checks/rules.py
+index aac046e..ccee057 100644
+--- a/checks/rules.py
++++ b/checks/rules.py
+@@ -16,3 +16,9 @@ def trailing_whitespace(lines):
+ def tab_indentation(lines):
+     return [Finding("L002", number, "tab used for indentation")
+             for number, line in enumerate(lines, 1) if line.startswith("\t")]
++
++
++@rule("L003")
++def line_length(lines):
++    return [Finding("L003", number, f"line too long ({len(line)} > 100)")
++            for number, line in enumerate(lines, 1) if len(line) > 100]
+diff --git a/tests/test_lint.py b/tests/test_lint.py
+index 7227901..e6ccd06 100644
+--- a/tests/test_lint.py
++++ b/tests/test_lint.py
+@@ -18,6 +18,10 @@ class TestLint(unittest.TestCase):
+         self.assertEqual([(f.line, f.code) for f in lint("\tx = 1 \ny = 2 \n")],
+                          [(1, "L001"), (1, "L002"), (2, "L001")])
+ 
++    def test_line_length(self):
++        self.assertEqual(lint("x" * 100 + "\n" + "y" * 101 + "\n"),
++                         [Finding("L003", 2, "line too long (101 > 100)")])
++
+ 
+ if __name__ == "__main__":
+     unittest.main()

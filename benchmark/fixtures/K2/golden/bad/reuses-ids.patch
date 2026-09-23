@@ -1,0 +1,25 @@
+diff --git a/todo/store.py b/todo/store.py
+index c46334c..5a1ebb9 100644
+--- a/todo/store.py
++++ b/todo/store.py
+@@ -12,8 +12,7 @@ class TodoList:
+         """Add an item and return its id. A blank title raises ValueError."""
+         if not title.strip():
+             raise ValueError("title must not be blank")
+-        item_id = self._next_id
+-        self._next_id += 1
++        item_id = max(self._items, default=0) + 1
+         self._items[item_id] = {"title": title.strip(), "done": False}
+         return item_id
+ 
+@@ -21,6 +20,10 @@ class TodoList:
+         """Mark an item done. An unknown id raises KeyError."""
+         self._items[item_id]["done"] = True
+ 
++    def remove(self, item_id):
++        """Delete an item, done or not. An unknown id raises KeyError."""
++        del self._items[item_id]
++
+     def pending(self):
+         """Titles of the items not yet done, in the order they were added."""
+         return [item["title"] for item in self._items.values() if not item["done"]]

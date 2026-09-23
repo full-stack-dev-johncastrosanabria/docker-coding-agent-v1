@@ -1,0 +1,40 @@
+diff --git a/README.md b/README.md
+index 31347ad..9d1e8ea 100644
+--- a/README.md
++++ b/README.md
+@@ -10,6 +10,11 @@ add up to it exactly:
+     >>> split_amount(90, 3)
+     [30, 30, 30]
+ 
++When the total does not divide evenly, the leftover cents go to the last parts, one cent each:
++
++    >>> split_amount(100, 3)
++    [33, 33, 34]
++
+ `parts` must be at least 1 and the total must not be negative; anything else raises `ValueError`.
+ 
+ ## Development
+diff --git a/splitter/amounts.py b/splitter/amounts.py
+index d537fa4..9772da1 100644
+--- a/splitter/amounts.py
++++ b/splitter/amounts.py
+@@ -8,4 +8,4 @@ def split_amount(total_cents, parts):
+     if total_cents < 0:
+         raise ValueError("total_cents must not be negative")
+     base, leftover = divmod(total_cents, parts)
+-    return [base + 1 if index < leftover else base for index in range(parts)]
++    return [base + 1 if index >= parts - leftover else base for index in range(parts)]
+diff --git a/tests/test_amounts.py b/tests/test_amounts.py
+index 4b930f3..be08ee8 100644
+--- a/tests/test_amounts.py
++++ b/tests/test_amounts.py
+@@ -14,6 +14,9 @@ class TestSplitAmount(unittest.TestCase):
+                 self.assertEqual(len(result), parts)
+                 self.assertEqual(sum(result), total)
+ 
++    def test_the_leftover_cents_go_to_the_last_parts(self):
++        self.assertEqual(split_amount(100, 3), [33, 33, 34])
++
+     def test_invalid_arguments_are_rejected(self):
+         for total, parts in ((10, 0), (-1, 2)):
+             with self.subTest(total=total, parts=parts), self.assertRaises(ValueError):
