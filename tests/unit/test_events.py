@@ -583,6 +583,28 @@ class TestFirstMutation(unittest.TestCase):
         self.assertIsNone(result.first_mutation)
         self.assertTrue(result.context_precedes_first_mutation)
 
+    def test_65_a_baseline_run_before_the_context_record_breaks_the_ordering(self):
+        # T081 (Claude K1): the pre-change baseline is a verification command, so running it
+        # before the Context Record is the first workspace mutation - whatever the skill said.
+        for baseline in ("python3 -m unittest discover -s tests -v", "cd /workspace && pytest -q",
+                         "python3 -m unittest tests.test_hours 2>&1 | tail -5"):
+            with self.subTest(baseline=baseline):
+                result = events.analyze(stream(
+                    call("a", "read_file", {"path": "src/x.py"}),
+                    call("b", "Bash", {"command": baseline}),
+                    call("c", "write_file", self.CONTEXT)), exit_status=0)
+                self.assertEqual((result.first_mutation, result.context_record_at), (1, 2))
+                self.assertFalse(result.context_precedes_first_mutation)
+
+    def test_66_the_baseline_after_the_context_record_and_before_the_edit_is_in_order(self):
+        result = events.analyze(stream(
+            call("a", "read_file", {"path": "src/x.py"}),
+            call("b", "write_file", self.CONTEXT),
+            call("c", "Bash", {"command": "python3 -m unittest discover -s tests"}),
+            call("d", "edit_file", {"path": "src/x.py"})), exit_status=0)
+        self.assertEqual((result.context_record_at, result.first_mutation), (1, 2))
+        self.assertTrue(result.context_precedes_first_mutation)
+
     def first_mutation(self, command):
         return events.analyze(stream(call("a", "shell", {"cmd": command})),
                               exit_status=0).first_mutation

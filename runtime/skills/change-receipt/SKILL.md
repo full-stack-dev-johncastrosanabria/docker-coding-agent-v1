@@ -61,6 +61,12 @@ single direct→planned escalation actually happened.
   including `verification.type: "none-adequate"`, for which the change set must be empty.
 - **`after_last_change`** is `false` for any check that ran before your last edit. Marking stale
   evidence as fresh is the one error the launcher's own re-execution will contradict directly.
+- **`baseline` and `checks` are different lists.** `baseline` holds the runs made before your
+  change. `checks` holds only runs made after your last edit, so every required entry in it has
+  `after_last_change: true`. Never record a pre-change run in `checks`: a required check that
+  predates your last edit is stale, and the host does not report success while one is recorded. The
+  launcher's own re-run only replaces a check with the same id, so it does not clear a stale check
+  recorded under a different id.
 - **`result`** is what you observed: `pass`, `fail`, `error`, `partial`, `unresolved`. Never write
   `pass` for a check you did not run to completion.
 - **`review.identical`** is `false` if the candidate's fingerprint changed while the reviewer read
