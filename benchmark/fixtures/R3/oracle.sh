@@ -1,5 +1,5 @@
 #!/bin/sh
-# K3: the new tests pass on the real implementation and catch every hidden mutant of it.
+# R3: the new tests pass on the real implementation and catch every hidden mutant of it.
 . "$FIXTURE_DIR/../../tools/oracle_lib.sh"
 unchanged textstats/words.py
 ls "$WORK"/tests/test_*.py >/dev/null 2>&1 || fail "no test module was added under tests/"

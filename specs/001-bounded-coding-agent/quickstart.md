@@ -71,12 +71,12 @@ Any upgrade of sbx, Docker Agent or Claude Code re-runs the affected gates and t
 
 ## 4. Smoke run: small trusted task (US1)
 
-Fixtures keep their task in `fixture.yaml` and their repository as `seed/`. Prepare a fixture checkout under the git-ignored `benchmark/work/` (from the DCA checkout root). The snippet prints the fixture's verification command:
+Fixtures keep their task in `fixture.yaml` and their repository as `seed/`. Prepare a fixture checkout under the git-ignored `benchmark/work/` (from the DCA checkout root). The snippet stores the fixture's verification command in `VERIFY`. `K1` is the acceptance fixture T079 creates; until it exists, the same steps work for a reliability fixture (for example `FIXTURE=R1`).
 
 ```bash
 FIXTURE=K1
 rm -rf "benchmark/work/$FIXTURE" "benchmark/work/$FIXTURE.task.txt"
-python3 - "$FIXTURE" <<'PY'
+VERIFY=$(python3 - "$FIXTURE" <<'PY'
 import sys
 sys.path.insert(0, "src")
 from dca import bench
@@ -86,11 +86,12 @@ with open(f"benchmark/work/{fixture['id']}.task.txt", "w", encoding="utf-8") as 
     handle.write(fixture["task"])
 print(fixture["verification"]["commands"][0])
 PY
+)
 ```
 
 ```bash
-dca run --repo benchmark/work/K1 --trust trusted --task @benchmark/work/K1.task.txt \
-  --verify "python3 -m unittest discover -s tests -t ."
+dca run --repo "benchmark/work/$FIXTURE" --trust trusted \
+  --task "@benchmark/work/$FIXTURE.task.txt" --verify "$VERIFY"
 ```
 
 Expected:

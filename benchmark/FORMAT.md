@@ -2,8 +2,11 @@
 
 Each fixture is a directory `benchmark/fixtures/<id>/`, and its `fixture.yaml` must validate against
 [`fixture.schema.json`](../specs/001-bounded-coding-agent/contracts/fixture.schema.json). The file is
-JSON-compatible YAML, read with the stdlib `json` module only. IDs follow the schema: `K*` are
-small/direct tasks and `M*` are medium/planned tasks.
+JSON-compatible YAML, read with the stdlib `json` module only. IDs follow the schema. The committed
+reliability suite is `R1`–`R10`: `R1`–`R8` are small/direct tasks and `R9`, `R10` are medium/planned
+tasks. `K*`, `M*`, `F*` and `S*` are reserved for the acceptance fixtures that T079–T089, T092 and
+T094 create. Before 007 the reliability suite was `K1`–`K8`, `M1`, `M2`; the mapping is in the
+[baseline](baselines/reliability-2026-09-22.md#fixture-ids).
 
 | Path | Purpose |
 |---|---|
@@ -11,7 +14,7 @@ small/direct tasks and `M*` are medium/planned tasks.
 | `seed/` | The starting repository as plain files. It includes a `.gitignore` for bytecode, so a verification run is not reported as a change. |
 | `oracle.sh` | Decides whether a delivered candidate is correct, and exits 0 on pass. |
 | `hidden/` | Tests the oracle adds and the agent never sees. |
-| `mutants/` | K3 only: wrong implementations that the agent's new tests must detect. |
+| `mutants/` | R3 only: wrong implementations that the agent's new tests must detect. |
 | `golden/good.patch`, `golden/bad/*.patch` | A reference solution and plausible wrong answers, used to validate the oracle. |
 
 ## Seed determinism

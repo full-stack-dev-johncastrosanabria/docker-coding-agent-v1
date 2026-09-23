@@ -4,6 +4,10 @@ The 005-dca-hardening reliability campaign: the 10-fixture suite (K1-K8, M1, M2)
 
 Composed from the generated `benchmark/results/<bench-id>/benchmark.json` files, which Git ignores. The machine-readable form is [`reliability-2026-09-22.json`](reliability-2026-09-22.json).
 
+## Fixture IDs
+
+These runs used the suite's original IDs, and the tables below keep them. Since 007 the same fixtures are `R1`–`R10`, unchanged apart from the ID. `K*` and `M*` are reserved for the acceptance fixtures of T079, T080 and T082. Mapping: `K1` → `R1`, `K2` → `R2`, `K3` → `R3`, `K4` → `R4`, `K5` → `R5`, `K6` → `R6`, `K7` → `R7`, `K8` → `R8`, `M1` → `R9`, `M2` → `R10`.
+
 ## Original full campaign
 
 The accepted evidence: one full suite per backend. Claude ran at `27d1fd6`. Codex ran at `f5e06ae`, after the scratch-directory policy fix (`2ffaf02`). Every run passed, and no sandbox was left behind.

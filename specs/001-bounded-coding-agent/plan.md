@@ -313,6 +313,7 @@ src/dca/
 benchmark/
 ├── thresholds.yaml
 ├── fixtures/{K1..K8,M1..M6,F1..F6,S1..S4,S5a,S5b,S6..S8}/{fixture.yaml,seed/,repo.bundle,oracle.sh,golden/{good.patch,bad/*.patch}}   # 29 physical
+├── fixtures/R1..R10/             # 005 reliability suite (never in the acceptance count)
 └── results/
 gates/                             # G0–G11 procedures and recorded evidence
 scripts/verify.sh

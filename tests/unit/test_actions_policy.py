@@ -202,7 +202,7 @@ class ActionsPolicyMetadata(unittest.TestCase):
 
 
 class TestNativeRulesNeverDenyScratchWrites(unittest.TestCase):
-    """Regression (dca bench, Codex K1): a native deny rule broader than the gate.
+    """Regression (dca bench, Codex K1, now R1): a native deny rule broader than the gate.
 
     The gate decides the scratch dir first (class 6, ALLOW), and the root is REQUIRED to write
     context.json, plan.md and report.agent.json there. A native `/run/dca/**` rule rejected that

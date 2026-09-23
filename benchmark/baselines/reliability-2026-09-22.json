@@ -2,6 +2,21 @@
   "baseline": "reliability-2026-09-22",
   "description": "The 005-dca-hardening reliability campaign: the 10-fixture suite (K1-K8, M1, M2), trusted, one run per fixture per backend, every run a real `bin/dca run`.",
   "source": "benchmark/results/<bench_id>/benchmark.json (generated locally, ignored by Git)",
+  "fixture_ids": {
+    "note": "These runs used the suite's original IDs, and every run below keeps them. Since 007 the same fixtures are R1-R10, unchanged apart from the ID; K* and M* are reserved for the acceptance fixtures of T079, T080 and T082.",
+    "historical_to_current": {
+      "K1": "R1",
+      "K2": "R2",
+      "K3": "R3",
+      "K4": "R4",
+      "K5": "R5",
+      "K6": "R6",
+      "K7": "R7",
+      "K8": "R8",
+      "M1": "R9",
+      "M2": "R10"
+    }
+  },
   "notes": [
     "In the campaign, M1 and M2 expected `planned` but both backends classified them `direct`. Classification mismatches are counted, not scored (tests/unit/test_bench.py test_61), so they did not affect pass/fail. The cause was contract ambiguity: root.md's direct and planned descriptions overlapped, with no precedence rule and no definition of the planned criteria. `53206d7` states the precedence (any planned criterion makes a task planned) and defines the criteria. In the focused reruns all four M1/M2 runs classified `planned`, and K7 stayed `direct`."
   ],

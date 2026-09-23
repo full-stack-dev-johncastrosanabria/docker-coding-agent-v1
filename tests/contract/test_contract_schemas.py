@@ -230,6 +230,13 @@ FIXTURE_CASES = [
     ("id S5 (bare) rejected", {**S5A, "id": "S5"}, False),
     ("id S9 rejected", {**K1, "id": "S9"}, False),
     ("id K9 rejected", {**K1, "id": "K9"}, False),
+    # The 005 reliability suite has its own namespace (007): R1-R10, never an acceptance ID.
+    ("reliability R1 valid", {**K1, "id": "R1"}, True),
+    ("reliability R9 valid", {**K1, "id": "R9", "category": "medium"}, True),
+    ("reliability R10 valid", {**K1, "id": "R10", "category": "medium"}, True),
+    ("id R0 rejected", {**K1, "id": "R0"}, False),
+    ("id R11 rejected", {**K1, "id": "R11"}, False),
+    ("id R01 rejected", {**K1, "id": "R01"}, False),
     ("S5a with gate_condition always", {**S5A, "gate_condition": "always"}, False),
     ("S5b as untrusted-ineligible",
      {**S5B, "gate_condition": "untrusted-ineligible", "prohibited_checks": S5A["prohibited_checks"]}, False),

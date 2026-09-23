@@ -29,30 +29,29 @@ the disposition of every known open finding before T074–T108 continue.
 | Quickstart §1 stale: `gpt-5.6` (G3 recorded the `gpt-5.5` fallback), no install, no pinned Docker Agent binary. | Rows corrected and added. | `gates/G3.json`, quickstart §1 |
 | T074/T079 wording named files that don't exist (`build_seed.py`, `apply_golden.py`, `test_bench_tools.py`, `repo.bundle`); T106 described the pre-006 CLI. | Wording synchronized. | `tasks.md` |
 
-## Decision required before T079, T080 and T082
+## Fixture IDs (resolved)
 
-005 committed a 10-fixture **reliability suite** under the IDs `K1`–`K8`, `M1` and `M2`. It has a
-recorded baseline, and FORMAT.md keeps a used task prompt stable. Its tasks differ from the ones
-T079/T080/T082 specify for those IDs:
+005 committed its 10-fixture **reliability suite** under `K1`–`K8`, `M1` and `M2`, the same IDs
+T079/T080/T082 specify for different acceptance fixtures. Resolved in 007 by renaming the
+reliability suite. Nothing changed but the ID: the seeds build to the same commits, and every other
+file is byte-identical.
 
-- **Covered by existing fixtures:** a bug fix, adding behavior (existing K7, K8), a config change
-  (existing K5), a planned multi-file change with review (existing M1).
-- **Not covered:**
-  - FR-019 pre-existing-failure baseline (spec K1);
-  - docs plus a test (spec K4);
-  - FR-014a alternative verification (spec K5);
-  - FR-012 no new dependency (spec K6);
-  - FR-013 repository convention (spec K7);
-  - FR-009 direct→planned escalation (spec M2);
-  - FR-001b justified repository-wide search (spec M4).
+| Historical | Current | | Historical | Current |
+| --- | --- | --- | --- | --- |
+| K1 | R1 | | K6 | R6 |
+| K2 | R2 | | K7 | R7 |
+| K3 | R3 | | K8 | R8 |
+| K4 | R4 | | M1 | R9 |
+| K5 | R5 | | M2 | R10 |
 
-T092 (M3) and T094 (M5) don't collide. The requirements stand; only the ID reconciliation is open:
-
-| Option | Effect |
-|---|---|
-| **1. Rename the reliability suite** to its own prefix (for example `R1`–`R10`), with the mapping recorded in the baseline. Author K1–K8/M1–M6 exactly as T079/T080/T082 specify. **Recommended.** | Keeps every requirement, the 28-fixture count and the R24 thresholds. Keeps the reliability suite as a regression set. Costs one rename. |
-| 2. Make the existing fixtures the acceptance K/M set, and change their seeds and tasks to carry the uncovered requirements. | Breaks FORMAT.md prompt stability and comparability with the 005 baseline. |
-| 3. Keep both sets and let the categories grow. | Changes the 28-fixture count and the R24 thresholds, which is a spec change. |
+- **Future runs** report `R1`–`R10`. The 2026-09-22 baseline and the ignored run artifacts keep the
+  IDs they were recorded with; the baseline carries this mapping.
+- **Reserved:** `K*`, `M*`, `F*` and `S*` belong to the acceptance fixtures. None exists yet;
+  T079, T080, T082, T084, T085, T087–T089, T092 and T094 create each one as specified.
+- **Counting:** the acceptance matrix (T075) counts the K/M/F/S definitions only, never `R*`.
+- **Still to cover:** the acceptance requirements the reliability suite doesn't cover (FR-019,
+  FR-014a, FR-012, FR-013, FR-009, FR-001b, docs plus a test) are what T079, T080 and T082 exist to
+  deliver.
 
 ## Deferred to T074–T108
 
@@ -60,8 +59,7 @@ T092 (M3) and T094 (M5) don't collide. The requirements stand; only the ID recon
 |---|---|---|
 | FR-001 generic ordering check, and detector precision: the read-only allowlist lacks `echo`/`printf` and over-reports early mutations in the fail-closed direction. | T075 (test), T076 (acceptance mode) | Only the acceptance FR-001 check consumes ordering. |
 | Classification mismatches are counted, not scored (SC-010). | T075/T076; T080 (plan-free K fixture) | Acceptance scoring. |
-| The Claude full-suite evidence predates `2ffaf02` (campaign at `27d1fd6`). Post-fix Claude reruns cover M1, M2 and K7 only. | T081, T097 | Acceptance re-runs every fixture on both backends. |
-| The fixture-ID decision above. | before T079/T080/T082 | A product decision, not a wording fix. |
+| The Claude full-suite evidence predates `2ffaf02` (campaign at `27d1fd6`). Post-fix Claude reruns cover M1, M2 and K7 only (now R9, R10, R7). | T081, T097 | Acceptance re-runs every fixture on both backends. |
 
 ## Deferred post-freeze
 
@@ -82,15 +80,14 @@ T092 (M3) and T094 (M5) don't collide. The requirements stand; only the ID recon
 |---|---|
 | Already satisfied | T074, T077 (005). T076's reliability runner (005) |
 | **Next** | **T075**, the acceptance-matrix tests; then T076 acceptance mode, then T078 |
-| Ready (dependencies met) | T075, T084, T085, T087, T088, T089, T092, T094, T102, T103, T104, T106, T107 |
+| Ready (dependencies met) | T075, T079, T080, T082, T084, T085, T087, T088, T089, T092, T094, T102, T103, T104, T106, T107 |
 | Wording updated in 007 | T074, T075, T076, T079, T096, T106; quickstart §1, §4–§6, §8 (used by T081, T090, T108) |
-| Blocked by the fixture-ID decision | T079, T080, T082, and through them T081, T083 |
-| Blocked by prior tasks | T076 (T075), T078 (T075), T086 (T084, T085), T090 (T089), T091 (T087–T089), T093 (T092), T095 (T089, T094), T096–T101 (the acceptance chain), T105 (T100, T101), T108 (T102–T107) |
+| Blocked by prior tasks | T076 (T075), T078 (T075), T081 (T079, T080), T083 (T082), T086 (T084, T085), T090 (T089), T091 (T087–T089), T093 (T092), T095 (T089, T094), T096–T101 (the acceptance chain), T105 (T100, T101), T108 (T102–T107) |
 | Superseded | none |
 
 Ownership:
 - The FR-001 ordering check belongs to T075/T076.
 - The detector itself belongs to T039/T040, which are complete and were fixed in 007.
 
-No task assumes an architecture that no longer exists. The one conflict is the fixture-ID
-collision, recorded above.
+No task assumes an architecture that no longer exists, and no decision is open. The next
+implementation task is **T075**.

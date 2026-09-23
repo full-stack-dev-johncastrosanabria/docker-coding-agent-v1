@@ -260,7 +260,7 @@ If the run succeeds, the final check passes, the result is available on the repo
 
 ```sh
 bin/dca bench --backend claude            # every fixture, once, on Claude trusted
-bin/dca bench --backend both --fixtures 'K1,M*' --repeat 2
+bin/dca bench --backend both --fixtures 'R1,R9,R10' --repeat 2
 ```
 
 **Every fixture run is a real production `dca run`**: the same eligibility checks, policy, sandbox, host limits, verification, retrieval and cleanup, against the real model backend. Provider availability, rate limits, quota and cost therefore affect a benchmark exactly as they affect a normal run. A full suite on one backend is 10 sandbox runs.
