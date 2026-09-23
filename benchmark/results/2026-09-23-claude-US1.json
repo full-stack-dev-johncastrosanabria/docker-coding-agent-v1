@@ -447,5 +447,97 @@
   "verdict_reasons": [
     "FR-001 ordering fails for direct fixture(s) K1",
     "6/8 small fixtures pass (re-scored), below the 7/8 small threshold"
-  ]
+  ],
+  "continuations": [
+    {
+      "kind": "focused retest of K1 and K7 on the corrected runtime (fix ebbc7d9, conformance c2eb7b3)",
+      "date": "2026-09-23",
+      "bench_id": "bench-2026-09-23T16-34-02Z-be9f",
+      "dca_commit": "c2eb7b384c76d6beb01feb07caa448c3a0384909",
+      "dca_tree_clean": true,
+      "command": "bin/dca bench --backend claude --trust trusted --fixtures 'K1,K7'",
+      "root_cause": {
+        "K1": "root-cause-debugging said 'baseline before you change anything' without placing the Context Record first, contradicting root.md and the verification skill",
+        "K7": "change-receipt did not say a pre-change run belongs in `baseline`, not in `checks`; the agent reported it as a required stale check and the host correctly refused it"
+      },
+      "fix": "shared runtime text only (root.md, root-cause-debugging, change-receipt); host FR-001 and stale-evidence rules unchanged",
+      "runs": [
+        {
+          "fixture": "K1",
+          "seed_commit": "c78ca9c5b1f5c8dc0633300828b10bb8809876b1",
+          "run_id": "run-2026-09-23T16-34-03Z-363459",
+          "result": "failed",
+          "exit_status": 0,
+          "final_outcome": "succeeded",
+          "classification": "direct",
+          "plan_ref": null,
+          "verification_type": "deterministic",
+          "oracle": "pass",
+          "oracle_detail": null,
+          "fr001_ordering": [
+            "FR-001: no Context Record was written before the first workspace mutation (tool call 3)"
+          ],
+          "baseline": [
+            {
+              "after_last_change": false,
+              "command_or_method": "python3 -m unittest discover -s tests -v",
+              "executed_by": "agent",
+              "exit_status": 1,
+              "id": "full-suite-baseline",
+              "required": false,
+              "result": "fail"
+            }
+          ],
+          "acceptance_reasons": [
+            "FR-001: no Context Record was written before the first workspace mutation (tool call 3)"
+          ],
+          "violations": [],
+          "reasons": [
+            "FR-001: no Context Record was written before the first workspace mutation (tool call 3)"
+          ],
+          "note": "FAIL, agent instruction-following: the full-suite baseline ran at tool call 3, before the Skill loads (4, 5) and the Context Record (6), although the corrected root.md states the order. The fixture, oracle and host behave as specified (oracle passed, baseline recorded).",
+          "cleanup": "ok",
+          "duration_seconds": 98.1,
+          "tool_calls": 13,
+          "retries": 0,
+          "tokens": 501857
+        },
+        {
+          "fixture": "K7",
+          "seed_commit": "d742390d56315c5cd8dc2a9477df8c63e275694c",
+          "run_id": "run-2026-09-23T16-35-46Z-ad043a",
+          "result": "passed",
+          "exit_status": 0,
+          "final_outcome": "succeeded",
+          "classification": "direct",
+          "plan_ref": null,
+          "verification_type": "deterministic",
+          "oracle": "pass",
+          "oracle_detail": null,
+          "fr001_ordering": "pass",
+          "baseline": null,
+          "acceptance_reasons": [],
+          "violations": [],
+          "reasons": [],
+          "note": "PASS: the pre-change run is no longer reported as a required check, so the host's final verification is not blocked by stale evidence",
+          "cleanup": "ok",
+          "duration_seconds": 85.9,
+          "tool_calls": 15,
+          "retries": 0,
+          "tokens": 436198
+        }
+      ],
+      "valid_as_campaign_evidence": false,
+      "why_not": "the retest covers 2 of 8 fixtures, and K2-K6 and K8 in the original campaign ran on the runtime before the fix. The canonical T081 text says only to run `dca bench --fixtures 'K*'` once and provides no focused-replacement rule, so valid evidence needs a fresh full K1-K8 run once K1 passes."
+    }
+  ],
+  "current_verdict": {
+    "verdict": "OPEN",
+    "small_fixtures_passed": "not established",
+    "reason": "K7 is fixed. K1 still fails FR-001 ordering on the corrected runtime, so no valid 7/8 exists on one runtime.",
+    "threshold": {
+      "applicable": 8,
+      "min_pass": 7
+    }
+  }
 }

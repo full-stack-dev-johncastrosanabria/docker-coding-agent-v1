@@ -450,5 +450,87 @@
   "verdict_reasons": [
     "2 fixture(s) did not run (class D, disk): K7, K8",
     "5/8 pass so far; the 7/8 small threshold depends on the fixtures that did not run"
-  ]
+  ],
+  "continuations": [
+    {
+      "kind": "retry of the fixtures the disk guard never ran (K7, K8), same protocol and committed fixtures",
+      "date": "2026-09-23",
+      "bench_id": "bench-2026-09-23T16-15-02Z-dd88",
+      "dca_commit": "700d782d330ca59c62339861fc0818ce9b508c39",
+      "dca_tree_clean": true,
+      "command": "bin/dca bench --backend codex --trust trusted --fixtures 'K7,K8'",
+      "environment": "Claude Code restored to its 2.1.278 pin and the global sbx policy to deny-all (G4 fingerprint sha256:e282594f... verified) before the run; disk freed by the user",
+      "runs": [
+        {
+          "fixture": "K7",
+          "seed_commit": "d742390d56315c5cd8dc2a9477df8c63e275694c",
+          "run_id": "run-2026-09-23T16-15-03Z-294932",
+          "result": "passed",
+          "exit_status": 0,
+          "final_outcome": "succeeded",
+          "classification": "direct",
+          "plan_ref": null,
+          "verification_type": "deterministic",
+          "oracle": "pass",
+          "oracle_detail": null,
+          "fr001_ordering": "pass",
+          "baseline": null,
+          "acceptance_reasons": [],
+          "violations": [],
+          "reasons": [],
+          "note": "the retry allowed for the disk-guard interruption: first execution of this fixture on this backend",
+          "cleanup": "ok",
+          "duration_seconds": 118.8,
+          "tool_calls": 14,
+          "retries": 0,
+          "tokens": 9402
+        },
+        {
+          "fixture": "K8",
+          "seed_commit": "12528e1b3cfaa84fbc8c76c27ada9d1d7f479b58",
+          "run_id": "run-2026-09-23T16-17-04Z-9dbca3",
+          "result": "passed",
+          "exit_status": 0,
+          "final_outcome": "succeeded",
+          "classification": "direct",
+          "plan_ref": null,
+          "verification_type": "deterministic",
+          "oracle": "pass",
+          "oracle_detail": null,
+          "fr001_ordering": "pass",
+          "baseline": null,
+          "acceptance_reasons": [],
+          "violations": [],
+          "reasons": [],
+          "note": "the retry allowed for the disk-guard interruption: first execution of this fixture on this backend",
+          "cleanup": "ok",
+          "duration_seconds": 99.9,
+          "tool_calls": 12,
+          "retries": 0,
+          "tokens": 7930
+        }
+      ],
+      "note": "K1-K6 were not rerun. Runtime assets were unchanged at this commit, so these two runs use the same runtime as the original campaign."
+    }
+  ],
+  "current_verdict": {
+    "verdict": "PASS",
+    "small_fixtures_passed": "7/8",
+    "per_fixture": {
+      "K1": "pass",
+      "K2": "pass",
+      "K3": "pass",
+      "K4": "pass",
+      "K5": "pass",
+      "K6": "fail",
+      "K7": "pass",
+      "K8": "pass"
+    },
+    "threshold": {
+      "applicable": 8,
+      "min_pass": 7
+    },
+    "unscored_runs": 0,
+    "basis": "K1-K6 from the original campaign (K6 is a genuine agent wrong answer and stays a failure), K7 and K8 from the continuation"
+  }
 }
