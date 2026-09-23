@@ -271,9 +271,22 @@ class TestDispatch(unittest.TestCase):
                          ("both", "R*", 2, "trusted"))
 
     def test_44_bench_acceptance_is_refused_as_a_precondition_before_anything_runs(self):
-        code, _, err = invoke(["bench", "--acceptance"])
-        self.assertEqual(code, 3)
-        self.assertIn("28-fixture", err)
+        # The refusals themselves are T075's (tests/unit/test_bench.py TestAcceptanceCommand);
+        # here: --acceptance reaches the bench command, and a refusal is exit 3 with no run.
+        seen = []
+
+        def refuse(options, repo_root=None):
+            seen.append(options.acceptance)
+            raise errors.PreconditionError("the acceptance run is refused, not scored")
+        original = cli.bench_module.command
+        cli.bench_module.command = refuse
+        try:
+            code, _, err = invoke(["bench", "--acceptance", "--repeat", "3"])
+        finally:
+            cli.bench_module.command = original
+        self.assertEqual((code, seen), (3, [True]))
+        self.assertIn("refused, not scored", err)
+        self.assertEqual(Recorded.instances, [])
 
     def test_45_bench_rejects_an_unknown_backend(self):
         code, _, _ = invoke(["bench", "--backend", "gemini"])

@@ -160,8 +160,10 @@ def build_parser():
                        help="comma-separated fixture id globs, e.g. 'R*' or 'R1,R9'")
     bench.add_argument("--repeat", type=int, default=1, help="runs per fixture (acceptance: 3)")
     bench.add_argument("--acceptance", action="store_true",
-                       help="acceptance mode (28-fixture suite and committed thresholds; "
-                            "refused for this reliability suite)")
+                       help="the 28-fixture acceptance protocol (research R23/R24): needs "
+                            "a clean tree, committed benchmark/thresholds.yaml, exact pins, "
+                            "passed gates and --repeat 3; refused while the suite is "
+                            "incomplete")
     return parser
 
 
