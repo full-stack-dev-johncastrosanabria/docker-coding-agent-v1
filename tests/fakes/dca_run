@@ -11,7 +11,8 @@ Behavior is scripted per invocation through `$DCA_FAKE_RUN` (JSON):
   * `mode`: `succeeded` (default), `failed`, `precondition` (exit 3, no report), `invalid-report`;
   * `patch`: a unified diff applied to the task branch;
   * `leak`: also register a `dca-<run-id>` sandbox in the fake sbx state and never remove it;
-  * `delegate`: sub-agents named in the event stream, e.g. ["researcher", "reviewer"].
+  * `delegate`: sub-agents named in the event stream, e.g. ["researcher", "reviewer"];
+  * `events`: raw events placed first in the stream, e.g. a workspace edit before any Context Record.
 """
 
 import argparse
@@ -45,8 +46,8 @@ def git(repo, *args):
                           stdout=subprocess.PIPE).stdout.decode().strip()
 
 
-def stream(delegate):
-    lines = [{"type": "stream_started", "session_id": "s"}]
+def stream(delegate, extra=()):
+    lines = [{"type": "stream_started", "session_id": "s"}, *extra]
     for number, role in enumerate(delegate):
         lines.append({"type": "tool_call", "agent_name": "root", "tool_call": {
             "id": f"call-{number}", "type": "function",
@@ -88,7 +89,7 @@ def main(argv):
     git(repo, "checkout", "-q", "main")
 
     os.makedirs(options.out, exist_ok=True)
-    text = stream(script.get("delegate", []))
+    text = stream(script.get("delegate", []), script.get("events", []))
     with open(os.path.join(options.out, "events.jsonl"), "w", encoding="utf-8") as handle:
         handle.write(text)
     result = "pass" if mode == "succeeded" else "fail"

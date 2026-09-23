@@ -419,6 +419,47 @@ class TestBenchRuns(unittest.TestCase):
         self.assertEqual(len({r["seed_commit"] for r in document["runs"]}), 1)
 
 
+    def run_acceptance_fixture(self, **script):
+        """K2 with the fake launcher, in a plain `--fixtures` run, recording what the oracle saw."""
+        fixtures = bench.discover(selection="K2,R1")
+        script.setdefault("patch", os.path.join(fixtures[0]["_dir"], fixtures[0]["golden"]["good"]))
+        os.environ["DCA_FAKE_RUN"] = json.dumps(script)
+        seen = []
+
+        def oracle(fixture, candidate, run_out=None):
+            seen.append((fixture["id"], run_out))
+            return bench.run_oracle_on_host(fixture, candidate, run_out=run_out)
+
+        runner = bench.Bench(["claude"], fixtures=fixtures[:1], repo_root=str(ROOT),
+                             bench_id="b-test", sbx=self.sbx, oracle=oracle,
+                             dca_command=[sys.executable, str(FAKE_DCA)], log=self.logs.append,
+                             work_root=str(self.dir / "work"),
+                             results_root=str(self.dir / "results"))
+        return runner.run()["runs"][0], seen
+
+    def test_59_an_acceptance_fixture_is_held_to_the_acceptance_checks_in_a_fixtures_run(self):
+        # T081/T083/T086 validate K*, M* and F* with `dca bench --fixtures`: those runs must check
+        # FR-001 ordering and give the oracle the run's outputs, exactly as the protocol does.
+        run, seen = self.run_acceptance_fixture()
+        self.assertEqual(run["result"], bench.PASSED, run["reasons"])
+        self.assertEqual((run["acceptance_reasons"], run["violations"]), ([], []))
+        self.assertEqual(seen, [("K2", str(self.dir / "work" / "b-test" / "claude-K2-1" / "run"))])
+
+    def test_59a_a_workspace_edit_before_the_context_record_fails_an_acceptance_fixture(self):
+        edit = {"type": "tool_call", "agent_name": "root", "tool_call": {
+            "id": "e", "type": "function", "function": {
+                "name": "edit_file", "arguments": json.dumps({"path": "/workspace/todo/store.py"})}}}
+        run, _ = self.run_acceptance_fixture(events=[edit])
+        self.assertEqual(run["result"], bench.FAILED)
+        self.assertTrue(any(r.startswith("FR-001: no Context Record was written before the first "
+                                         "workspace mutation") for r in run["reasons"]),
+                        run["reasons"])
+
+    def test_59b_a_reliability_fixture_keeps_the_reliability_scoring(self):
+        _, document = self.run_bench(selection="R1")
+        run = document["runs"][0]
+        self.assertEqual(run["result"], bench.PASSED, run["reasons"])
+        self.assertNotIn("acceptance_reasons", run)
 
 class TestSummary(unittest.TestCase):
     def test_60_rates_durations_and_counts(self):

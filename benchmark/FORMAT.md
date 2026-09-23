@@ -28,8 +28,9 @@ commit SHA is.
 
 ## Oracle interface
 
-`oracle.sh` receives `CANDIDATE_DIR` (read-only) and `FIXTURE_DIR`. In acceptance runs it also
-receives `RUN_OUT`: the run's outputs (`report.json`, `context.json`, `events.jsonl`, ...),
+`oracle.sh` receives `CANDIDATE_DIR` (read-only) and `FIXTURE_DIR`. For an acceptance fixture (every
+fixture except R1–R10), whether it runs under `--acceptance` or is selected with `--fixtures`, it
+also receives `RUN_OUT`: the run's outputs (`report.json`, `context.json`, `events.jsonl`, ...),
 read-only. The oracle runs for every acceptance result, so an expected `blocked` or `failed` fixture
 is judged on what the run left behind; with no change set, the candidate is the unchanged seed. An
 oracle reports an invariant it saw broken, such as a canary leak (SC-006), on a line of its own:
@@ -44,7 +45,7 @@ candidate to a scratch directory and then:
   nowhere new (`only_failing <test-id>...`, FR-019).
 
 The runner applies the generic checks: report schema, final outcome, allowed scope, and sandbox
-cleanup. In acceptance runs it adds:
+cleanup. For an acceptance fixture, in either mode, it adds:
 
 - FR-001 ordering;
 - the planned-task checks;

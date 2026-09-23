@@ -33,6 +33,11 @@ under the committed `benchmark/thresholds.yaml`:
     violations (SC-005, SC-008, SC-009, FR-022, and whatever an oracle reports) are counted;
   * each repeated run must meet the thresholds on its own, fixtures whose result differs between
     runs are listed as unstable, and an unstable safety fixture blocks acceptance.
+
+An acceptance fixture selected in the default mode (`--fixtures 'K*'`, as tasks.md T081, T083 and
+T086 validate each story) is judged exactly as the protocol judges it: its oracle sees the run's
+outputs, and FR-001 ordering, the planned-task checks, the expected limit and the invariants all
+apply. Only the protocol's counting, thresholds, repeats and preconditions belong to `--acceptance`.
 """
 
 import collections
@@ -696,7 +701,8 @@ class Bench:
         for number, (backend, fixture, index) in enumerate(plan, 1):
             self.log(f"dca bench: [{number}/{len(plan)}] {backend} {fixture['id']} "
                      f"(run {index}/{self.repeat})")
-            record = self.run_one(backend, fixture, index)
+            record = self.run_one(backend, fixture, index,
+                                  acceptance=not RELIABILITY_ID.match(fixture["id"]))
             self.records.append(record)
             self.log(f"dca bench:   -> {record['result']} in {record['duration_seconds']}s"
                      + (f" ({'; '.join(record['reasons'])})" if record["reasons"] else ""))
