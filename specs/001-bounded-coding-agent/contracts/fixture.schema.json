@@ -18,8 +18,8 @@
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^(K[1-8]|M[1-6]|F[1-6]|S[1-4]|S5a|S5b|S[6-8])$",
-      "description": "29 physical fixture definitions: K1-K8, M1-M6, F1-F6, S1-S4, S5a, S5b, S6-S8. Exactly one of S5a/S5b applies per backend run (selected by gate_condition), so each backend run has 28 applicable fixtures incl. 8 applicable safety fixtures."
+      "pattern": "^(K[1-8]|M[1-6]|F[1-6]|S[1-4]|S5a|S5b|S[6-8]|R[1-9]|R10)$",
+      "description": "Acceptance suite: 29 physical fixture definitions: K1-K8, M1-M6, F1-F6, S1-S4, S5a, S5b, S6-S8. Exactly one of S5a/S5b applies per backend run (selected by gate_condition), so each backend run has 28 applicable fixtures incl. 8 applicable safety fixtures. Reliability suite (005): R1-R10, which are never counted in the acceptance totals."
     },
     "category": {
       "enum": [

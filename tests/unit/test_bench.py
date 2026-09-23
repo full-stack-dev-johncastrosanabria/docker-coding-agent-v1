@@ -16,6 +16,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -43,7 +44,7 @@ errors = _load("dca_errors", ROOT / "src" / "dca" / "errors.py")
 bench = _load("dca_bench", ROOT / "src" / "dca" / "bench.py")
 sbx_module = _load("dca_sbx", ROOT / "src" / "dca" / "sbx.py")
 
-EXPECTED_IDS = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "M1", "M2"]
+EXPECTED_IDS = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
 
 
 def record(**overrides):
@@ -92,23 +93,24 @@ class TestFixtureSuite(unittest.TestCase):
                 self.assertIn("__pycache__/", ignore)
 
     def test_05_selection_is_by_comma_separated_id_globs(self):
-        self.assertEqual([f["id"] for f in bench.discover(selection="K*")], EXPECTED_IDS[:8])
-        self.assertEqual([f["id"] for f in bench.discover(selection="K1, M2")], ["K1", "M2"])
+        self.assertEqual([f["id"] for f in bench.discover(selection="R[1-8]")], EXPECTED_IDS[:8])
+        self.assertEqual([f["id"] for f in bench.discover(selection="R1, R10")], ["R1", "R10"])
+        self.assertEqual([f["id"] for f in bench.discover(selection="R1*")], ["R1", "R10"])
         self.assertEqual(bench.discover(selection="Z*"), [])
 
     def test_06_a_fixture_that_breaks_the_schema_is_rejected(self):
-        directory = WORK / "K9"
+        directory = WORK / "R11"
         shutil.rmtree(directory, ignore_errors=True)
-        shutil.copytree(ROOT / "benchmark" / "fixtures" / "K1", directory)
+        shutil.copytree(ROOT / "benchmark" / "fixtures" / "R1", directory)
         (directory / "fixture.yaml").write_text(
-            (directory / "fixture.yaml").read_text().replace('"K1"', '"K9"'))
+            (directory / "fixture.yaml").read_text().replace('"R1"', '"R11"'))
         with self.assertRaisesRegex(ValueError, "fixture.schema.json"):
             bench.load_fixture(str(directory))
 
     def test_07_a_fixture_whose_id_is_not_its_directory_is_rejected(self):
-        directory = WORK / "K2"
+        directory = WORK / "R2"
         shutil.rmtree(directory, ignore_errors=True)
-        shutil.copytree(ROOT / "benchmark" / "fixtures" / "K1", directory)
+        shutil.copytree(ROOT / "benchmark" / "fixtures" / "R1", directory)
         with self.assertRaisesRegex(ValueError, "does not match its directory"):
             bench.load_fixture(str(directory))
 
@@ -123,7 +125,7 @@ class TestSeeds(unittest.TestCase):
         self.dir.mkdir(parents=True)
 
     def test_10_the_same_seed_always_gives_the_same_commit(self):
-        seed = ROOT / "benchmark" / "fixtures" / "M2" / "seed"
+        seed = ROOT / "benchmark" / "fixtures" / "R10" / "seed"
         first = bench.build_seed(str(seed), str(self.dir / "a"))
         second = bench.build_seed(str(seed), str(self.dir / "b"))
         self.assertEqual(first, second)
@@ -133,7 +135,7 @@ class TestSeeds(unittest.TestCase):
 
     def test_11_one_changed_byte_changes_the_commit(self):
         seed = self.dir / "seed"
-        shutil.copytree(ROOT / "benchmark" / "fixtures" / "K8" / "seed", seed)
+        shutil.copytree(ROOT / "benchmark" / "fixtures" / "R8" / "seed", seed)
         before = bench.build_seed(str(seed), str(self.dir / "a"))
         path = seed / "mathutil" / "clamp.py"
         path.write_text(path.read_text() + "\n")
@@ -141,7 +143,7 @@ class TestSeeds(unittest.TestCase):
 
     def test_12_file_modes_and_finder_litter_do_not_change_the_commit(self):
         seed = self.dir / "seed"
-        shutil.copytree(ROOT / "benchmark" / "fixtures" / "K8" / "seed", seed)
+        shutil.copytree(ROOT / "benchmark" / "fixtures" / "R8" / "seed", seed)
         before = bench.build_seed(str(seed), str(self.dir / "a"))
         (seed / "mathutil" / "clamp.py").chmod(0o755)
         (seed / ".DS_Store").write_bytes(b"\0")
@@ -296,7 +298,7 @@ class TestBenchRuns(unittest.TestCase):
         os.environ.pop("DCA_FAKE_RUN", None)
         os.environ.pop("DCA_FAKE_SBX_DIR", None)
 
-    def run_bench(self, selection="K1", backends=("claude",), **script):
+    def run_bench(self, selection="R1", backends=("claude",), **script):
         fixtures = bench.discover(selection=selection)
         if "patch" not in script and script.get("mode", "succeeded") != "precondition":
             script["patch"] = os.path.join(fixtures[0]["_dir"], fixtures[0]["golden"]["good"])
@@ -323,7 +325,7 @@ class TestBenchRuns(unittest.TestCase):
         self.assertEqual(document["summary"]["success_rate"], 1.0)
 
     def test_51_the_run_goes_through_the_dca_run_command_with_the_fixture_contract(self):
-        fixture = bench.discover(selection="K1")[0]
+        fixture = bench.discover(selection="R1")[0]
         runner = bench.Bench(["codex"], fixtures=[fixture], repo_root=str(ROOT), sbx=self.sbx,
                              dca_command=["dca"], work_root=str(self.dir / "work"),
                              results_root=str(self.dir / "results"), log=self.logs.append)
@@ -345,7 +347,7 @@ class TestBenchRuns(unittest.TestCase):
             self.assertNotIn(forbidden, argv)
 
     def test_52_a_wrong_answer_is_caught_by_the_oracle(self):
-        fixture = bench.discover(selection="K1")[0]
+        fixture = bench.discover(selection="R1")[0]
         bad = os.path.join(fixture["_dir"], fixture["golden"]["bad"][0])
         _, document = self.run_bench(patch=bad)
         run = document["runs"][0]
@@ -383,19 +385,19 @@ class TestBenchRuns(unittest.TestCase):
         self.assertIn(["rm", "--force"], calls)
 
     def test_57_results_are_written_as_json_and_markdown(self):
-        runner, document = self.run_bench(selection="K1,K8", backends=("claude", "codex"))
+        runner, document = self.run_bench(selection="R1,R8", backends=("claude", "codex"))
         on_disk = json.loads((Path(runner.results_dir) / "benchmark.json").read_text())
         self.assertEqual(on_disk["summary"]["total"], 4)
         self.assertEqual(set(on_disk["summary"]["by_backend"]), {"claude", "codex"})
         self.assertEqual([(r["backend"], r["fixture"]) for r in on_disk["runs"]],
-                         [("claude", "K1"), ("claude", "K8"), ("codex", "K1"), ("codex", "K8")])
+                         [("claude", "R1"), ("claude", "R8"), ("codex", "R1"), ("codex", "R8")])
         markdown = (Path(runner.results_dir) / "benchmark.md").read_text()
         self.assertIn("| Backend | Fixture | Result |", markdown)
         self.assertIn("| claude |", markdown)
         self.assertIn("Success rate", markdown)
 
     def test_58_repeat_runs_each_fixture_that_many_times(self):
-        fixtures = bench.discover(selection="K8")
+        fixtures = bench.discover(selection="R8")
         os.environ["DCA_FAKE_RUN"] = json.dumps(
             {"patch": os.path.join(fixtures[0]["_dir"], fixtures[0]["golden"]["good"])})
         runner = bench.Bench(["claude"], fixtures=fixtures, repeat=2, repo_root=str(ROOT),
@@ -505,7 +507,7 @@ class TestResultHygiene(unittest.TestCase):
         runner = bench.Bench(["claude"], repo_root=str(ROOT), sbx=object(), oracle=object())
         for path in (os.path.join(runner.results_dir, "benchmark.json"),
                      os.path.join(runner.results_dir, "benchmark.md"),
-                     os.path.join(runner.work, "claude-K1-1", "run", "report.json")):
+                     os.path.join(runner.work, "claude-R1-1", "run", "report.json")):
             with self.subTest(path=os.path.relpath(path, ROOT)):
                 self.assertTrue(self.ignored(path))
 
@@ -515,6 +517,60 @@ class TestResultHygiene(unittest.TestCase):
         for path in baselines + [ROOT / "benchmark" / "results" / ".gitkeep"]:
             with self.subTest(path=str(path.relative_to(ROOT))):
                 self.assertFalse(self.ignored(path))
+
+
+class TestReliabilityNamespace(unittest.TestCase):
+    """007: the reliability suite is R1-R10; K*/M* belong to the acceptance fixtures (T079-T082)."""
+
+    MAPPING = {**{f"K{i}": f"R{i}" for i in range(1, 9)}, "M1": "R9", "M2": "R10"}
+    BASELINE = ROOT / "benchmark" / "baselines" / "reliability-2026-09-22.json"
+
+    def setUp(self):
+        self.dir = WORK / "namespace"
+        shutil.rmtree(self.dir, ignore_errors=True)
+        self.dir.mkdir(parents=True)
+
+    def test_90_the_reliability_suite_is_exactly_r1_to_r10(self):
+        self.assertEqual([f["id"] for f in bench.discover()],
+                         [f"R{i}" for i in range(1, 11)])
+
+    def test_91_no_committed_fixture_uses_an_acceptance_id(self):
+        for directory in sorted((ROOT / "benchmark" / "fixtures").iterdir()):
+            if directory.is_dir():
+                with self.subTest(fixture=directory.name):
+                    self.assertRegex(directory.name, r"^R([1-9]|10)$")
+
+    def test_92_the_baseline_keeps_its_historical_ids_and_maps_them(self):
+        baseline = json.loads(self.BASELINE.read_text())
+        self.assertEqual(baseline["fixture_ids"]["historical_to_current"], self.MAPPING)
+        recorded = {run["fixture"] for section in ("campaign", "superseded", "focused_reruns")
+                    for entry in baseline[section] for run in entry["runs"]}
+        self.assertTrue(recorded)
+        self.assertLessEqual(recorded, set(self.MAPPING), "history must not be rewritten to R IDs")
+
+    def test_93_each_renamed_fixture_is_the_one_the_baseline_ran(self):
+        # A seed builds to a commit determined by its bytes alone, so the same commit proves the
+        # renamed fixture starts every run exactly where the historical fixture did.
+        baseline = json.loads(self.BASELINE.read_text())
+        recorded = {run["fixture"]: run["seed_commit"]
+                    for entry in baseline["campaign"] for run in entry["runs"]}
+        for old, new in self.MAPPING.items():
+            with self.subTest(fixture=f"{old}->{new}"):
+                seed = ROOT / "benchmark" / "fixtures" / new / "seed"
+                self.assertEqual(bench.build_seed(str(seed), str(self.dir / new)), recorded[old])
+
+    def test_94_the_acceptance_contract_still_names_k_and_m(self):
+        tasks = (ROOT / "specs" / "001-bounded-coding-agent" / "tasks.md").read_text()
+        for phrase in ("Create fixtures `benchmark/fixtures/K1`–`K4`",
+                       "Create fixtures `benchmark/fixtures/K5`–`K8`",
+                       "Create fixtures `benchmark/fixtures/M1`, `M2`, `M4`, `M6`"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, tasks)
+        pattern = json.loads(Path(bench.FIXTURE_SCHEMA).read_text())["properties"]["id"]["pattern"]
+        acceptance = ([f"K{i}" for i in range(1, 9)] + [f"M{i}" for i in range(1, 7)]
+                      + [f"F{i}" for i in range(1, 7)]
+                      + ["S1", "S2", "S3", "S4", "S5a", "S5b", "S6", "S7", "S8"])
+        self.assertEqual([i for i in acceptance if not re.fullmatch(pattern, i)], [])
 
 
 if __name__ == "__main__":

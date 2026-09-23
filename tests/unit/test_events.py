@@ -459,6 +459,19 @@ class TestAccounting(unittest.TestCase):
         self.assertIsNone(result.tool_calls[0].command)
         self.assertTrue(result.tool_calls[0].mutation)
 
+    def test_52d_a_repair_written_through_a_redirection_counts_as_a_retry(self):
+        # Host limits are authoritative (FR-023): a shell heredoc is a workspace change too.
+        result = events.analyze(stream(
+            call("v1", "shell", {"cmd": "make test"}),
+            response("v1", "tests failed\nexit status 1"),
+            call("e1", "shell", {"cmd": "cat > src/fix.py <<'EOF'\nfixed = True\nEOF"}),
+            response("e1", ""),
+            call("v2", "shell", {"cmd": "make test"}),
+            response("v2", "all good")), exit_status=0,
+            verification_commands=["make test"])
+        self.assertEqual(result.verification_runs, 2)
+        self.assertEqual(result.retries, 1)
+
     def test_53_rerunning_a_check_without_changing_anything_is_not_a_retry(self):
         result = events.analyze(stream(
             call("v1", "Bash", {"command": "make test"}),
@@ -569,6 +582,53 @@ class TestFirstMutation(unittest.TestCase):
         result = events.analyze(stream(), exit_status=0)
         self.assertIsNone(result.first_mutation)
         self.assertTrue(result.context_precedes_first_mutation)
+
+    def first_mutation(self, command):
+        return events.analyze(stream(call("a", "shell", {"cmd": command})),
+                              exit_status=0).first_mutation
+
+    def test_69a_creating_the_scratch_directory_is_not_a_mutation(self):
+        # Codex's create_directory names its targets in a `paths` list (observed in 005 runs).
+        result = events.analyze(stream(
+            call("a", "create_directory", {"paths": ["/run/dca/out"]}),
+            call("b", "write_file", self.CONTEXT)), exit_status=0)
+        self.assertIsNone(result.first_mutation)
+
+    def test_69b_a_paths_list_reaching_outside_the_scratch_dir_is_a_mutation(self):
+        for paths in (["/run/dca/out", "/workspace/new"], ["/workspace/new"], []):
+            with self.subTest(paths=paths):
+                result = events.analyze(stream(call("a", "create_directory", {"paths": paths})),
+                                        exit_status=0)
+                self.assertEqual(result.first_mutation, 0)
+
+    def test_69c_a_redirected_write_is_a_mutation(self):
+        for command in ("cat a > b", "ls >> notes.txt", "grep foo src > out.txt",
+                        "echo x >| f", "cat <<'EOF' > src/x.py\nprint(1)\nEOF",
+                        "cat a 2>/dev/null > b"):
+            with self.subTest(command=command):
+                self.assertEqual(self.first_mutation(command), 0)
+
+    def test_69d_redirections_that_write_no_file_stay_inspection(self):
+        for command in ("grep -rn foo src 2>/dev/null", "ls 2>&1", "cat f >/dev/null",
+                        "ls &>/dev/null", "find . -name '*.py' 2>/dev/null | head",
+                        "cat f > /dev/null 2>&1"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.first_mutation(command))
+
+    def test_69e_arguments_that_make_an_inspection_program_write_are_mutations(self):
+        for command in ("sort -o out in", "sort --output=out in", "sort -uo out in",
+                        "find . -delete", "find . -name x -exec rm {} \\;",
+                        "find . -fprint list.txt", "uniq in out", "tree -o listing.txt",
+                        "git diff --output=patch.diff", "rg --pre=./script foo",
+                        "file -C -m magic"):
+            with self.subTest(command=command):
+                self.assertEqual(self.first_mutation(command), 0)
+
+    def test_69f_the_same_programs_used_to_look_stay_inspection(self):
+        for command in ("sort in", "sort -rn in", "uniq in", "find . -name '*.py'",
+                        "tree src", "git diff HEAD", "rg foo src", "file -b x"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.first_mutation(command))
 
 
 class TestReporting(unittest.TestCase):

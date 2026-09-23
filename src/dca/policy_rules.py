@@ -50,7 +50,8 @@ GATE_ONLY = {
 #: and `report.agent.json`. A static glob cannot say "except /run/dca/out", so the native rules name
 #: every other thing the launcher puts under /run/dca instead. Anything else there is still class 5
 #: or 25 at the gate; a native `/run/dca/**` rejected the required scratch writes before the gate saw
-#: them (dca bench, Codex K1: `write_file` of /run/dca/out/context.json denied, run blocked).
+#: them (dca bench, Codex K1 - now R1: `write_file` of /run/dca/out/context.json denied, run
+#: blocked).
 SELF_PATHS = (
     "/opt/dca/**", "/etc/claude-code/**",
     "/run/dca/run.json", "/run/dca/grants.json", "/run/dca/task.txt",

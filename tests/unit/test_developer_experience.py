@@ -753,5 +753,40 @@ class TestVerify(Case):
         self.assertIn("dca init", out)
 
 
+# --- pre-freeze closure (007) ------------------------------------------------------------------------
+
+
+class TestPreFreezeClosure(Case):
+    def test_90_the_codex_sign_in_instruction_is_the_one_the_pinned_cli_has(self):
+        # `docker agent login` is not a command of the pinned Docker Agent v1.136.0; `setup` is.
+        empty = self.tmp / "no-sign-in"
+        empty.mkdir()
+        request = launcher.RunRequest(repo=self.repo, task="t", backend="codex", trust="trusted")
+        with mock.patch.object(launcher, "HOST_CONFIG_DIR", str(empty)):
+            with self.assertRaises(errors.PreconditionError) as caught:
+                launcher.Launcher(request, sbx=mock.Mock())._check_backend_auth()
+        self.assertIn("`docker agent setup` (select ChatGPT)", str(caught.exception))
+        self.assertIn("docker agent setup", console.ACTIONS["codex"])
+        for path in sorted((ROOT / "src" / "dca").glob("*.py")):
+            with self.subTest(path=path.name):
+                self.assertNotIn("docker agent login", path.read_text(encoding="utf-8"))
+
+    def test_91_a_multi_word_task_that_starts_with_a_dash_is_the_task(self):
+        self.main(["run", "--repo", self.repo, "-0 values crash parse()"])
+        self.assertEqual(self.request().task, "-0 values crash parse()")
+
+    def test_92_a_one_word_dash_task_goes_after_the_separator(self):
+        self.main(["run", "--repo", self.repo, "--", "-fix"])
+        self.assertEqual(self.request().task, "-fix")
+        code, _, err = self.main(["run", "--repo", self.repo, "-fix"])
+        self.assertEqual(code, 2)
+        self.assertEqual(Recorded.instances, [])
+        help_text = io.StringIO()
+        with contextlib.redirect_stdout(help_text):
+            with self.assertRaises(SystemExit):
+                cli.build_parser().parse_args(["run", "--help"])
+        self.assertIn("dca run -- -fix", " ".join(help_text.getvalue().split()))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -178,7 +178,8 @@ dca run "Fix the median calculation for even-length inputs without changing its 
 dca run --backend codex "Fix the median calculation for even-length inputs."
 ```
 
-- **Task:** the quoted argument, or `@path/to/task.txt` to read it from a file.
+- **Task:** the quoted argument, or `@path/to/task.txt` to read it from a file. A one-word task that
+  starts with `-` goes after `--`: `dca run -- -fix`.
 - **Repository:** the one containing the current directory. A directory that isn't part of a
   repository's committed tree is refused, never guessed.
 - **Backend, trust and verification commands:** from the local config unless you pass them.
@@ -259,7 +260,7 @@ If the run succeeds, the final check passes, the result is available on the repo
 
 ```sh
 bin/dca bench --backend claude            # every fixture, once, on Claude trusted
-bin/dca bench --backend both --fixtures 'K1,M*' --repeat 2
+bin/dca bench --backend both --fixtures 'R1,R9,R10' --repeat 2
 ```
 
 **Every fixture run is a real production `dca run`**: the same eligibility checks, policy, sandbox, host limits, verification, retrieval and cleanup, against the real model backend. Provider availability, rate limits, quota and cost therefore affect a benchmark exactly as they affect a normal run. A full suite on one backend is 10 sandbox runs.
@@ -286,7 +287,7 @@ These controls describe the validated trusted V1 paths. They are not a claim tha
 ## Known V1 limitations
 
 | Area | V1 status |
-|---|---|
+| --- | --- |
 | Claude trusted / Codex trusted | Supported production paths. |
 | Untrusted execution | Intentionally blocked. |
 | Sandboxes and source | Ephemeral, local Docker Sandboxes; the host repository is not mounted. No remote or distributed execution. |

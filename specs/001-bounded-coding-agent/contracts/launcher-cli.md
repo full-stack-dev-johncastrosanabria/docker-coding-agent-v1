@@ -193,7 +193,7 @@ dca bench [--backend claude|codex|both] [--trust trusted|untrusted] [--fixtures 
           [--acceptance]        # requires committed thresholds, clean tree, exact pinned versions, passed gates
 ```
 
-V1 ships a 10-fixture reliability suite (K1-K8, M1-M2; `benchmark/FORMAT.md`). Every fixture run is
+V1 ships a 10-fixture reliability suite (R1-R10, named K1-K8, M1-M2 before 007; `benchmark/FORMAT.md`). Every fixture run is
 a real `dca run` subprocess, results go to `benchmark/results/<bench-id>/benchmark.{json,md}`, and
 the exit status is 0 only when every run passed. `--acceptance` is refused (exit 3) until the full
 28-fixture suite and `benchmark/thresholds.yaml` exist.

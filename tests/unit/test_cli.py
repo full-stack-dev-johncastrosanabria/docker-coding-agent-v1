@@ -263,12 +263,12 @@ class TestDispatch(unittest.TestCase):
         original = cli.bench_module.command
         cli.bench_module.command = lambda options, repo_root=None: seen.append(options) or 0
         try:
-            code, _, _ = invoke(["bench", "--backend", "both", "--fixtures", "K*", "--repeat", "2"])
+            code, _, _ = invoke(["bench", "--backend", "both", "--fixtures", "R*", "--repeat", "2"])
         finally:
             cli.bench_module.command = original
         self.assertEqual(code, 0)
         self.assertEqual((seen[0].backend, seen[0].fixtures, seen[0].repeat, seen[0].trust),
-                         ("both", "K*", 2, "trusted"))
+                         ("both", "R*", 2, "trusted"))
 
     def test_44_bench_acceptance_is_refused_as_a_precondition_before_anything_runs(self):
         code, _, err = invoke(["bench", "--acceptance"])

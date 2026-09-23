@@ -102,7 +102,8 @@ def build_parser():
                     "positional argument or --task; unset options come from the checkout's local "
                     "config (dca init), then from the safe defaults.")
     run.add_argument("task_text", nargs="?", metavar="TASK",
-                     help="the task text in quotes, or @file to read it from a file")
+                     help="the task text in quotes, or @file to read it from a file; a one-word "
+                          "task that starts with '-' goes after --, e.g. dca run -- -fix")
     run.add_argument("--repo", default=None,
                      help="path to the git repository (default: the repository containing the "
                           "current directory; never mounted)")
@@ -156,7 +157,7 @@ def build_parser():
     bench.add_argument("--backend", default="claude", choices=["claude", "codex", "both"])
     bench.add_argument("--trust", default="trusted", choices=["trusted", "untrusted"])
     bench.add_argument("--fixtures", default=None,
-                       help="comma-separated fixture id globs, e.g. 'K*' or 'K1,M2'")
+                       help="comma-separated fixture id globs, e.g. 'R*' or 'R1,R9'")
     bench.add_argument("--repeat", type=int, default=1, help="runs per fixture (acceptance: 3)")
     bench.add_argument("--acceptance", action="store_true",
                        help="acceptance mode (28-fixture suite and committed thresholds; "
