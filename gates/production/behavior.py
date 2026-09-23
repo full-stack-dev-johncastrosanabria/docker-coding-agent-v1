@@ -239,14 +239,29 @@ def run_gate_probes(instance, backend, rows, out):
     instance.sbx.execute(instance.sandbox, f"rm -rf {PROBE_DIR}")
     instance.sbx.copy_in(staging, instance.sandbox, PROBE_DIR)
 
-    script = ["set -u"]
-    for name, (_payload, _expect, _cls, env) in sorted(table.items()):
-        prefix = f"env {env}" if env else ""
-        script.append(
-            f"out=$({prefix} {KIT_DIR}/bin/dca-gate <{PROBE_DIR}/{name}.json 2>/tmp/t062-err); "
-            f"status=$?; "
-            f"printf '%s\\t%s\\t%s\\t%s\\n' '{name}' \"$status\" "
-            "\"$(tr '\\n\\t' '  ' </tmp/t062-err)\" \"$(printf '%s' \"$out\" | tr '\\n\\t' '  ')\"")
+    def probe_lines(names):
+        lines = []
+        for name in names:
+            env = table[name][3]
+            prefix = f"env {env}" if env else ""
+            lines.append(
+                f"out=$({prefix} {KIT_DIR}/bin/dca-gate <{PROBE_DIR}/{name}.json 2>/tmp/t062-err); "
+                f"status=$?; "
+                f"printf '%s\\t%s\\t%s\\t%s\\n' '{name}' \"$status\" "
+                "\"$(tr '\\n\\t' '  ' </tmp/t062-err)\" \"$(printf '%s' \"$out\" | tr '\\n\\t' '  ')\"")
+        return lines
+
+    before = [n for n in sorted(table) if n.startswith(probe_data.ORDERING_PREFIX)]
+    after = [n for n in sorted(table) if n not in before]
+    record = json.dumps(probe_data.CONTEXT_RECORD)
+    script = ["set -u", "sudo rm -f /run/dca/out/context.json", *probe_lines(before),
+              # A real run's agent writes its record before it does anything else (FR-001): stage
+              # one, so the positive controls below are judged as they would be in a run.
+              "sudo install -d -m 0777 /run/dca/out",
+              f"printf '%s' '{record}' | sudo tee /run/dca/out/context.json >/dev/null",
+              "sudo chmod 0644 /run/dca/out/context.json",
+              *probe_lines(after)]
+    script.append("sudo rm -f /run/dca/out/context.json")
     script.append(f"printf 'HOSTILE_MODULE\\t%s\\n' "
                   f"\"$(test -e {probe_data.HOSTILE_MODULE_MARKER} && echo imported || echo no)\"")
     result = sh(instance, "\n".join(script), timeout=300)

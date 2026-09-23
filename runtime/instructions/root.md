@@ -49,7 +49,9 @@ mutations.
 
 A baseline run is itself a verification command, so it is a mutation too. Every task therefore goes
 in this order: read and classify, write the Context Record, run the baseline, change, run the final
-checks. Write the Context Record first, then run the baseline, then change anything.
+checks. Write the Context Record first, then run the baseline, then change anything. The policy gate
+enforces this: until a valid Context Record exists at `/run/dca/out/context.json`, it refuses every
+verification command and every file change, and it allows reading and writing the record.
 
 Before that first mutation, write `/run/dca/out/context.json`:
 
