@@ -624,6 +624,67 @@ class TestFirstMutation(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(self.first_mutation(command), 0)
 
+    def test_69g_printing_and_changing_directory_are_inspection(self):
+        # T075 precision, from the 005-007 runs: `echo "---"` and `cd /workspace && ...` were
+        # counted as early mutations although neither can change the workspace.
+        for command in ('echo "---"', "printf '%s\\n' done", "cd /workspace && grep -rn foo src",
+                        'find src -name "*.py" | head -50 && echo "---" && ls', "cd /workspace"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.first_mutation(command))
+
+    def test_69g2_asking_a_tool_for_its_version_is_inspection(self):
+        for command in ("node --version && which node", "python3 --version", "npm --version"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.first_mutation(command))
+        # Only the bare version query of a program on PATH: anything more runs the program.
+        for command in ("node --version script.js", "./build --version", "node -e 'x'",
+                        "python3 --version > /workspace/v", "xargs -I{} sh -c 'cat {}'"):
+            with self.subTest(command=command):
+                self.assertEqual(self.first_mutation(command), 0)
+
+    def test_69g3_claude_tool_search_is_not_a_mutation(self):
+        # Claude Code's ToolSearch only loads tool schemas (observed before the Context Record).
+        result = events.analyze(stream(call("a", "ToolSearch", {"query": "select:Read"})),
+                                exit_status=0)
+        self.assertIsNone(result.first_mutation)
+
+    def test_69h_a_record_written_through_the_shell_is_a_scratch_write_and_is_the_record(self):
+        # Claude writes the Context Record with a Bash heredoc (observed in every 005 run).
+        record = ("mkdir -p /run/dca/out && cat > /run/dca/out/context.json << 'EOF'\n"
+                  '{"classification": {"value": "direct", "reason": "a -> b"}}\nEOF')
+        plan = "cat > /run/dca/out/plan.md <<'PLAN'\n# Plan\n1. edit > test\nPLAN"
+        result = events.analyze(stream(
+            call("a", "shell", {"cmd": record}), call("b", "shell", {"cmd": plan}),
+            call("c", "write_file", {"path": "src/x.py"})), exit_status=0)
+        self.assertEqual((result.context_record_at, result.plan_at, result.first_mutation),
+                         (0, 1, 2))
+        self.assertTrue(result.context_precedes_first_mutation)
+
+    def test_69h2_observed_scratch_commands_are_not_mutations(self):
+        for command in ('mkdir -p /run/dca/out && cat /run/dca/out/context.json 2>/dev/null; '
+                        'echo "---"; node --version && which node',     # the claude R2 (K2) run
+                        "git diff > /run/dca/out/diff.txt",
+                        "mkdir -p /run/dca/out"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.first_mutation(command))
+
+    def test_69i_a_shell_write_that_is_not_confined_to_the_scratch_dir_is_a_mutation(self):
+        for command in (
+                "mkdir -p /run/dca/out /workspace/new",
+                "cat > context.json <<'EOF'\n{}\nEOF",
+                "cat > /run/dca/out/../../workspace/x <<'EOF'\n{}\nEOF",
+                "cat /run/dca/out/context.json > /workspace/copy",
+                "echo x > /run/dca/out/a && echo y > src/b",
+                "mkdir -p /run/dca/out && python3 gen.py > /run/dca/out/log",
+                "cat > /run/dca/out/x <<EOF\n$(touch /workspace/pwned)\nEOF",
+                "cat > /run/dca/out/x <<EOF\n`touch /workspace/pwned`\nEOF",
+                'echo x > "$OUT"', "echo x > /run/dca/out/$NAME", "echo x > /run/dca/out/*",
+                "echo x | tee >(cat > /workspace/x) >/dev/null",
+                "tee /run/dca/out/x < src/a.py",
+                "mkdir /run/dca/out/x && touch /workspace/y"):
+            with self.subTest(command=command):
+                self.assertEqual(self.first_mutation(command), 0)
+
     def test_69f_the_same_programs_used_to_look_stay_inspection(self):
         for command in ("sort in", "sort -rn in", "uniq in", "find . -name '*.py'",
                         "tree src", "git diff HEAD", "rg foo src", "file -b x"):

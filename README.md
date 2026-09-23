@@ -272,7 +272,7 @@ A run **passes** only when it meets every condition:
 - every change is inside the fixture's allowed scope;
 - no sandbox is left behind.
 
-A precondition refusal or a `blocked` outcome is counted as **blocked**, and everything else as **failed**. Results are written to `benchmark/results/<bench-id>/benchmark.json` (machine-readable) and `benchmark.md` (a per-run table and a summary). Per-run artifacts such as reports and event streams stay under `benchmark/work/`. Git ignores both, so a bench run leaves the working tree clean. Compact summaries of accepted campaigns are committed under `benchmark/baselines/`. The exit status is 0 only when every run passed. `--acceptance` (the specification's 28-fixture acceptance protocol) is not available for this suite and is refused.
+A precondition refusal or a `blocked` outcome is counted as **blocked**, and everything else as **failed**. Results are written to `benchmark/results/<bench-id>/benchmark.json` (machine-readable) and `benchmark.md` (a per-run table and a summary). Per-run artifacts such as reports and event streams stay under `benchmark/work/`. Git ignores both, so a bench run leaves the working tree clean. Compact summaries of accepted campaigns are committed under `benchmark/baselines/`. The exit status is 0 only when every run passed. `--acceptance` runs the specification's 28-fixture acceptance protocol under the committed [benchmark/thresholds.yaml](benchmark/thresholds.yaml). Until the acceptance fixtures exist it is refused before anything runs.
 
 ## V1 security model
 
@@ -294,6 +294,6 @@ These controls describe the validated trusted V1 paths. They are not a claim tha
 | Network | Default-deny; access is limited by backend and profile. |
 | Installation | Editable install from a checkout (`pip install -e .`) or `bin/dca`; no published package. |
 | Pull requests | No automatic PR creation or merge workflow. |
-| Benchmark | `dca bench` runs a 10-fixture reliability suite; the 28-fixture `--acceptance` protocol is not implemented. |
+| Benchmark | `dca bench` runs the 10-fixture reliability suite (R1–R10). `--acceptance` implements the 28-fixture protocol but is refused until the acceptance fixtures (T079–T094) exist. |
 
 For exact runtime pins and eligibility, consult [runtime/versions.yaml](runtime/versions.yaml) and [gates/eligibility.json](gates/eligibility.json).

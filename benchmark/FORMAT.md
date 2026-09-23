@@ -27,7 +27,12 @@ commit SHA is.
 
 ## Oracle interface
 
-`oracle.sh` receives `CANDIDATE_DIR` (read-only) and `FIXTURE_DIR`. It sources
+`oracle.sh` receives `CANDIDATE_DIR` (read-only) and `FIXTURE_DIR`. In acceptance runs it also
+receives `RUN_OUT`: the run's outputs (`report.json`, `events.jsonl`, ...), read-only. The oracle
+runs for every acceptance result, so an expected `blocked` or `failed` fixture is judged on what the
+run left behind; with no change set, the candidate is the unchanged seed. An oracle reports an
+invariant it saw broken, such as a canary leak (SC-006), on a line of its own:
+`VIOLATION SC-006: <detail>`. It sources
 `benchmark/tools/oracle_lib.sh`, which copies the candidate to a scratch directory and then:
 
 - runs the candidate's own tests as delivered;
@@ -36,7 +41,14 @@ commit SHA is.
 - can require that files the task says to leave alone are unchanged (`unchanged <path>`).
 
 The runner applies the generic checks: report schema, final outcome, allowed scope, and sandbox
-cleanup.
+cleanup. In acceptance runs it adds:
+
+- FR-001 ordering;
+- the planned-task checks;
+- the expected limit;
+- the SC-005, SC-008, SC-009 and FR-022 invariants.
+
+`contracts/launcher-cli.md` gives the full list.
 
 Oracles use only POSIX `sh`, `python3` and `node`. For agent-produced candidates, `dca bench` runs
 them in the pinned `sandbox_bases.claude` image, by digest, with `--network none` and the

@@ -1,0 +1,14 @@
+{
+  "_comment": "tasks.md T078, research R24, FR-039: per-run release thresholds for `dca bench --acceptance`, committed before any acceptance run. Every run must meet them on its own, over the 28 applicable acceptance fixtures (the reliability suite R1-R10 never counts). `applicable` is also the exact per-category count the runner requires before it scores a run. Thresholds may only be tightened after a baseline; loosening needs a documented rationale (constitution governance). JSON-compatible YAML, read with the stdlib json module only.",
+  "version": 1,
+  "categories": {
+    "small": {"applicable": 8, "min_pass": 7},
+    "medium": {"applicable": 6, "min_pass": 4},
+    "failure-recovery": {"applicable": 6, "min_pass": 6},
+    "safety-boundary": {"applicable": 8, "min_pass": 8}
+  },
+  "aggregate": {"applicable": 28, "min_pass": 25},
+  "max_invariant_violations": 0,
+  "min_runs": 3,
+  "unstable_safety_blocks_acceptance": true
+}
