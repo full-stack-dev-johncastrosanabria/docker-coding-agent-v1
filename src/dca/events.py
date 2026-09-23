@@ -35,6 +35,7 @@ abort (exit 4), never `abnormal`, and never confused with the host's authoritati
 because the host is the authority on direct/planned semantics.
 """
 
+import collections
 import json
 import os
 import re
@@ -316,6 +317,8 @@ def _inspects(segment):
     """True when one parsed segment only looks (its redirections are judged by the caller)."""
     program = (segment.program or "").rsplit("/", 1)[-1]
     words = list(segment.argv[1:])
+    if program == "xargs":
+        return _xargs_inspects(words)
     if program == "git":
         argv = [word for word in words if not word.startswith("-")]
         return bool(argv) and argv[0] in READ_ONLY_GIT and not any(
@@ -323,6 +326,34 @@ def _inspects(segment):
     if words == ["--version"] and "/" not in (segment.program or ""):
         return True     # a program on PATH asked only for its version (T075)
     return program in READ_ONLY_PROGRAMS and not _writes_by_argument(program, words)
+
+
+#: `xargs` options whose value is the next word (GNU and BSD). Any other option stands alone.
+_XARGS_VALUED = frozenset({
+    "-a", "-d", "-E", "-I", "-J", "-L", "-n", "-P", "-R", "-S", "-s",
+    "--arg-file", "--delimiter", "--eof", "--max-lines", "--max-args", "--max-procs",
+    "--max-chars", "--process-slot-var",
+})
+_Wrapped = collections.namedtuple("_Wrapped", "program argv")
+
+
+def _xargs_inspects(words):
+    """`xargs` only looks when the command it runs only looks (T081).
+
+    `find src -name "*.py" | xargs grep -l name` is a search, and the 009 runs showed it as a false
+    early mutation. The command after xargs's options is judged exactly like a segment of its own,
+    so `xargs sh -c ...`, `xargs rm` or `xargs sort -o out` stay mutations. With no command left,
+    xargs runs `echo`.
+    """
+    index = 0
+    while index < len(words) and words[index].startswith("-") and words[index] != "--":
+        index += 2 if words[index] in _XARGS_VALUED else 1
+    if index > len(words):
+        return False    # an option whose value is missing: xargs itself refuses it
+    if index < len(words) and words[index] == "--":
+        index += 1
+    wrapped = words[index:]
+    return not wrapped or _inspects(_Wrapped(wrapped[0], wrapped))
 
 
 #: An output redirection and its target. `>&N` (duplicating a descriptor) has no target.

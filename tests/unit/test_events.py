@@ -642,6 +642,23 @@ class TestFirstMutation(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(self.first_mutation(command), 0)
 
+    def test_69g4_xargs_running_an_inspecting_program_is_inspection(self):
+        # T081: Claude searched with `find | xargs grep -l` before its Context Record, and the
+        # detector reported that search as the first workspace mutation.
+        for command in ('ls /workspace/tests/ && find /workspace -name "*.py" | xargs grep -l "X"',
+                        'find . -name "*.py" -print0 | xargs -0 grep -n foo',
+                        "ls tests | xargs -n 1 wc -l", "find src | xargs -I {} cat {}",
+                        "printf 'a b' | xargs", "find . | xargs -- head -5"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.first_mutation(command))
+        # What xargs runs is judged like any other segment.
+        for command in ("xargs -I{} sh -c 'cat {}'", 'find . -name "*.pyc" | xargs rm',
+                        "find . | xargs -n 1 sed -i s/a/b/", "xargs -a list.txt python3 build.py",
+                        "find . | xargs sort -o /workspace/out", "find . | xargs grep x > out",
+                        "find . | xargs -I", "find . | xargs -n 1 xargs rm"):
+            with self.subTest(command=command):
+                self.assertEqual(self.first_mutation(command), 0)
+
     def test_69g3_claude_tool_search_is_not_a_mutation(self):
         # Claude Code's ToolSearch only loads tool schemas (observed before the Context Record).
         result = events.analyze(stream(call("a", "ToolSearch", {"query": "select:Read"})),
