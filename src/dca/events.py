@@ -133,7 +133,7 @@ READ_ONLY_TOOLS = frozenset({
     "read", "read_file", "readfile", "view", "cat_file",
     "ls", "list", "list_directory", "directory_tree", "get_file_info",
     "glob", "grep", "search", "search_files", "find", "notebookread",
-    "todoread", "todowrite", "think",
+    "todoread", "todowrite", "think", "toolsearch",
     "task", "transfer_task", "agent", "delegate",
     "read_skill", "read_skill_file", "skill",
     "git_status", "git_log", "git_diff",
@@ -145,12 +145,14 @@ SHELL_TOOLS = frozenset({"bash", "sh", "shell", "run_command", "run_shell_comman
 
 #: Programs that only look. Deliberately short: anything absent is treated as a mutation, which is
 #: the fail-closed direction for an ordering rule (an early first-mutation can only make the
-#: Context Record look late, never make a late one look early).
+#: Context Record look late, never make a late one look early). `echo`, `printf` and `cd` (T075)
+#: print or change the shell's directory only; the 005-007 runs showed them as false early
+#: mutations. Any file they write goes through a redirection, which is checked separately.
 READ_ONLY_PROGRAMS = frozenset({
     "ls", "cat", "head", "tail", "grep", "egrep", "fgrep", "rg", "ag", "find", "wc", "file",
     "stat", "pwd", "basename", "dirname", "tree", "du", "df", "diff", "cmp", "which", "type",
     "date", "whoami", "readlink", "realpath", "sort", "uniq", "cut", "tr", "nl", "column",
-    "md5sum", "sha256sum", "shasum", "true", "false", "test",
+    "md5sum", "sha256sum", "shasum", "true", "false", "test", "echo", "printf", "cd",
 })
 
 #: `git` subcommands that only read. `git branch` and `git checkout` are absent on purpose: both
@@ -307,19 +309,86 @@ def shell_is_read_only(command):
     parsed = shellparse.parse(command)
     if not parsed.ok or not parsed.segments or _redirects_to_a_file(command):
         return False
-    for segment in parsed.segments:
-        program = (segment.program or "").rsplit("/", 1)[-1]
-        words = list(segment.argv[1:])
-        if program == "git":
-            argv = [word for word in words if not word.startswith("-")]
-            if not argv or argv[0] not in READ_ONLY_GIT:
-                return False
-            if any(word == "--output" or word.startswith("--output=") for word in words):
-                return False
+    return all(_inspects(segment) for segment in parsed.segments)
+
+
+def _inspects(segment):
+    """True when one parsed segment only looks (its redirections are judged by the caller)."""
+    program = (segment.program or "").rsplit("/", 1)[-1]
+    words = list(segment.argv[1:])
+    if program == "git":
+        argv = [word for word in words if not word.startswith("-")]
+        return bool(argv) and argv[0] in READ_ONLY_GIT and not any(
+            word == "--output" or word.startswith("--output=") for word in words)
+    if words == ["--version"] and "/" not in (segment.program or ""):
+        return True     # a program on PATH asked only for its version (T075)
+    return program in READ_ONLY_PROGRAMS and not _writes_by_argument(program, words)
+
+
+#: An output redirection and its target. `>&N` (duplicating a descriptor) has no target.
+_OUTPUT_REDIRECTION = re.compile(
+    r"(?:\d+|&)?>>?\|?[ \t]*(?![&>])('[^']*'|\"[^\"]*\"|[^\s;&|<>()]+)")
+#: A heredoc operator and its delimiter. A quoted delimiter turns off expansion in the body.
+_HEREDOC = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
+#: Characters that let the shell decide the path at run time: never a provable scratch target.
+_EXPANDING = re.compile(r"[$`*?~\[{]")
+
+
+def _without_heredoc_bodies(command):
+    """`command` minus its heredoc bodies, or None when a body can run a command.
+
+    A body is data unless its delimiter is unquoted and it contains a command substitution, which
+    the shell runs while expanding the document.
+    """
+    kept, pending = [], []
+    for line in command.split("\n"):
+        if pending:
+            delimiter, strip_tabs, expands = pending[0]
+            if (line.lstrip("\t") if strip_tabs else line) == delimiter:
+                pending.pop(0)
+            elif expands and ("$(" in line or "`" in line):
+                return None
             continue
-        if program not in READ_ONLY_PROGRAMS or _writes_by_argument(program, words):
-            return False
-    return True
+        kept.append(line)
+        pending += [(delimiter, dash == "-", not quote)
+                    for dash, quote, delimiter in _HEREDOC.findall(line)]
+    return None if pending else "\n".join(kept)
+
+
+def shell_scratch_writes(command, scratch_dir=SCRATCH_DIR):
+    """The scratch-dir paths `command` writes, when it can write nothing else; None otherwise.
+
+    data-model.md: writes confined to `/run/dca/out/` are not workspace mutations. A shell command
+    qualifies only when every segment is inspection or a `mkdir` of scratch directories, and every
+    output redirection targets `/dev/null` or a literal absolute path inside the scratch dir.
+    Anything the host cannot prove - a relative or variable target, a substitution, a leftover `>`
+    it could not attribute - is not scratch-only.
+    """
+    parsed = shellparse.parse(command)
+    body = _without_heredoc_bodies(command)
+    if not parsed.ok or not parsed.segments or body is None:
+        return None
+    body = _HARMLESS_REDIRECTION.sub(" ", body)
+    matches = list(_OUTPUT_REDIRECTION.finditer(body))
+    if body.count(">") != sum(match.group(0).count(">") for match in matches):
+        return None
+    written = []
+    for match in matches:
+        target = match.group(1).strip("'\"")
+        if _EXPANDING.search(target) or not os.path.isabs(target) \
+                or not _under_scratch(target, scratch_dir):
+            return None
+        written.append(os.path.normpath(target))
+    for segment in parsed.segments:
+        if (segment.program or "").rsplit("/", 1)[-1] == "mkdir":
+            directories = [word for word in segment.argv[1:] if not word.startswith("-")]
+            if not directories or any(_EXPANDING.search(d) or not os.path.isabs(d)
+                                      or not _under_scratch(d, scratch_dir)
+                                      for d in directories):
+                return None
+        elif not _inspects(segment):
+            return None
+    return written
 
 
 class ToolCallRecord:
@@ -359,10 +428,20 @@ class ToolCallRecord:
             return False
         if lowered in SHELL_TOOLS:
             # A build or test command IS a mutation (data-model.md): it can rewrite the workspace.
-            # Only commands the host can prove are inspection are exempt.
+            # Only commands the host can prove are inspection, or confined to the scratch dir,
+            # are exempt.
             if self.command is None:
                 return True
-            return not shell_is_read_only(self.command)
+            if shell_is_read_only(self.command):
+                return False
+            scratch = shell_scratch_writes(self.command)
+            if scratch is None:
+                return True
+            # Recorded as this call's paths, so a Context Record or Plan written through the shell
+            # is recognized as that record (FR-001, FR-008).
+            self.paths = self.paths + scratch
+            self.scratch_only = True
+            return False
         if self.scratch_only:
             # A write confined to /run/dca/out is run evidence, not workspace state.
             return False
