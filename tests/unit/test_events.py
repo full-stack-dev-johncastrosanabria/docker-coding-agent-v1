@@ -565,8 +565,8 @@ class TestFirstMutation(unittest.TestCase):
         self.assertEqual(result.first_mutation, 0)
         self.assertEqual(result.first_attempted_mutation, 0)
         self.assertTrue(result.tool_calls[0].mutation)
-        self.assertTrue(result.tool_calls[0].denied)
-        self.assertTrue(result.tool_calls[0].denied_structurally)
+        self.assertTrue(result.tool_calls[0].refused_before_execution)
+        self.assertTrue(result.tool_calls[0].not_dispatched)
         # but it changed nothing, so FR-001 ordering does not measure from it
         self.assertFalse(result.tool_calls[0].effective_mutation)
         self.assertIsNone(result.first_effective_mutation)
@@ -799,14 +799,14 @@ class TestEffectiveMutation(unittest.TestCase):
                                         exit_status=0)
                 record = result.tool_calls[0]
                 self.assertTrue(record.mutation, "the attempt must stay an attempted mutation")
-                self.assertTrue(record.denied)
+                self.assertTrue(record.refused_before_execution)
                 self.assertFalse(record.effective_mutation)
                 self.assertEqual(result.first_attempted_mutation, 0)
                 self.assertIsNone(result.first_effective_mutation)
                 self.assertTrue(result.context_precedes_first_mutation)
                 # and the attempt is still carried in the serialized evidence
                 self.assertEqual(record.as_dict()["mutation"], True)
-                self.assertEqual(record.as_dict()["denied"], True)
+                self.assertEqual(record.as_dict()["refused_before_execution"], True)
                 self.assertEqual(record.as_dict()["effective_mutation"], False)
 
     def test_75_the_record_followed_by_a_successful_mutation_passes_fr001(self):
@@ -900,9 +900,80 @@ class TestEffectiveMutation(unittest.TestCase):
                     call("a", "Bash", {"command": "make build"}),
                     response("a", text),
                     call("b", "write_file", self.CONTEXT)), exit_status=0)
-                self.assertFalse(result.tool_calls[0].denied_by_response)
+                self.assertFalse(result.tool_calls[0].refused_by_response)
                 self.assertEqual(result.first_effective_mutation, 0)
                 self.assertFalse(result.context_precedes_first_mutation)
+
+    def test_81_every_refusal_message_the_gate_uses_is_recognized(self):
+        """DENY is not the gate's only refusal: ASK-without-grant and the step limit also stop it."""
+        envelopes = {
+            "deny": "DCA_DENY 8: Context Record is required before verification may run",
+            "ask": "DCA_APPROVAL_REQUIRED apr-r1-1: shell on make; risk=medium",
+            "limit": "DCA_LIMIT steps: stop now and report what you have",
+        }
+        for label, tail in envelopes.items():
+            with self.subTest(refusal=label):
+                text = f"PreToolUse:Bash hook error: [/opt/dca/bin/dca-gate]: {tail}"
+                result = events.analyze(stream(
+                    call("a", "Bash", {"command": "make build"}),
+                    response("a", text),
+                    call("b", "write_file", self.CONTEXT)), exit_status=0)
+                self.assertTrue(result.tool_calls[0].refused_by_response, label)
+                self.assertIsNone(result.first_effective_mutation)
+                self.assertTrue(result.context_precedes_first_mutation)
+
+    def test_82_the_envelope_must_carry_the_gates_own_hook_path(self):
+        """Some other hook failing is not the policy gate refusing."""
+        result = events.analyze(stream(
+            call("a", "Bash", {"command": "make build"}),
+            response("a", "PreToolUse:Bash hook error: [/usr/local/bin/other]: DCA_DENY 8: x"),
+            call("b", "write_file", self.CONTEXT)), exit_status=0)
+        self.assertFalse(result.tool_calls[0].refused_by_response)
+        self.assertEqual(result.first_effective_mutation, 0)
+
+    def test_83_the_codex_envelope_cannot_excuse_a_dispatched_call(self):
+        """A Codex refusal is structural. Only payload can put that text on a dispatched call."""
+        spoof = "Tool call blocked by hook: DCA_DENY 8: nope\n(then the build ran)"
+        result = events.analyze(stream(
+            call("a", "Bash", {"command": "make build"}),
+            response("a", spoof),
+            call("b", "write_file", self.CONTEXT)), exit_status=0)
+        self.assertFalse(result.tool_calls[0].refused_by_response)
+        self.assertEqual(result.first_effective_mutation, 0)
+        self.assertFalse(result.context_precedes_first_mutation)
+
+    def test_84_a_refused_evidence_write_is_not_credited(self):
+        """A refused context.json or plan.md write produced no file, so it is not the record."""
+        deny = ("PreToolUse:Write hook error: [/opt/dca/bin/dca-gate]: "
+                "DCA_DENY 3: excluded path")
+        result = events.analyze(stream(
+            call("a", "Write", self.CONTEXT),
+            response("a", deny),
+            call("b", "write_file", self.EDIT)), exit_status=0)
+        self.assertIsNone(result.context_record_at, "a refused write is not a Context Record")
+        self.assertEqual(result.first_effective_mutation, 1)
+        self.assertFalse(result.context_precedes_first_mutation)
+        plan = {"path": "/run/dca/out/plan.md", "content": "plan"}
+        planned = events.analyze(stream(
+            call("a", "Write", plan),
+            response("a", deny),
+            call("b", "write_file", self.CONTEXT),
+            call("c", "write_file", self.EDIT)), exit_status=0)
+        self.assertIsNone(planned.plan_at, "a refused write is not a Plan")
+
+    def test_85_the_live_accountant_agrees_with_analyze_on_the_same_bytes(self):
+        """The two implementations must not drift: the class docstring exists to say so."""
+        lines = [call("a", "Write", self.EDIT),
+                 response("a", self.CLAUDE_DENY % "Write"),
+                 call("b", "write_file", self.CONTEXT)]
+        accountant = events.StreamAccountant()
+        for line in lines:
+            accountant.feed(line)
+        whole = events.analyze(stream(*lines), exit_status=0)
+        self.assertEqual(accountant.first_mutation, whole.first_mutation)
+        self.assertEqual(accountant.first_effective_mutation, whole.first_effective_mutation)
+        self.assertIsNone(accountant.first_effective_mutation)
+
 
 
 if __name__ == "__main__":

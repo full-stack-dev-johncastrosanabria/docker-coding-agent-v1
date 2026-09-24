@@ -109,14 +109,13 @@ RECOGNIZED_EVENTS = OBSERVED_EVENTS | NATIVE_CEILING_EVENTS
 TOOL_CALL_EVENT = "tool_call"
 TERMINAL_EVENT = "stream_stopped"
 #: Types that carry an ATTEMPTED tool call. They are never counted as steps - a blocked call was
-#: not dispatched - but an attempted mutation still means the agent tried to change the workspace,
-#: which is what FR-001's ordering rule is about.
+#: not dispatched - but the attempt is kept, because an attempt is what retries, the reviewer and
+#: researcher invariants and the diagnostics read. An attempt is NOT a change: FR-001 and FR-008
+#: measure ordering from the first EFFECTIVE mutation, the first attempted mutation the gate did not
+#: refuse, because a refused call never reached the workspace. See
+#: `ToolCallRecord.effective_mutation` and data-model *First workspace mutation*.
 ATTEMPT_EVENTS = frozenset({"tool_call", "hook_blocked", "tool_call_confirmation"})
-#: An attempt is not the same as a change. FR-001/FR-008 measure ordering from the first EFFECTIVE
-#: mutation - the first attempted mutation the gate did NOT refuse - because a refused call never
-#: reached the workspace. Every other reader of `mutation` (retries, the reviewer and researcher
-#: invariants, diagnostics) keeps the attempted meaning, and the attempt stays in the record either
-#: way. See `ToolCallRecord.effective_mutation` and data-model *First workspace mutation*.
+
 #: The event that carries a tool call's arguments one fragment at a time, before the
 #: dispatched `tool_call` itself arrives.
 PARTIAL_EVENT = "partial_tool_call"
@@ -256,23 +255,28 @@ class ToolCallRecord:
         self.mutation = self._is_mutation()
 
     @property
-    def denied_structurally(self):
+    def not_dispatched(self):
         """The runtime never dispatched this call, so the workspace cannot have changed.
 
-        `hook_blocked` and `tool_call_confirmation` both land here. Neither can be impersonated from
-        inside the sandbox: they are outer event types, and rule 1 means only `tool_call` dispatches.
+        `hook_blocked` (a gate refusal) and `tool_call_confirmation` (a call awaiting a decision)
+        both land here. Only the first is a refusal, but neither executed, which is all the ordering
+        rules need. Neither can be impersonated from inside the sandbox: they are outer event types,
+        and rule 1 means only `tool_call` dispatches. A confirmation cannot later execute without
+        re-arriving as its own dispatched `tool_call`, and in this harness it cannot be approved at
+        all - the launcher gives the runtime no stdin (`launcher.execute_agent`, `stdin=DEVNULL`), so
+        G3 records it rejected.
         """
         return not self.dispatched
 
     @property
-    def denied_by_response(self):
-        """The call was dispatched, but the gate's own hook refused it before the tool ran."""
-        return self.dispatched and gate_denied_response(self.response, self.name)
+    def refused_by_response(self):
+        """Dispatched, but the gate's hook refused it before the tool ran (Claude's only signal)."""
+        return self.dispatched and gate_refused_response(self.response, self.name)
 
     @property
-    def denied(self):
-        """The gate refused this call, by either backend's reporting."""
-        return self.denied_structurally or self.denied_by_response
+    def refused_before_execution(self):
+        """This call did not reach the workspace: the gate refused it, or it never dispatched."""
+        return self.not_dispatched or self.refused_by_response
 
     @property
     def effective_mutation(self):
@@ -281,7 +285,7 @@ class ToolCallRecord:
         A refused attempt stays fully visible - `mutation`, the record and the denial are all still
         reported - but it changed nothing, so it is not where the ordering rules measure from.
         """
-        return self.mutation and not self.denied
+        return self.mutation and not self.refused_before_execution
 
     def _is_mutation(self):
         lowered = self.name.lower()
@@ -318,7 +322,8 @@ class ToolCallRecord:
         return {"order": self.order, "id": self.id, "name": self.name, "agent": self.agent,
                 "timestamp": self.timestamp, "dispatched": self.dispatched,
                 "mutation": self.mutation, "scratch_only": self.scratch_only,
-                "denied": self.denied, "effective_mutation": self.effective_mutation,
+                "refused_before_execution": self.refused_before_execution,
+                "effective_mutation": self.effective_mutation,
                 "command": self.command}
 
 
@@ -393,29 +398,41 @@ FAILURE_MARKERS = (
 #: carries authority, so the envelope below is matched deliberately narrowly and an unrecognized
 #: response leaves the call EFFECTIVE. The bias is the safe one: a missed refusal keeps FR-001
 #: strict, while a false refusal would excuse a real pre-record mutation.
-GATE_MARKER = "DCA_DENY"
+#: Every message the gate refuses a call with. All three exit 2 and all three mean the tool never
+#: ran: an outright DENY, an ASK with no matching grant, and the class-29 advisory step limit
+#: (`policy_gate.EXIT_DENY`; contract *policy-gate.md*). Matching only the first would leave an
+#: unparseable mutating command - class 28, ASK - scored as a change the workspace never saw.
+GATE_MARKERS = ("DCA_DENY", "DCA_APPROVAL_REQUIRED", "DCA_LIMIT")
+#: The gate's own hook path, as the runtime prints it when the gate refuses. Requiring it narrows
+#: the envelope further; it can only tighten the match, never loosen it.
+GATE_HOOK_PATH = "[/opt/dca/bin/dca-gate]:"
 CLAUDE_DENIAL_PREFIX = "PreToolUse:"
 CLAUDE_DENIAL_INFIX = " hook error:"
-CODEX_DENIAL_PREFIX = "Tool call blocked by hook:"
 
 
-def gate_denied_response(response, tool_name):
+def gate_refused_response(response, tool_name):
     """True when `response` is the gate's refusal of a call on THIS tool, not merely its output.
 
-    `tool_name` must match the tool the Claude envelope names, so a shell command whose stdout
-    happens to quote a refusal cannot excuse itself unless it also impersonates its own tool. The
-    remaining impersonation is closed one layer up, where `dca bench` corroborates the excuse
-    against the host-written gate log (see `bench.corroborated_ordering_point`).
+    Only the Claude shape is matched here. A Codex refusal arrives as a `hook_blocked` event with no
+    `tool_call` at all, so it is already covered structurally by `ToolCallRecord.not_dispatched`;
+    matching its response text as well would add a branch that no genuine refusal can reach and that
+    payload could reach, with nothing to bind it to the tool it claims.
+
+    Three things must all hold: the envelope is at the start of the response, it carries the gate's
+    own hook path, and it names THIS record's tool. A shell command's stdout therefore cannot excuse
+    itself unless it also impersonates its own tool - and `dca bench` will not honour even that
+    unless the host-written gate log records a matching refusal
+    (`bench.corroborated_ordering_point`). That is defence in depth, not proof: see the caveat there.
     """
-    if not isinstance(response, str) or GATE_MARKER not in response:
+    if not isinstance(response, str) or not any(m in response for m in GATE_MARKERS):
         return False
     text = response.strip()
-    if text.startswith(CODEX_DENIAL_PREFIX):
-        return True
-    if text.startswith(CLAUDE_DENIAL_PREFIX) and CLAUDE_DENIAL_INFIX in text:
-        named = text[len(CLAUDE_DENIAL_PREFIX):text.index(CLAUDE_DENIAL_INFIX)].strip()
-        return bool(tool_name) and named.lower() == str(tool_name).lower()
-    return False
+    if not text.startswith(CLAUDE_DENIAL_PREFIX) or CLAUDE_DENIAL_INFIX not in text:
+        return False
+    if GATE_HOOK_PATH not in text:
+        return False
+    named = text[len(CLAUDE_DENIAL_PREFIX):text.index(CLAUDE_DENIAL_INFIX)].strip()
+    return bool(tool_name) and named.lower() == str(tool_name).lower()
 
 
 def response_outcome(text):
@@ -723,16 +740,25 @@ def _session_cost(typed, key):
 
 
 def _account_ordering(result, scratch_dir):
-    """First workspace mutation, and when the Context Record and Plan were written (FR-001)."""
+    """First workspace mutation, and when the Context Record and Plan were written (FR-001).
+
+    `first_mutation` stays the ATTEMPTED point, counting refused calls, because that is what the
+    retry accountant, the reviewer and researcher invariants and the diagnostics read.
+    `first_effective_mutation` is the point the ordering rules measure from. An evidence write the
+    gate refused produced no file, so it is not credited as the record or the plan being written -
+    the same principle, applied to the evidence side.
+    """
     for record in result.tool_calls:
-        if result.context_record_at is None and record.writes(CONTEXT_RECORD, scratch_dir):
-            result.context_record_at = record.order
-        if result.plan_at is None and record.writes(PLAN_FILE, scratch_dir):
-            result.plan_at = record.order
         if result.first_mutation is None and record.mutation:
             result.first_mutation = record.order
         if result.first_effective_mutation is None and record.effective_mutation:
             result.first_effective_mutation = record.order
+        if record.refused_before_execution:
+            continue
+        if result.context_record_at is None and record.writes(CONTEXT_RECORD, scratch_dir):
+            result.context_record_at = record.order
+        if result.plan_at is None and record.writes(PLAN_FILE, scratch_dir):
+            result.plan_at = record.order
 
 
 def _account_retries(result, verification_commands):
@@ -870,8 +896,6 @@ class StreamAccountant:
         self.retries = 0
         self.verification_runs = 0
         self.tokens = 0
-        self.first_mutation = None
-        self.first_effective_mutation = None
         self.context_record_at = None
         self._sessions = {}
         self._streamed = StreamedArguments()
@@ -900,10 +924,6 @@ class StreamAccountant:
             self.steps += 1
             if self.context_record_at is None and record.writes(CONTEXT_RECORD, self.scratch_dir):
                 self.context_record_at = record.order
-            if self.first_mutation is None and record.mutation:
-                self.first_mutation = record.order
-            if self.first_effective_mutation is None and record.effective_mutation:
-                self.first_effective_mutation = record.order
             self._recount_retries()
             return True
         if kind in ATTEMPT_EVENTS and kind != TOOL_CALL_EVENT:
@@ -912,10 +932,6 @@ class StreamAccountant:
                 record = ToolCallRecord(len(self.tool_calls), event, False, self.scratch_dir,
                                         streamed=self._streamed)
                 self.tool_calls.append(record)
-                if self.first_mutation is None and record.mutation:
-                    self.first_mutation = record.order
-                if self.first_effective_mutation is None and record.effective_mutation:
-                    self.first_effective_mutation = record.order
             return True
         if kind == "tool_call_response":
             identifier = event.get("tool_call_id")
@@ -939,6 +955,22 @@ class StreamAccountant:
             self.tokens = sum(item["input"] + item["output"] for item in self._sessions.values())
             return True
         return False
+
+    @property
+    def first_mutation(self):
+        """The first ATTEMPTED mutation so far. Derived, never latched.
+
+        `effective_mutation` depends on a call's response, which arrives after the call, so a latched
+        value computed when the record was appended would be wrong for the one backend the
+        distinction exists for. Deriving both on demand is what keeps this class and `analyze()` from
+        giving two different answers to one question - the drift the class docstring warns about.
+        """
+        return next((r.order for r in self.tool_calls if r.mutation), None)
+
+    @property
+    def first_effective_mutation(self):
+        """The first mutation so far that the gate did not refuse. Derived, never latched."""
+        return next((r.order for r in self.tool_calls if r.effective_mutation), None)
 
     def _recount_retries(self):
         if not self.verification_commands:

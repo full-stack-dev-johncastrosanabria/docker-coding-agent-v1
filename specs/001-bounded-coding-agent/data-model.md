@@ -116,16 +116,23 @@ provenance. The in-VM gate may read its scope set only to classify cooperatively
 | `plan_ref` | string \| null | required for planned tasks: the Plan written to `/run/dca/out/plan.md` before the first workspace mutation (FR-008); `null` for direct tasks |
 | `written_at` | timestamp | must precede the first workspace mutation |
 
-**First workspace mutation**: the first tool call that **actually changed** the workspace or
-candidate repository state - the first *effective* mutation. A call the policy gate refused before
-it ran is an **attempted** mutation: it stays recorded, attributed and reported (`first_attempted_mutation`,
-the per-call `mutation` and `denied` flags, and the gate log), but the workspace never saw
-it, so the ordering rules do not measure from it. Both points are kept: `first_attempted_mutation`
+**First workspace mutation**: the first tool call that **can change** the workspace or candidate
+repository state **and was not refused before it ran** - the first *effective* mutation. A call the policy gate refused before
+it ran is an **attempted** mutation: it stays in the event stream and in the
+gate log, which are the run's retained artifacts, and in the host's own analysis
+(`first_attempted_mutation`, the per-call `mutation` and `refused_before_execution` flags), but the
+workspace never saw it, so the ordering rules do not measure from it. Both points are kept: `first_attempted_mutation`
 and `first_effective_mutation`. FR-001 and FR-008 measure from the effective one; everything else
 that reads mutations - retry accounting, the reviewer and researcher invariants, safety, approval and
 DENY accounting - continues to read attempts, unchanged. `dca bench` honours a refusal read out of a
 tool response only when the host's own gate log records that refusal, because a response is payload;
-a structural `hook_blocked` event needs no corroboration.
+a structural `hook_blocked` event needs no corroboration. That corroboration is defence in
+depth, not proof - the gate log is VM-originated (*policy-gate* contract, *Run state*).
+
+The runtime instruction in `runtime/instructions/root.md` is deliberately **stricter** than this
+scoring rule: it tells the agent the first workspace mutation is the first such call "attempted or
+executed", so the agent should not even attempt one before writing the record. Guidance that keeps
+the agent away from the boundary is not the rule that scores it, and the two are meant to differ.
 
 A call counts as a mutation when it can change the workspace or candidate repository state. That
 includes file writes, edits, deletes, renames
