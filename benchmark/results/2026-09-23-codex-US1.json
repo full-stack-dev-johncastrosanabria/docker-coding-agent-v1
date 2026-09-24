@@ -1,5 +1,5 @@
 {
-  "evidence": "tasks.md T081 (US1 small): quickstart \u00a74 smoke run, then `dca bench --fixtures 'K*'` once",
+  "evidence": "tasks.md T081 (US1 small): quickstart §4 smoke run, then `dca bench --fixtures 'K*'` once",
   "date": "2026-09-23",
   "backend": "codex",
   "trust": "trusted",
@@ -107,7 +107,7 @@
     "pass": true,
     "informational": {
       "k1_oracle_with_run_out": "fail",
-      "note": "Not a quickstart \u00a74 criterion: the smoke run passes no --criteria, so the agent never saw K1's FR-019 criterion. T081 checks K1's baseline in the dca bench run, which passes them."
+      "note": "Not a quickstart §4 criterion: the smoke run passes no --criteria, so the agent never saw K1's FR-019 criterion. T081 checks K1's baseline in the dca bench run, which passes them."
     }
   },
   "bench": {
@@ -532,5 +532,12 @@
     },
     "unscored_runs": 0,
     "basis": "K1-K6 from the original campaign (K6 is a genuine agent wrong answer and stays a failure), K7 and K8 from the continuation"
+  },
+  "fr001_semantics_review": {
+    "reviewed_at_commit": "acd1063",
+    "question": "does scoring FR-001 from the first EFFECTIVE mutation invalidate this 7/8 evidence?",
+    "answer": "No. The change is strictly more permissive: it only excuses a mutation the policy gate refused before it ran. A fixture whose ordering passed under the attempted-mutation rule therefore still passes under the effective-mutation rule. Every fixture in fr001_ordering_by_fixture here is `pass` (K7/K8 via the recorded continuation), so no verdict moves.",
+    "caveat": "these runs predate the gate fix (e6861c9) and the semantic correction, so they are not on the current runtime build. T081 does not require both backends' evidence to come from one build, and the contract does not invalidate this record - but the difference is recorded here rather than left implicit.",
+    "action": "not rerun, per the operator decision and the canonical contract"
   }
 }

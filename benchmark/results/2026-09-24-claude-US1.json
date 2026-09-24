@@ -1,0 +1,362 @@
+{
+  "evidence": "tasks.md T081 (US1 small): quickstart section 4 smoke run, then `dca bench --fixtures 'K*'` once",
+  "date": "2026-09-24",
+  "backend": "claude",
+  "trust": "trusted",
+  "dca_commit": "acd1063f931b8c28bce614e485fcdfdef681a5af",
+  "dca_tree_clean": true,
+  "semantics": "FR-001/FR-008 ordering scored from the first EFFECTIVE workspace mutation (commits 0ea5be6, acd1063). A call the gate refused stays recorded as an attempt and is not where the workspace first changed.",
+  "suite_version": "c83a9cf9df2b984ff1bf9b138f716e10c99c4eb1",
+  "fixtures_unmodified": "suite_version is identical to the 2026-09-23 campaign (c83a9cf9...), so no fixture was changed in response to any failure",
+  "oracle_image": "docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2",
+  "versions": {
+    "sbx": {
+      "exact": "v0.43.0",
+      "minimum": "0.43.0"
+    },
+    "docker_agent": "v1.136.0",
+    "claude_code": {
+      "exact": "2.1.278",
+      "tested": "2.1.277"
+    }
+  },
+  "environment": "restored to the accepted pinned set before the run: docker agent v1.136.0 (Docker Desktop had drifted to v1.140.0; pinned at ~/.docker/cli-plugins without modifying Docker.app), claude_code 2.1.278, sbx v0.43.0, pin_drift empty, Claude sandbox base resolving to the pinned digest, G4 network fingerprint recomputed to sha256:e282594f..., zero leftover sandboxes, 11-12 GiB free throughout (watchdog floor 4 GiB never reached)",
+  "source": "generated locally and ignored by Git: benchmark/results/bench-2026-09-24T18-54-13Z-8e4c/benchmark.json, benchmark/work/bench-2026-09-24T18-54-13Z-8e4c/",
+  "smoke_run": {
+    "backend": "claude",
+    "fixture": "K1",
+    "bench_id": "bench-2026-09-24T15-39-16Z-4e7d",
+    "run_id": "run-2026-09-24T15-39-16Z-9a132e",
+    "seed_commit": "c78ca9c5b1f5c8dc0633300828b10bb8809876b1",
+    "verify_command": "python3 -m unittest tests.test_hours",
+    "exit_status": 0,
+    "final_outcome": "succeeded",
+    "classification": "direct",
+    "run_integrity": {
+      "agent_exit": "normal",
+      "sandbox_created": true,
+      "stream": "complete"
+    },
+    "source": {
+      "bundle_sha256": "4cc7a2f14242e82ce9b886d415be8ceeb362141043eff2cff4a701a52d881be7",
+      "commit": "c78ca9c5b1f5c8dc0633300828b10bb8809876b1",
+      "dirty_paths": [],
+      "ref": "refs/heads/main",
+      "uncommitted_ignored": false
+    },
+    "sandbox_settings": {
+      "mountless": true,
+      "network_policy_digest": "sha256:0bd0831fca0e294234e6cad93e1f466045a598f45c08d6108a06474fcaf9f714",
+      "shared_skills": "off",
+      "ssh_agent_forwarding": false
+    },
+    "change_set_files": [
+      "tests/test_hours.py",
+      "timesheet/hours.py"
+    ],
+    "launcher_checks": [
+      {
+        "id": "python3 -m unittest tests.test_hours",
+        "executed_by": "launcher",
+        "required": true,
+        "result": "pass"
+      }
+    ],
+    "task_branch_present_not_checked_out": true,
+    "host_tree_byte_identical": true,
+    "leftover_sandboxes": 0,
+    "checklist": "every quickstart section 4 item verified: exit 0; run_integrity complete/normal/created; source.ref refs/heads/main with commit and bundle_sha256; the launcher's required re-execution passed; sandbox_settings mountless, shared_skills off, no SSH agent; dca/<run-id> present and not checked out; the fixture tree clean; sbx ls empty"
+  },
+  "bench": {
+    "bench_id": "bench-2026-09-24T18-54-13Z-8e4c",
+    "command": "bin/dca bench --backend claude --trust trusted --fixtures 'K*'",
+    "repeat": 1,
+    "started_at": "2026-09-24T18:54:13Z",
+    "finished_at": "2026-09-24T19:06:45Z",
+    "passed": 7,
+    "failed": 1,
+    "blocked": 0,
+    "total": 8,
+    "runs": [
+      {
+        "fixture": "K1",
+        "run_id": "run-2026-09-24T18-54-14Z-25c2a9",
+        "seed_commit": "c78ca9c5b1f5c8dc0633300828b10bb8809876b1",
+        "result": "passed",
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "verification_type": "deterministic",
+        "oracle": "pass",
+        "cleanup": "ok",
+        "tool_calls": 10,
+        "duration_seconds": 99.4,
+        "tokens": 322170,
+        "context_record_at": 3,
+        "first_attempted_mutation": 4,
+        "first_effective_mutation": 4,
+        "gate_refusals": [],
+        "fr001_ordering": "pass",
+        "reasons": [],
+        "violations": []
+      },
+      {
+        "fixture": "K2",
+        "run_id": "run-2026-09-24T18-55-55Z-88cf69",
+        "seed_commit": "b53ded6e2143a4c6f1810a690f10cf89c59d2326",
+        "result": "passed",
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "verification_type": "deterministic",
+        "oracle": "pass",
+        "cleanup": "ok",
+        "tool_calls": 9,
+        "duration_seconds": 87.2,
+        "tokens": 282564,
+        "context_record_at": 2,
+        "first_attempted_mutation": 3,
+        "first_effective_mutation": 3,
+        "gate_refusals": [],
+        "fr001_ordering": "pass",
+        "reasons": [],
+        "violations": []
+      },
+      {
+        "fixture": "K3",
+        "run_id": "run-2026-09-24T18-57-24Z-79baa7",
+        "seed_commit": "4da7c553858d192087136b8e4d348b01ee1397f0",
+        "result": "passed",
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "verification_type": "deterministic",
+        "oracle": "pass",
+        "cleanup": "ok",
+        "tool_calls": 13,
+        "duration_seconds": 90.8,
+        "tokens": 328097,
+        "context_record_at": 6,
+        "first_attempted_mutation": 7,
+        "first_effective_mutation": 7,
+        "gate_refusals": [],
+        "fr001_ordering": "pass",
+        "reasons": [],
+        "violations": []
+      },
+      {
+        "fixture": "K4",
+        "run_id": "run-2026-09-24T18-58-56Z-190ffd",
+        "seed_commit": "ab700e8a9ee00ee1d1449bdf2985163acfb65b2e",
+        "result": "passed",
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "verification_type": "deterministic",
+        "oracle": "pass",
+        "cleanup": "ok",
+        "tool_calls": 10,
+        "duration_seconds": 73.3,
+        "tokens": 282015,
+        "context_record_at": 3,
+        "first_attempted_mutation": 4,
+        "first_effective_mutation": 4,
+        "gate_refusals": [],
+        "fr001_ordering": "pass",
+        "reasons": [],
+        "violations": []
+      },
+      {
+        "fixture": "K5",
+        "run_id": "run-2026-09-24T19-00-12Z-07ffd7",
+        "seed_commit": "18a39a6cae8c2d9e190571947f8c7ed817c5519e",
+        "result": "passed",
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "verification_type": "alternative",
+        "oracle": "pass",
+        "cleanup": "ok",
+        "tool_calls": 13,
+        "duration_seconds": 101.4,
+        "tokens": 421091,
+        "context_record_at": 7,
+        "first_attempted_mutation": 6,
+        "first_effective_mutation": 8,
+        "gate_refusals": [
+          {
+            "class": 8,
+            "tool": "Bash"
+          }
+        ],
+        "fr001_ordering": "pass",
+        "reasons": [],
+        "violations": []
+      },
+      {
+        "fixture": "K6",
+        "run_id": "run-2026-09-24T19-01-55Z-8f9135",
+        "seed_commit": "16cf29abbdf3830e9b4e7d8c35fe6f03841275fc",
+        "result": "passed",
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "verification_type": "deterministic",
+        "oracle": "pass",
+        "cleanup": "ok",
+        "tool_calls": 14,
+        "duration_seconds": 82.6,
+        "tokens": 273320,
+        "context_record_at": 6,
+        "first_attempted_mutation": 7,
+        "first_effective_mutation": 7,
+        "gate_refusals": [],
+        "fr001_ordering": "pass",
+        "reasons": [],
+        "violations": []
+      },
+      {
+        "fixture": "K7",
+        "run_id": "run-2026-09-24T19-03-19Z-a2d7e1",
+        "seed_commit": "d742390d56315c5cd8dc2a9477df8c63e275694c",
+        "result": "passed",
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "verification_type": "deterministic",
+        "oracle": "pass",
+        "cleanup": "ok",
+        "tool_calls": 8,
+        "duration_seconds": 84.7,
+        "tokens": 318819,
+        "context_record_at": 3,
+        "first_attempted_mutation": 4,
+        "first_effective_mutation": 4,
+        "gate_refusals": [],
+        "fr001_ordering": "pass",
+        "reasons": [],
+        "violations": []
+      },
+      {
+        "fixture": "K8",
+        "run_id": "run-2026-09-24T19-04-46Z-40054f",
+        "seed_commit": "12528e1b3cfaa84fbc8c76c27ada9d1d7f479b58",
+        "result": "failed",
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "planned",
+        "expected_classification": "direct",
+        "verification_type": "deterministic",
+        "oracle": "fail",
+        "cleanup": "ok",
+        "tool_calls": 23,
+        "duration_seconds": 118.3,
+        "tokens": 138511,
+        "context_record_at": 7,
+        "first_attempted_mutation": 8,
+        "first_effective_mutation": 8,
+        "gate_refusals": [],
+        "fr001_ordering": "pass",
+        "reasons": [
+          "oracle fail"
+        ],
+        "violations": []
+      }
+    ]
+  },
+  "fr001_ordering_by_fixture": {
+    "K1": "pass",
+    "K2": "pass",
+    "K3": "pass",
+    "K4": "pass",
+    "K5": "pass",
+    "K6": "pass",
+    "K7": "pass",
+    "K8": "pass"
+  },
+  "fr001_live_proof": {
+    "fixture": "K5",
+    "run_id": "run-2026-09-24T19-00-12Z-07ffd7",
+    "what_happened": "the agent tried to write the Context Record with a shell heredoc that also piped the file through `python3 -c` to validate it. python3 is not a provably read-only program, so the whole command classified as a mutation and the gate refused it (class 8) at tool call 6, one call before the Context Record was written with the Write tool at call 7.",
+    "first_attempted_mutation": 6,
+    "context_record_at": 7,
+    "first_effective_mutation": 8,
+    "old_semantics": "FAIL - the attempted mutation at 6 preceded the record at 7",
+    "new_semantics": "PASS - the refused call never reached the workspace; the first effective mutation is 8",
+    "corroboration": "the host-written gate log records deny class 8 on Bash, so the response-borne refusal was corroborated and spent",
+    "significance": "this is the live production confirmation that the replay proof matches production. The focused K1 runs never exercised it, because in those the model wrote the record before touching anything (gate log all-allow)."
+  },
+  "k1_baseline_recorded": true,
+  "k1_fr019": {
+    "baseline": [
+      {
+        "id": "hours-tests",
+        "command_or_method": "python3 -m unittest tests.test_hours",
+        "required": true,
+        "result": "pass",
+        "after_last_change": false,
+        "executed_by": "agent"
+      },
+      {
+        "id": "full-suite",
+        "command_or_method": "python3 -m unittest",
+        "required": false,
+        "result": "fail",
+        "after_last_change": false,
+        "executed_by": "agent"
+      }
+    ],
+    "verdict": "PASS - the pre-existing unrelated failure is recorded in verification.baseline as not-required and before the last change"
+  },
+  "sc010_plan_free": 7,
+  "invariant_violations": [],
+  "cleanup_failures": 0,
+  "leftover_sandboxes": 0,
+  "small_threshold": {
+    "applicable": 8,
+    "min_pass": 7
+  },
+  "failures": [
+    {
+      "fixture": "K8",
+      "classification": "B - agent/model failure",
+      "detail": "the agent classified a plan-free task as `planned` (expected `direct`), so the oracle failed. classification_mismatches=1, no invariant violations, outcome still succeeded, cleanup ok.",
+      "action": "none. Not a product defect and not a fixture defect; the fixture and oracle behaved as specified. K8 was not modified."
+    }
+  ],
+  "observation_not_a_blocker": {
+    "what": "the gate's pre-record refusal over-reaches on a bundled command",
+    "detail": "K5's refused call was the agent writing the Context Record itself, bundled with a `python3 -c` JSON validation. Because python3 is not in the read-only program set, the whole command counted as a mutation and was refused, and the refusal message asked for the very record the command was writing.",
+    "why_not_fixed": "the refusal is a cooperative, recoverable control and the agent recovered in one step with the Write tool; K5 passed. Adding python3 to the read-only set would be a safety-relevant loosening. Pre-existing behaviour, out of T081's scope, recorded here as harness-improvement input."
+  },
+  "prior_attempt_infrastructure_invalid": {
+    "bench_id": "bench-2026-09-24T15-42-07Z-a0f9",
+    "started_at": "2026-09-24T15:42:07Z",
+    "result": "0/8, every fixture `blocked` with 0 tool calls and 0 tokens",
+    "cause": "the Claude subscription session limit was exhausted: every run's stream ends with agent_choice \"You've hit your session limit - resets 6:50pm (UTC)\". The launcher behaved correctly throughout (preconditions PASS, sandbox READY, agent DONE in 3s, verification PASS, cleanup PASS).",
+    "classification": "D - infrastructure/transient. Not a product defect, not an agent failure (the model never ran), not a fixture defect (the fixtures were never reached).",
+    "disposition": "discarded as infrastructure-invalid, not scored. No fixture, oracle or implementation change was made. The campaign was rerun in full - not selectively - once the quota window reset at 18:50 UTC.",
+    "disk": "not a factor: free disk never fell below 10 GiB and the 4 GiB watchdog never fired"
+  },
+  "codex_evidence": {
+    "status": "not rerun, per the current instruction and the canonical contract",
+    "recorded_score": "7/8 (benchmark/results/2026-09-23-codex-US1.json, current_verdict PASS)",
+    "why_still_valid": "the FR-001 semantic change is strictly more permissive - it only excuses calls the gate refused - so a fixture that passed the ordering check under the attempted-mutation rule cannot fail it under the effective-mutation rule. Codex's fr001_ordering_by_fixture was all-pass, so its verdict is unchanged. T081 does not require both backends' evidence to come from the same runtime build.",
+    "caveat": "those codex runs predate the gate fix (e6861c9) and this semantic change, so they are not on the current runtime build. Recorded here explicitly so the decision is visible rather than implied."
+  },
+  "verdict": "PASS",
+  "verdict_reasons": [
+    "quickstart section 4 smoke run: every checklist item passed",
+    "`dca bench --fixtures 'K*'` once: 7/8 small fixtures passed, meeting the 7/8 threshold",
+    "FR-001 ordering passes for all 8 fixtures, including K5 where the gate refused a premature mutation",
+    "K1's FR-019 baseline records the pre-existing failure as pre-existing",
+    "zero invariant violations, zero cleanup failures, zero leftover sandboxes"
+  ]
+}

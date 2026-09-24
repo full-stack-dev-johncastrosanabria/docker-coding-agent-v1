@@ -1,5 +1,5 @@
 {
-  "evidence": "tasks.md T081 (US1 small): quickstart \u00a74 smoke run, then `dca bench --fixtures 'K*'` once",
+  "evidence": "tasks.md T081 (US1 small): quickstart §4 smoke run, then `dca bench --fixtures 'K*'` once",
   "date": "2026-09-23",
   "backend": "claude",
   "trust": "trusted",
@@ -103,7 +103,7 @@
     "pass": true,
     "informational": {
       "k1_oracle_with_run_out": "fail",
-      "note": "Not a quickstart \u00a74 criterion: the smoke run passes no --criteria, so the agent never saw K1's FR-019 criterion. T081 checks K1's baseline in the dca bench run, which passes them."
+      "note": "Not a quickstart §4 criterion: the smoke run passes no --criteria, so the agent never saw K1's FR-019 criterion. T081 checks K1's baseline in the dca bench run, which passes them."
     }
   },
   "bench": {
@@ -532,12 +532,17 @@
     }
   ],
   "current_verdict": {
-    "verdict": "OPEN",
-    "small_fixtures_passed": "not established",
-    "reason": "K7 is fixed. K1 still fails FR-001 ordering on the corrected runtime, so no valid 7/8 exists on one runtime.",
+    "verdict": "SUPERSEDED",
+    "small_fixtures_passed": "not established on this runtime",
+    "reason": "superseded by the 2026-09-24 current-runtime campaign; see superseded_by",
     "threshold": {
       "applicable": 8,
       "min_pass": 7
     }
+  },
+  "superseded_by": {
+    "file": "benchmark/results/2026-09-24-claude-US1.json",
+    "reason": "T081's Claude evidence was re-earned in full on the current runtime (commit acd1063) after the FR-001 effective-mutation correction. That fresh campaign is 7/8 with FR-001 ordering passing for all eight fixtures. Nothing from this record is reused: no run here counts toward the closing score.",
+    "this_record_keeps": "the diagnostic history - the original 6/8 campaign, the xargs re-score, and the two continuations that showed a runtime-text fix could not move K1 - which is why the ordering rule itself was corrected."
   }
 }
