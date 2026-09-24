@@ -1,0 +1,32 @@
+diff --git a/README.md b/README.md
+index 31347ad..fa1a041 100644
+--- a/README.md
++++ b/README.md
+@@ -10,6 +10,11 @@ add up to it exactly:
+     >>> split_amount(90, 3)
+     [30, 30, 30]
+ 
++When the total does not divide evenly, the leftover cents go to the first parts, one cent each:
++
++    >>> split_amount(100, 3)
++    [34, 33, 33]
++
+ `parts` must be at least 1 and the total must not be negative; anything else raises `ValueError`.
+ 
+ ## Development
+diff --git a/tests/test_amounts.py b/tests/test_amounts.py
+index 4b930f3..0e3b177 100644
+--- a/tests/test_amounts.py
++++ b/tests/test_amounts.py
+@@ -14,6 +14,11 @@ class TestSplitAmount(unittest.TestCase):
+                 self.assertEqual(len(result), parts)
+                 self.assertEqual(sum(result), total)
+ 
++    def test_an_uneven_split_differs_by_at_most_one_cent(self):
++        result = split_amount(100, 3)
++        self.assertEqual(sum(result), 100)
++        self.assertLessEqual(max(result) - min(result), 1)
++
+     def test_invalid_arguments_are_rejected(self):
+         for total, parts in ((10, 0), (-1, 2)):
+             with self.subTest(total=total, parts=parts), self.assertRaises(ValueError):

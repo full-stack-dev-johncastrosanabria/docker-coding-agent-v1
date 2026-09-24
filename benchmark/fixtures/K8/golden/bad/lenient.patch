@@ -1,0 +1,19 @@
+diff --git a/settings/values.py b/settings/values.py
+index c172029..9fc40a8 100644
+--- a/settings/values.py
++++ b/settings/values.py
+@@ -2,12 +2,8 @@
+ 
+ 
+ def parse_bool(text):
+-    """"true" is True and "false" is False. Anything else raises ValueError."""
+-    if text == "true":
+-        return True
+-    if text == "false":
+-        return False
+-    raise ValueError(f"not a boolean: {text!r}")
++    """True for "true", "yes" or "1", in any case; everything else is False."""
++    return text.strip().lower() in ("true", "yes", "1")
+ 
+ 
+ def parse_port(text):

@@ -1,0 +1,17 @@
+diff --git a/timesheet/hours.py b/timesheet/hours.py
+index cc9ed37..9a923f2 100644
+--- a/timesheet/hours.py
++++ b/timesheet/hours.py
+@@ -7,10 +7,8 @@ def total_minutes(entries):
+     Each entry is a (start, end) pair of "HH:MM" clock times on the same day, with end after
+     start. An empty timesheet totals 0.
+     """
+-    total = 0
+-    for start, end in entries:
+-        total = _minutes(end) - _minutes(start)
+-    return total
++    ordered = sorted(entries)
++    return _minutes(ordered[-1][1]) - _minutes(ordered[0][0])
+ 
+ 
+ def _minutes(clock):

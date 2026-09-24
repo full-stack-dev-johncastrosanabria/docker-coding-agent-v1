@@ -12,6 +12,11 @@ isolate the cause, then change the smallest thing that removes it.
 
 Run the relevant checks **before** making any change and record their results as the baseline.
 
+Run them after the Context Record is written, not before. A baseline run is a verification command,
+and a verification command counts as the first workspace mutation, so the Context Record
+(`/run/dca/out/context.json`, see the verification skill) has to exist first. The order is: Context
+Record, baseline, change. Report the baseline under `verification.baseline` in the receipt.
+
 This is what separates "my change broke this" from "this was already broken", and there is no way
 to recover the distinction afterwards. Without a baseline, a pre-existing failure looks exactly like
 a regression you introduced, and a regression you introduced looks exactly like a pre-existing

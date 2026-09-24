@@ -1,0 +1,13 @@
+{
+  "_comment": "Rejected: the change is right, but the baseline holds only the task's own passing tests, so the pre-existing failure is not distinguishable from one the change introduced (FR-019).",
+  "final_outcome": "succeeded",
+  "verification": {
+    "type": "deterministic",
+    "baseline": [
+      {"id": "hours tests (before the change)", "command_or_method": "python3 -m unittest tests.test_hours", "required": true, "executed_by": "agent", "after_last_change": false, "result": "pass", "exit_status": 0}
+    ],
+    "checks": [
+      {"id": "python3 -m unittest tests.test_hours", "command_or_method": "python3 -m unittest tests.test_hours", "required": true, "executed_by": "launcher", "after_last_change": true, "result": "pass", "exit_status": 0}
+    ]
+  }
+}

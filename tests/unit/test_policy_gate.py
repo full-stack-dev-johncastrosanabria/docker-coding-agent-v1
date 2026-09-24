@@ -543,5 +543,285 @@ class LogHygiene(GateHarness):
                 self.assertIn(field, entry)
 
 
+VALID_RECORD = {"classification": {"value": "direct", "reason": "one bug in one file"},
+                "repository_map": {"scope": "minimal", "target_files": ["src/app.py"]},
+                "verification_approach": {"type": "deterministic",
+                                         "checks": [{"id": "make test", "required": True}]},
+                "plan_ref": None}
+#: Verification and baseline commands, spelled the ways the recorded runs spelled them.
+VERIFY_COMMANDS = ("make test", "python3 -m unittest discover -s tests -v 2>&1 | tail -50",
+                   "cd /workspace && pytest -q", "npm test",
+                   "find . -name '*.py' | sort; python3 -m unittest tests.test_hours")
+INSPECTION_COMMANDS = ("ls -la", "cat src/app.py", "git status --porcelain", "git log --oneline -5",
+                       'find . -name "*.py" | xargs grep -l "x"', "python3 --version",
+                       "grep -rn foo src && echo done", "cd /workspace && ls")
+DENIED_MESSAGE = "Context Record is required before verification may run"
+
+
+class ContextRecordFirst(GateHarness):
+    """T081 / FR-001: verification, and any workspace change, wait for the Context Record.
+
+    The gate is the host-side half of the ordering rule: a run cannot execute a baseline, a test or
+    an edit before the record exists, whatever the model decides. Reads, git inspection and writes
+    to the scratch dir stay open so the agent can research and write the record.
+    """
+
+    def record_path(self):
+        return self.prefix / "run" / "dca" / "out" / "context.json"
+
+    def stage_record(self, document=VALID_RECORD, raw=None):
+        self.record_path().write_text(raw if raw is not None else json.dumps(document),
+                                      encoding="utf-8")
+
+    def both(self, tool_claude, tool_codex, tool_input):
+        """The same request, as each backend's native hook payload."""
+        return (self.run_gate(self.claude(tool_claude, tool_input)),
+                self.run_gate(self.codex(tool_codex, tool_input)))
+
+    def assertOrderingDeny(self, result, action_class):
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn(f"DCA_DENY {action_class}: {DENIED_MESSAGE}", result.stderr)
+        self.assertIn("/run/dca/out/context.json", result.stderr)
+        self.assertEqual(self.approvals(), [], "an ordering refusal is not an approval request")
+
+    def test_70_reading_the_repository_before_the_record_stays_allowed(self):
+        target = str(self.workspace / "src" / "app.py")
+        for claude_tool, codex_tool, tool_input in (
+                ("Read", "read_file", {"file_path": target, "path": target}),
+                ("Grep", "search_files_content", {"pattern": "x", "path": str(self.workspace)}),
+                ("Glob", "list_directory", {"pattern": "*.py", "path": str(self.workspace)}),
+                ("Read", "read_multiple_files", {"paths": [target], "path": target}),
+                ("Glob", "directory_tree", {"path": str(self.workspace)})):
+            with self.subTest(tool=codex_tool):
+                claude, codex = self.both(claude_tool, codex_tool, tool_input)
+                self.assertAllowClaude(claude)
+                self.assertAllowCodex(codex)
+
+    def test_71_git_and_shell_inspection_before_the_record_stays_allowed(self):
+        for command in INSPECTION_COMMANDS:
+            with self.subTest(command=command):
+                claude, codex = self.both("Bash", "shell", {"command": command})
+                self.assertAllowClaude(claude)
+                self.assertAllowCodex(codex)
+        # Writing the record, and other run evidence, is exactly what must stay possible.
+        scratch = self.prefix / "run" / "dca" / "out"
+        for command in (f"mkdir -p {scratch}",
+                        f"cat > {scratch}/context.json <<'EOF'\n{{}}\nEOF",
+                        f"mkdir -p {scratch} && date -u +%Y-%m-%dT%H:%M:%SZ"):
+            with self.subTest(command=command):
+                self.assertAllowClaude(self.run_gate(self.claude("Bash", {"command": command})))
+        self.assertAllowClaude(self.run_gate(self.claude(
+            "Write", {"file_path": str(scratch / "context.json")})))
+        self.assertAllowCodex(self.run_gate(self.codex(
+            "write_file", {"path": str(scratch / "plan.md")})))
+        self.assertAllowCodex(self.run_gate(self.codex(
+            "create_directory", {"paths": [str(scratch)]})))
+
+    def test_72_a_verification_command_before_the_record_is_denied_for_both_backends(self):
+        for command in VERIFY_COMMANDS:
+            with self.subTest(command=command):
+                claude, codex = self.both("Bash", "shell", {"command": command})
+                self.assertOrderingDeny(claude, 8)
+                self.assertOrderingDeny(codex, 8)
+        entry = self.log()[-1]
+        self.assertEqual((entry["class"], entry["decision"]), (8, "deny"))
+
+    def test_72a_the_declared_verification_command_is_no_exception(self):
+        # class 8 allows the declared command - but only once the record exists.
+        claude, codex = self.both("Bash", "shell", {"command": "make test"})
+        self.assertOrderingDeny(claude, 8)
+        self.assertOrderingDeny(codex, 8)
+
+    def test_73_the_same_commands_are_allowed_once_the_record_exists(self):
+        self.stage_record()
+        for command in VERIFY_COMMANDS:
+            with self.subTest(command=command):
+                claude, codex = self.both("Bash", "shell", {"command": command})
+                self.assertAllowClaude(claude)
+                self.assertAllowCodex(codex)
+        self.assertEqual(self.log()[-1]["decision"], "allow")
+
+    def test_74_a_workspace_change_before_the_record_is_denied_and_allowed_after(self):
+        target = str(self.workspace / "src" / "app.py")
+        cases = (("Write", "write_file", {"file_path": target, "path": target}, 3),
+                 ("Edit", "edit_file", {"file_path": target, "path": target}, 3),
+                 ("Write", "create_directory", {"path": str(self.workspace / "new"),
+                                                "paths": [str(self.workspace / "new")]}, 3),
+                 ("Bash", "shell", {"command": "sed -i s/1/2/ src/app.py"}, 8),
+                 ("Bash", "shell", {"command": "rm -f src/app.py"}, 8),
+                 ("Bash", "shell", {"command": "touch src/new.py"}, 8),
+                 ("Bash", "shell", {"command": "echo x > src/app.py"}, 8))
+        for claude_tool, codex_tool, tool_input, action_class in cases:
+            with self.subTest(codex_tool=codex_tool, tool_input=tool_input):
+                claude, codex = self.both(claude_tool, codex_tool, tool_input)
+                self.assertOrderingDeny(claude, action_class)
+                self.assertOrderingDeny(codex, action_class)
+        self.stage_record()
+        for claude_tool, codex_tool, tool_input, _ in cases:
+            with self.subTest(after_record=codex_tool, tool_input=tool_input):
+                claude, codex = self.both(claude_tool, codex_tool, tool_input)
+                self.assertAllowClaude(claude)
+                self.assertAllowCodex(codex)
+
+    def test_75_a_missing_or_unusable_record_fails_closed(self):
+        variants = {
+            "empty file": "",
+            "not json": "{classification:",
+            "not an object": "[]",
+            "empty object": "{}",
+            "duplicate key": '{"classification": {}, "classification": {}}',
+            "no reason": json.dumps(dict(VALID_RECORD, classification={"value": "direct"})),
+            "blank reason": json.dumps(dict(VALID_RECORD,
+                                            classification={"value": "direct", "reason": "  "})),
+            "bad classification": json.dumps(dict(
+                VALID_RECORD, classification={"value": "trivial", "reason": "r"})),
+            "no repository map": json.dumps({k: v for k, v in VALID_RECORD.items()
+                                             if k != "repository_map"}),
+            "no verification approach": json.dumps({k: v for k, v in VALID_RECORD.items()
+                                                    if k != "verification_approach"}),
+            "unusable approach": json.dumps(dict(VALID_RECORD,
+                                                 verification_approach={"type": "none-adequate"})),
+            "oversized": '{"pad": "' + "x" * 1_100_000 + '"}',
+        }
+        for name, raw in variants.items():
+            with self.subTest(record=name):
+                self.stage_record(raw=raw)
+                self.assertOrderingDeny(self.run_gate(self.claude("Bash", {"command": "make test"})), 8)
+                self.assertAllowClaude(self.run_gate(self.claude(
+                    "Read", {"file_path": str(self.workspace / "src" / "app.py")})))
+        with self.subTest(record="a directory"):
+            self.record_path().unlink()
+            self.record_path().mkdir()
+            self.assertOrderingDeny(self.run_gate(self.codex("shell", {"command": "make test"})), 8)
+            self.record_path().rmdir()
+        with self.subTest(record="unreadable"):
+            if os.geteuid() == 0:
+                self.skipTest("root reads any file")
+            self.stage_record()
+            self.record_path().chmod(0)
+            self.assertOrderingDeny(self.run_gate(self.claude("Bash", {"command": "make test"})), 8)
+            self.record_path().chmod(0o600)
+
+    def test_76_missing_or_malformed_run_state_still_exits_two(self):
+        self.stage_record()
+        (self.prefix / "run" / "dca" / "run.json").unlink()
+        for payload in (self.claude("Read", {"file_path": "x"}), self.codex("shell", {"command": "ls"})):
+            with self.subTest(payload=payload["tool_name"]):
+                self.assertDeny(self.run_gate(payload))
+        (self.prefix / "run" / "dca" / "run.json").write_text("{broken", encoding="utf-8")
+        self.assertDeny(self.run_gate(self.codex("shell", {"command": "ls"})))
+
+    def test_77_an_unparseable_or_unreadable_shell_call_before_the_record_is_refused(self):
+        for tool_input, action_class in (({"command": "eval $CMD"}, 28), ({"command": "sh -c \"$X\""}, 28),
+                                         ({}, 8), ({"command": "  "}, 8)):
+            with self.subTest(tool_input=tool_input):
+                self.assertOrderingDeny(self.run_gate(self.claude("Bash", tool_input)), action_class)
+
+    def test_78_claude_and_codex_reach_the_same_rule(self):
+        # The same request, with each backend's own tool names and argument keys, gets the same
+        # decision and class both before and after the record exists.
+        target = str(self.workspace / "src" / "app.py")
+        pairs = (({"command": "make test"}, "Bash", {"cmd": "make test"}, "shell"),
+                 ({"command": "ls"}, "Bash", {"command": "ls"}, "shell"),
+                 ({"file_path": target}, "Write", {"path": target}, "write_file"),
+                 ({"file_path": target}, "Edit", {"path": target}, "edit_file"),
+                 ({"file_path": target}, "Read", {"path": target}, "read_file"))
+        def outcome(result):
+            return (result.returncode, self.log()[-1]["class"], self.log()[-1]["decision"])
+        for stage in (False, True):
+            if stage:
+                self.stage_record()
+            for claude_input, claude_tool, codex_input, codex_tool in pairs:
+                with self.subTest(record=stage, tool=claude_tool, input=claude_input):
+                    claude = outcome(self.run_gate(self.claude(claude_tool, claude_input)))
+                    codex = outcome(self.run_gate(self.codex(codex_tool, codex_input)))
+                    self.assertEqual(claude, codex)
+
+    def test_79_the_read_only_roles_keep_their_own_rule_and_may_research_before_the_record(self):
+        target = str(self.workspace / "src" / "app.py")
+        self.assertAllowClaude(self.run_gate(self.claude(
+            "Read", {"file_path": target}, agent_type="dca-researcher")))
+        self.assertAllowCodex(self.run_gate(self.codex(
+            "read_file", {"path": target}, agent_name="reviewer")))
+        result = self.run_gate(self.claude("Write", {"file_path": target}, agent_type="dca-reviewer"))
+        self.assertDeny(result, 27)
+        self.assertNotIn(DENIED_MESSAGE, result.stderr)
+
+    def test_80_delegation_skill_loads_and_the_step_limit_are_unchanged(self):
+        self.assertAllowClaude(self.run_gate(self.claude("Task", {"subagent_type": "dca-researcher"})))
+        self.assertAllowCodex(self.run_gate(self.codex("transfer_task", {"agent": "researcher"})))
+        self.assertAllowClaude(self.run_gate(self.claude("Skill", {"skill": "verification"})))
+        self.assertDeny(self.run_gate(self.claude("Skill", {"skill": "other"})), 26)
+        self.write_run(steps_used=100, step_limit=100)
+        result = self.run_gate(self.claude("Bash", {"command": "ls"}))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("DCA_LIMIT steps", result.stderr)
+
+    def test_81_network_and_sensitive_path_denials_still_win_over_the_ordering_reason(self):
+        self.assertDeny(self.run_gate(self.claude("WebSearch", {"query": "x"})), 30)
+        result = self.run_gate(self.claude("Read", {"file_path": str(self.workspace / ".env")}))
+        self.assertDeny(result, 2)
+        self.stage_record()
+        self.assertDeny(self.run_gate(self.claude("Read", {"file_path": str(self.workspace / ".env")})), 2)
+        self.assertAllowClaude(self.run_gate(self.claude("Write", {"file_path": str(self.workspace / "src" / "app.py")})))
+
+
+def _load(name, path):
+    import importlib.util
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+class OrderingRuleAgreesWithTheHost(GateHarness):
+    """The gate and the host's FR-001 detector are two enforcers of one rule; they must not drift."""
+
+    record_path = ContextRecordFirst.record_path
+    stage_record = ContextRecordFirst.stage_record
+
+    def test_82_the_gate_denies_exactly_what_the_detector_counts_as_a_mutation(self):
+        events = _load("dca_events", ROOT / "src" / "dca" / "events.py")
+        corpus = list(VERIFY_COMMANDS) + list(INSPECTION_COMMANDS) + [
+            "python3 -m unittest", "python3 -c 'print(1)'", "git checkout -b x", "git branch -D x",
+            "git add -A", "npm --version", "node script.js", "./build --version",
+            "find . -name '*.pyc' | xargs rm", "find . | xargs -n 1 sed -i s/a/b/",
+            "cat x > /workspace/out", "echo hi > /dev/null", "sort -o out.txt in.txt", "make",
+            "mkdir -p /workspace/newdir", "true", "cd /workspace", "pwd && ls | head -3"]
+        for command in corpus:
+            line = json.dumps({"type": "tool_call", "agent_name": "root", "tool_call": {
+                "id": "a", "type": "function", "function": {
+                    "name": "shell", "arguments": json.dumps({"cmd": command})}}})
+            text = "\n".join([json.dumps({"type": "stream_started", "session_id": "s"}), line,
+                              json.dumps({"type": "stream_stopped", "session_id": "s",
+                                          "reason": "normal"})]) + "\n"
+            counted = events.analyze(text, exit_status=0).first_mutation is not None
+            denied = self.run_gate(self.codex("shell", {"cmd": command})).returncode == 2
+            with self.subTest(command=command):
+                self.assertEqual(denied, counted)
+
+    def test_83_the_gate_accepts_the_records_the_host_accepts_and_no_others(self):
+        bench = _load("dca_bench", ROOT / "src" / "dca" / "bench.py")
+        records = {"valid": VALID_RECORD, "alternative": dict(VALID_RECORD, verification_approach={
+                       "type": "alternative", "definition": "d", "limitation": "l"}),
+                   "planned": dict(VALID_RECORD, classification={"value": "planned", "reason": "r"}),
+                   "empty": {}, "no reason": dict(VALID_RECORD, classification={"value": "direct"}),
+                   "bad value": dict(VALID_RECORD, classification={"value": "x", "reason": "r"}),
+                   "no map": {k: v for k, v in VALID_RECORD.items() if k != "repository_map"},
+                   "map not object": dict(VALID_RECORD, repository_map=["a"]),
+                   "no approach": {k: v for k, v in VALID_RECORD.items() if k != "verification_approach"},
+                   "none-adequate": dict(VALID_RECORD, verification_approach={"type": "none-adequate"}),
+                   "approach not object": dict(VALID_RECORD, verification_approach="deterministic")}
+        for name, record in records.items():
+            self.stage_record(record)
+            host_accepts = bench._context_record_problem(str(self.record_path())) is None
+            gate_accepts = self.run_gate(self.claude("Bash", {"command": "make test"})).returncode == 0
+            with self.subTest(record=name):
+                self.assertEqual(gate_accepts, host_accepts)
+
+
 if __name__ == "__main__":
     unittest.main()

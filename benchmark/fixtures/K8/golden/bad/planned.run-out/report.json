@@ -1,0 +1,6 @@
+{
+  "_comment": "Rejected: the change is right, but a one-function task was classified planned and produced an explicit plan (SC-010).",
+  "final_outcome": "succeeded",
+  "classification": {"value": "planned", "reason": "changes parsing behavior"},
+  "plan_ref": "/run/dca/out/plan.md"
+}

@@ -1,0 +1,11 @@
+{
+  "_comment": "The Context Record fields K5's oracle reads.",
+  "classification": {
+    "value": "direct",
+    "reason": "one loop in one script"
+  },
+  "verification_approach": {
+    "type": "alternative",
+    "checks": []
+  }
+}

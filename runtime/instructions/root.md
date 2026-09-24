@@ -47,6 +47,12 @@ dependency install, formatter, generator, **build command or verification comman
 read-only inspection, skill loading, delegation, and writes confined to `/run/dca/out/` are not
 mutations.
 
+A baseline run is itself a verification command, so it is a mutation too. Every task therefore goes
+in this order: read and classify, write the Context Record, run the baseline, change, run the final
+checks. Write the Context Record first, then run the baseline, then change anything. The policy gate
+enforces this: until a valid Context Record exists at `/run/dca/out/context.json`, it refuses every
+verification command and every file change, and it allows reading and writing the record.
+
 Before that first mutation, write `/run/dca/out/context.json`:
 
 ```json
@@ -82,7 +88,9 @@ skill.
   **modify no file at all**.
 
 Your own confidence is never verification. Evidence that predates your last change is stale and
-counts as unresolved.
+counts as unresolved. The evidence for a required check is the run made after your last edit. A run
+made before it is the **baseline**: report it under `verification.baseline`, never in
+`verification.checks`.
 
 ## 5. Delegate investigation to the researcher
 

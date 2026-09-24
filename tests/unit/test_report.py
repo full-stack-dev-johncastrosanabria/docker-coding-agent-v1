@@ -252,6 +252,55 @@ class TestSuccess(ReportCase):
         self.assertEqual(checks[0]["executed_by"], "launcher")
         self.assertEqual(built["final_outcome"], "failed")
 
+    # T081 (Claude K7): a pre-change run reported as a REQUIRED check with after_last_change false.
+
+    def test_37a_a_pre_change_run_recorded_as_a_required_check_blocks_success(self):
+        stale = check("unittest-baseline", by="agent", fresh=False)
+        final = check("unittest-final", by="agent", fresh=True)
+        built = self.build(agent=agent_report(checks=[stale, final]),
+                           launcher_checks=[check("make test", by="launcher")])
+        self.assertEqual(built["final_outcome"], "blocked")
+        self.assertIn("unittest-baseline", built["primary_reason"])
+        self.assertIn("stale", built["primary_reason"])
+        self.assertEqual([o["rule"] for o in built["outcome_overrides"]], ["D-FIN.5 / FR-035a"])
+        # The launcher's authoritative pass does not erase the stale agent entry.
+        by_id = {c["id"]: c for c in built["verification"]["checks"]}
+        self.assertFalse(by_id["unittest-baseline"]["after_last_change"])
+        self.assertEqual(by_id["make test"]["executed_by"], "launcher")
+
+    def test_37b_the_same_run_recorded_as_baseline_leaves_success_to_the_final_checks(self):
+        baseline = [check("unittest-baseline", required=False, by="agent", fresh=False)]
+        body = agent_report(checks=[check("unittest-final", by="agent", fresh=True)])
+        body["verification"]["baseline"] = baseline
+        built = self.build(agent=body, launcher_checks=[check("make test", by="launcher")])
+        self.assertEqual(built["final_outcome"], "succeeded")
+        self.assertEqual(built["outcome_overrides"], [])
+        self.assertEqual([c["id"] for c in built["verification"]["baseline"]],
+                         ["unittest-baseline"])
+        self.assertNotIn("unittest-baseline", [c["id"] for c in built["verification"]["checks"]])
+
+    def test_37c_a_baseline_alone_never_satisfies_required_verification(self):
+        body = agent_report(checks=[])
+        body["verification"]["baseline"] = [check("unittest-baseline", by="agent", fresh=False)]
+        built = self.build(agent=body)
+        self.assertEqual(built["final_outcome"], "blocked")
+        self.assertIn("no required check", built["primary_reason"])
+
+    def test_37d_the_launcher_reexecution_stays_authoritative_for_the_same_check(self):
+        # Host authority is unchanged: on the final state, its run replaces the agent's copy of the
+        # same check, in either direction.
+        passing = self.build(agent=agent_report(checks=[check("make test", by="agent", fresh=False)]),
+                             launcher_checks=[check("make test", by="launcher", result="pass")])
+        self.assertEqual(passing["final_outcome"], "succeeded")
+        failing = self.build(agent=agent_report(checks=[check("make test", by="agent", fresh=True)]),
+                             launcher_checks=[check("make test", by="launcher", result="fail")])
+        self.assertEqual(failing["final_outcome"], "failed")
+
+    def test_37e_stale_evidence_with_no_launcher_run_is_never_success(self):
+        built = self.build(agent=agent_report(checks=[check(by="agent", fresh=False)]))
+        self.assertEqual(built["final_outcome"], "blocked")
+        self.assertEqual(report.exit_status(built), 11)
+
     def test_38_an_alternative_approach_can_also_succeed(self):
         built = self.build(agent=agent_report(
             verification_type="alternative",

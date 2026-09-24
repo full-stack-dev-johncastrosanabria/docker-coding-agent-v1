@@ -1,0 +1,543 @@
+{
+  "evidence": "tasks.md T081 (US1 small): quickstart §4 smoke run, then `dca bench --fixtures 'K*'` once",
+  "date": "2026-09-23",
+  "backend": "codex",
+  "trust": "trusted",
+  "dca_commit": "41761e41558d44b0f03ec39a51bd4350c988933c",
+  "dca_tree_clean": true,
+  "rescored_at_commit": "e346cb0",
+  "rescore_note": "The per-fixture acceptance checks were re-applied to the recorded run outputs with the corrected first-mutation detector (xargs fix). FR-001 is judged only from events.jsonl and context.json, and the oracle verdicts are unchanged.",
+  "suite_version": "c83a9cf9df2b984ff1bf9b138f716e10c99c4eb1",
+  "oracle_image": "docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2",
+  "versions": {
+    "sbx": {
+      "exact": "v0.43.0",
+      "minimum": "0.43.0"
+    },
+    "docker_agent": "v1.136.0",
+    "claude_code": {
+      "exact": "2.1.278",
+      "tested": "2.1.277"
+    }
+  },
+  "source": "generated locally and ignored by Git: benchmark/results/bench-2026-09-23T14-28-58Z-fd8c/benchmark.json, benchmark/work/bench-2026-09-23T14-28-58Z-fd8c/ and benchmark/work/US1-smoke-codex/",
+  "smoke_run": {
+    "backend": "codex",
+    "run_id": "run-2026-09-23T14-24-18Z-33e7af",
+    "seed_commit": "c78ca9c5b1f5c8dc0633300828b10bb8809876b1",
+    "verify_command": "python3 -m unittest tests.test_hours",
+    "exit_status": 0,
+    "final_outcome": "succeeded",
+    "classification": {
+      "reason": "One clear bug fix plus a focused regression test with an obvious required unittest verification; no planned criteria apply.",
+      "value": "direct"
+    },
+    "run_integrity": {
+      "agent_exit": "normal",
+      "sandbox_created": true,
+      "stream": "complete"
+    },
+    "source": {
+      "bundle_sha256": "4cc7a2f14242e82ce9b886d415be8ceeb362141043eff2cff4a701a52d881be7",
+      "commit": "c78ca9c5b1f5c8dc0633300828b10bb8809876b1",
+      "dirty_paths": [],
+      "ref": "refs/heads/main",
+      "uncommitted_ignored": false
+    },
+    "sandbox_settings": {
+      "mountless": true,
+      "network_policy_digest": "sha256:93ba3084fbcd7a9339f17a0ea1afe5e95132d759ff3fe6d838b16bb05d50bff6",
+      "shared_skills": "off",
+      "ssh_agent_forwarding": false
+    },
+    "change_set": {
+      "branch": "dca/run-2026-09-23T14-24-18Z-33e7af",
+      "files": [
+        {
+          "path": "tests/test_hours.py",
+          "status": "modified"
+        },
+        {
+          "path": "timesheet/hours.py",
+          "status": "modified"
+        }
+      ]
+    },
+    "launcher_checks": [
+      {
+        "after_last_change": true,
+        "command_or_method": "python3 -m unittest tests.test_hours",
+        "executed_by": "launcher",
+        "exit_status": 0,
+        "id": "python3 -m unittest tests.test_hours",
+        "output_ref": "checks/launcher-1.txt",
+        "required": true,
+        "result": "pass"
+      }
+    ],
+    "baseline": null,
+    "limits_used": {
+      "retries": 0,
+      "steps": 13,
+      "tokens": 7651,
+      "verification_runs": 1
+    },
+    "oracle": "fail",
+    "oracle_detail": "Traceback (most recent call last):\n  File \"/tmp/tmp.Xx3LMTHDyp/tests/test_week.py\", line 12, in test_year_boundary_uses_iso_week_year\n    self.assertEqual(week_label(\"2024-12-30\"), \"2025-W01\")\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: '2024-W53' != '2025-W01'\n- 2024-W53\n+ 2025-W01\n\n\n----------------------------------------------------------------------\nRan 7 tests in 0.003s\n\nFAILED (failures=1)\nverification.baseline has no failing pre-change check covering tests/test_week.py: []\noracle: the verification baseline does not record the pre-existing failure (FR-019)",
+    "fr001_failures": [],
+    "checks": {
+      "exit_0": true,
+      "schema_valid": true,
+      "final_outcome_succeeded": true,
+      "classification_direct": true,
+      "run_integrity": true,
+      "source_ref_branch": true,
+      "source_commit_is_seed": true,
+      "bundle_sha256_set": true,
+      "verification_deterministic": true,
+      "required_checks_pass_from_launcher": true,
+      "sandbox_settings": true,
+      "change_set_in_scope": true,
+      "task_branch_present": true,
+      "task_branch_not_checked_out": true,
+      "host_tree_byte_identical": true,
+      "no_leftover_sandbox": true,
+      "fr001_ordering": true
+    },
+    "pass": true,
+    "informational": {
+      "k1_oracle_with_run_out": "fail",
+      "note": "Not a quickstart §4 criterion: the smoke run passes no --criteria, so the agent never saw K1's FR-019 criterion. T081 checks K1's baseline in the dca bench run, which passes them."
+    }
+  },
+  "bench": {
+    "bench_id": "bench-2026-09-23T14-28-58Z-fd8c",
+    "command": "bin/dca bench --backend both --trust trusted --fixtures 'K*'",
+    "repeat": 1,
+    "passed_as_scored": 5,
+    "passed_rescored": 5,
+    "completed": 6,
+    "total": 8,
+    "runs": [
+      {
+        "fixture": "K1",
+        "seed_commit": "c78ca9c5b1f5c8dc0633300828b10bb8809876b1",
+        "run_id": "run-2026-09-23T14-42-58Z-01336c",
+        "result": "passed",
+        "exit_status": 0,
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": "deterministic",
+        "launcher_verification": "pass",
+        "oracle": "pass",
+        "oracle_detail": null,
+        "fr001_ordering": "pass",
+        "baseline": [
+          {
+            "after_last_change": false,
+            "command_or_method": "python3 -m unittest tests.test_hours",
+            "executed_by": "agent",
+            "exit_status": 0,
+            "id": "hours-tests",
+            "required": true,
+            "result": "pass"
+          },
+          {
+            "after_last_change": false,
+            "command_or_method": "python3 -m unittest",
+            "executed_by": "agent",
+            "exit_status": 1,
+            "id": "full-unittest-baseline",
+            "output_ref": "Pre-existing failure: tests.test_week.TestWeekLabel.test_year_boundary_uses_iso_week_year expected 2025-W01 but got 2024-W53.",
+            "required": false,
+            "result": "fail"
+          }
+        ],
+        "alternative": null,
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [],
+        "violations": [],
+        "reasons": [],
+        "rescored_with_fix": {
+          "result": "passed",
+          "reasons": []
+        },
+        "classification_of_failure": null,
+        "duration_seconds": 113.1,
+        "tool_calls": 16,
+        "retries": 0,
+        "tokens": 9734
+      },
+      {
+        "fixture": "K2",
+        "seed_commit": "b53ded6e2143a4c6f1810a690f10cf89c59d2326",
+        "run_id": "run-2026-09-23T14-44-53Z-f7ee29",
+        "result": "passed",
+        "exit_status": 0,
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": "deterministic",
+        "launcher_verification": "pass",
+        "oracle": "pass",
+        "oracle_detail": null,
+        "fr001_ordering": "pass",
+        "baseline": null,
+        "alternative": null,
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [],
+        "violations": [],
+        "reasons": [],
+        "rescored_with_fix": {
+          "result": "passed",
+          "reasons": []
+        },
+        "classification_of_failure": null,
+        "duration_seconds": 114.7,
+        "tool_calls": 12,
+        "retries": 0,
+        "tokens": 8427
+      },
+      {
+        "fixture": "K3",
+        "seed_commit": "4da7c553858d192087136b8e4d348b01ee1397f0",
+        "run_id": "run-2026-09-23T14-46-49Z-00b043",
+        "result": "passed",
+        "exit_status": 0,
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": "deterministic",
+        "launcher_verification": "pass",
+        "oracle": "pass",
+        "oracle_detail": null,
+        "fr001_ordering": "pass",
+        "baseline": null,
+        "alternative": null,
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [],
+        "violations": [],
+        "reasons": [],
+        "rescored_with_fix": {
+          "result": "passed",
+          "reasons": []
+        },
+        "classification_of_failure": null,
+        "duration_seconds": 110.3,
+        "tool_calls": 13,
+        "retries": 0,
+        "tokens": 8279
+      },
+      {
+        "fixture": "K4",
+        "seed_commit": "ab700e8a9ee00ee1d1449bdf2985163acfb65b2e",
+        "run_id": "run-2026-09-23T14-48-42Z-8fca4b",
+        "result": "passed",
+        "exit_status": 0,
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": "deterministic",
+        "launcher_verification": "pass",
+        "oracle": "pass",
+        "oracle_detail": null,
+        "fr001_ordering": "pass",
+        "baseline": null,
+        "alternative": null,
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [],
+        "violations": [],
+        "reasons": [],
+        "rescored_with_fix": {
+          "result": "passed",
+          "reasons": []
+        },
+        "classification_of_failure": null,
+        "duration_seconds": 111.6,
+        "tool_calls": 14,
+        "retries": 0,
+        "tokens": 8509
+      },
+      {
+        "fixture": "K5",
+        "seed_commit": "18a39a6cae8c2d9e190571947f8c7ed817c5519e",
+        "run_id": "run-2026-09-23T14-50-36Z-c6a028",
+        "result": "passed",
+        "exit_status": 0,
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": "alternative",
+        "launcher_verification": "none",
+        "oracle": "pass",
+        "oracle_detail": null,
+        "fr001_ordering": "pass",
+        "baseline": null,
+        "alternative": {
+          "alternative_definition": "After editing /workspace/notes.py, run a shell command that writes /tmp/notes-skip-blank-sample.txt containing: Alpha, an empty line, a whitespace-only line, '  Beta  ', and Gamma; then run python3 /workspace/notes.py /tmp/notes-skip-blank-sample.txt and verify stdout exactly equals $'1. Alpha\\n2.   Beta\\n3. Gamma'.",
+          "limitation": "deterministic repository verification for the affected behavior was unavailable because this repository has no automated tests and the task forbids adding any, so this checks the specified behavior with a representative manual sample rather than a maintained test suite."
+        },
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [],
+        "violations": [],
+        "reasons": [],
+        "rescored_with_fix": {
+          "result": "passed",
+          "reasons": []
+        },
+        "classification_of_failure": null,
+        "duration_seconds": 98.3,
+        "tool_calls": 9,
+        "retries": 0,
+        "tokens": 7745
+      },
+      {
+        "fixture": "K6",
+        "seed_commit": "16cf29abbdf3830e9b4e7d8c35fe6f03841275fc",
+        "run_id": "run-2026-09-23T14-52-16Z-b0bc9d",
+        "result": "failed",
+        "exit_status": 0,
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": "deterministic",
+        "launcher_verification": "pass",
+        "oracle": "fail",
+        "oracle_detail": "idden_render_table.TestHiddenRenderTable.test_no_line_has_trailing_spaces)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/tmp/tmp.Z3PSrMzOyj/tests/test_hidden_render_table.py\", line 28, in test_no_line_has_trailing_spaces\n    self.assertEqual(line, line.rstrip(\" \"))\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'Ann          ' != 'Ann'\n- Ann          \n+ Ann\n\n\n----------------------------------------------------------------------\nRan 7 tests in 0.000s\n\nFAILED (failures=1)\noracle: the original or hidden tests fail",
+        "fr001_ordering": "pass",
+        "baseline": null,
+        "alternative": null,
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [],
+        "violations": [],
+        "reasons": [
+          "oracle fail"
+        ],
+        "rescored_with_fix": {
+          "result": "failed",
+          "reasons": [
+            "oracle fail"
+          ]
+        },
+        "classification_of_failure": "agent wrong answer: when the last cell is empty, render_table leaves the two-space separator as trailing spaces, against the task's explicit 'no line has trailing spaces'. The hidden test checks exactly that stated requirement, so this is not an oracle defect.",
+        "duration_seconds": 179.4,
+        "tool_calls": 19,
+        "retries": 0,
+        "tokens": 10711
+      },
+      {
+        "fixture": "K7",
+        "seed_commit": "d742390d56315c5cd8dc2a9477df8c63e275694c",
+        "run_id": null,
+        "result": "failed",
+        "exit_status": -2,
+        "final_outcome": null,
+        "expected_disposition": "succeeded",
+        "classification": null,
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": null,
+        "launcher_verification": null,
+        "oracle": "skipped",
+        "oracle_detail": "",
+        "fr001_ordering": "not run",
+        "baseline": null,
+        "alternative": null,
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [
+          "no completion report (dca exit -2)"
+        ],
+        "violations": [],
+        "reasons": [
+          "no completion report (dca exit -2)",
+          "oracle skipped"
+        ],
+        "rescored_with_fix": {
+          "result": "failed",
+          "reasons": [
+            "no completion report (dca exit -2)",
+            "oracle skipped"
+          ]
+        },
+        "classification_of_failure": "class D (infrastructure: disk): interrupted with SIGINT before sandbox creation by the disk guard, after free space fell below the agreed 2 GiB floor during codex K6. No agent ran. Not scored; one justified retry is pending once disk is freed.",
+        "duration_seconds": 0.9,
+        "tool_calls": null,
+        "retries": null,
+        "tokens": null
+      },
+      {
+        "fixture": "K8",
+        "seed_commit": "12528e1b3cfaa84fbc8c76c27ada9d1d7f479b58",
+        "run_id": null,
+        "result": "failed",
+        "exit_status": -2,
+        "final_outcome": null,
+        "expected_disposition": "succeeded",
+        "classification": null,
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": null,
+        "launcher_verification": null,
+        "oracle": "skipped",
+        "oracle_detail": "",
+        "fr001_ordering": "not run",
+        "baseline": null,
+        "alternative": null,
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [
+          "no completion report (dca exit -2)"
+        ],
+        "violations": [],
+        "reasons": [
+          "no completion report (dca exit -2)",
+          "oracle skipped"
+        ],
+        "rescored_with_fix": {
+          "result": "failed",
+          "reasons": [
+            "no completion report (dca exit -2)",
+            "oracle skipped"
+          ]
+        },
+        "classification_of_failure": "class D (infrastructure: disk): same as K7.",
+        "duration_seconds": 0.5,
+        "tool_calls": null,
+        "retries": null,
+        "tokens": null
+      }
+    ]
+  },
+  "fr001_ordering_by_fixture": {
+    "K1": "pass",
+    "K2": "pass",
+    "K3": "pass",
+    "K4": "pass",
+    "K5": "pass",
+    "K6": "pass",
+    "K7": "not run",
+    "K8": "not run"
+  },
+  "k1_baseline_recorded": true,
+  "sc010_plan_free": 6,
+  "invariant_violations": [],
+  "cleanup_failures": 0,
+  "small_threshold": {
+    "applicable": 8,
+    "min_pass": 7
+  },
+  "verdict": "INCOMPLETE",
+  "verdict_reasons": [
+    "2 fixture(s) did not run (class D, disk): K7, K8",
+    "5/8 pass so far; the 7/8 small threshold depends on the fixtures that did not run"
+  ],
+  "continuations": [
+    {
+      "kind": "retry of the fixtures the disk guard never ran (K7, K8), same protocol and committed fixtures",
+      "date": "2026-09-23",
+      "bench_id": "bench-2026-09-23T16-15-02Z-dd88",
+      "dca_commit": "700d782d330ca59c62339861fc0818ce9b508c39",
+      "dca_tree_clean": true,
+      "command": "bin/dca bench --backend codex --trust trusted --fixtures 'K7,K8'",
+      "environment": "Claude Code restored to its 2.1.278 pin and the global sbx policy to deny-all (G4 fingerprint sha256:e282594f... verified) before the run; disk freed by the user",
+      "runs": [
+        {
+          "fixture": "K7",
+          "seed_commit": "d742390d56315c5cd8dc2a9477df8c63e275694c",
+          "run_id": "run-2026-09-23T16-15-03Z-294932",
+          "result": "passed",
+          "exit_status": 0,
+          "final_outcome": "succeeded",
+          "classification": "direct",
+          "plan_ref": null,
+          "verification_type": "deterministic",
+          "oracle": "pass",
+          "oracle_detail": null,
+          "fr001_ordering": "pass",
+          "baseline": null,
+          "acceptance_reasons": [],
+          "violations": [],
+          "reasons": [],
+          "note": "the retry allowed for the disk-guard interruption: first execution of this fixture on this backend",
+          "cleanup": "ok",
+          "duration_seconds": 118.8,
+          "tool_calls": 14,
+          "retries": 0,
+          "tokens": 9402
+        },
+        {
+          "fixture": "K8",
+          "seed_commit": "12528e1b3cfaa84fbc8c76c27ada9d1d7f479b58",
+          "run_id": "run-2026-09-23T16-17-04Z-9dbca3",
+          "result": "passed",
+          "exit_status": 0,
+          "final_outcome": "succeeded",
+          "classification": "direct",
+          "plan_ref": null,
+          "verification_type": "deterministic",
+          "oracle": "pass",
+          "oracle_detail": null,
+          "fr001_ordering": "pass",
+          "baseline": null,
+          "acceptance_reasons": [],
+          "violations": [],
+          "reasons": [],
+          "note": "the retry allowed for the disk-guard interruption: first execution of this fixture on this backend",
+          "cleanup": "ok",
+          "duration_seconds": 99.9,
+          "tool_calls": 12,
+          "retries": 0,
+          "tokens": 7930
+        }
+      ],
+      "note": "K1-K6 were not rerun. Runtime assets were unchanged at this commit, so these two runs use the same runtime as the original campaign."
+    }
+  ],
+  "current_verdict": {
+    "verdict": "PASS",
+    "small_fixtures_passed": "7/8",
+    "per_fixture": {
+      "K1": "pass",
+      "K2": "pass",
+      "K3": "pass",
+      "K4": "pass",
+      "K5": "pass",
+      "K6": "fail",
+      "K7": "pass",
+      "K8": "pass"
+    },
+    "threshold": {
+      "applicable": 8,
+      "min_pass": 7
+    },
+    "unscored_runs": 0,
+    "basis": "K1-K6 from the original campaign (K6 is a genuine agent wrong answer and stays a failure), K7 and K8 from the continuation"
+  },
+  "fr001_semantics_review": {
+    "reviewed_at_commit": "acd1063",
+    "question": "does scoring FR-001 from the first EFFECTIVE mutation invalidate this 7/8 evidence?",
+    "answer": "No. The change is strictly more permissive: it only excuses a mutation the policy gate refused before it ran. A fixture whose ordering passed under the attempted-mutation rule therefore still passes under the effective-mutation rule. Every fixture in fr001_ordering_by_fixture here is `pass` (K7/K8 via the recorded continuation), so no verdict moves.",
+    "caveat": "these runs predate the gate fix (e6861c9) and the semantic correction, so they are not on the current runtime build. T081 does not require both backends' evidence to come from one build, and the contract does not invalidate this record - but the difference is recorded here rather than left implicit.",
+    "action": "not rerun, per the operator decision and the canonical contract"
+  }
+}

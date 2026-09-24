@@ -1,0 +1,27 @@
+diff --git a/tests/test_hours.py b/tests/test_hours.py
+index 64559c8..b363c13 100644
+--- a/tests/test_hours.py
++++ b/tests/test_hours.py
+@@ -10,6 +10,9 @@ class TestTotalMinutes(unittest.TestCase):
+     def test_single_entry(self):
+         self.assertEqual(total_minutes([("09:00", "10:30")]), 90)
+ 
++    def test_several_entries_are_added_up(self):
++        self.assertEqual(total_minutes([("09:00", "10:30"), ("13:00", "14:15")]), 165)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/timesheet/hours.py b/timesheet/hours.py
+index cc9ed37..ddac41d 100644
+--- a/timesheet/hours.py
++++ b/timesheet/hours.py
+@@ -9,7 +9,7 @@ def total_minutes(entries):
+     """
+     total = 0
+     for start, end in entries:
+-        total = _minutes(end) - _minutes(start)
++        total += _minutes(end) - _minutes(start)
+     return total
+ 
+ 

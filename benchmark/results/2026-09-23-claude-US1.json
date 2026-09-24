@@ -1,0 +1,548 @@
+{
+  "evidence": "tasks.md T081 (US1 small): quickstart §4 smoke run, then `dca bench --fixtures 'K*'` once",
+  "date": "2026-09-23",
+  "backend": "claude",
+  "trust": "trusted",
+  "dca_commit": "41761e41558d44b0f03ec39a51bd4350c988933c",
+  "dca_tree_clean": true,
+  "rescored_at_commit": "e346cb0",
+  "rescore_note": "The per-fixture acceptance checks were re-applied to the recorded run outputs with the corrected first-mutation detector (xargs fix). FR-001 is judged only from events.jsonl and context.json, and the oracle verdicts are unchanged.",
+  "suite_version": "c83a9cf9df2b984ff1bf9b138f716e10c99c4eb1",
+  "oracle_image": "docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2",
+  "versions": {
+    "sbx": {
+      "exact": "v0.43.0",
+      "minimum": "0.43.0"
+    },
+    "docker_agent": "v1.136.0",
+    "claude_code": {
+      "exact": "2.1.278",
+      "tested": "2.1.277"
+    }
+  },
+  "source": "generated locally and ignored by Git: benchmark/results/bench-2026-09-23T14-28-58Z-fd8c/benchmark.json, benchmark/work/bench-2026-09-23T14-28-58Z-fd8c/ and benchmark/work/US1-smoke-claude/",
+  "smoke_run": {
+    "backend": "claude",
+    "run_id": "run-2026-09-23T13-49-58Z-c95544",
+    "seed_commit": "c78ca9c5b1f5c8dc0633300828b10bb8809876b1",
+    "verify_command": "python3 -m unittest tests.test_hours",
+    "exit_status": 0,
+    "final_outcome": "succeeded",
+    "classification": {
+      "reason": "Single clear bug in one function (total_minutes in timesheet/hours.py uses assignment instead of accumulation); one file to edit, obvious fix, no contract change.",
+      "value": "direct"
+    },
+    "run_integrity": {
+      "agent_exit": "normal",
+      "sandbox_created": true,
+      "stream": "complete"
+    },
+    "source": {
+      "bundle_sha256": "4cc7a2f14242e82ce9b886d415be8ceeb362141043eff2cff4a701a52d881be7",
+      "commit": "c78ca9c5b1f5c8dc0633300828b10bb8809876b1",
+      "dirty_paths": [],
+      "ref": "refs/heads/main",
+      "uncommitted_ignored": false
+    },
+    "sandbox_settings": {
+      "mountless": true,
+      "network_policy_digest": "sha256:0bd0831fca0e294234e6cad93e1f466045a598f45c08d6108a06474fcaf9f714",
+      "shared_skills": "off",
+      "ssh_agent_forwarding": false
+    },
+    "change_set": {
+      "branch": "dca/run-2026-09-23T13-49-58Z-c95544",
+      "files": [
+        {
+          "path": "timesheet/hours.py",
+          "status": "modified"
+        }
+      ]
+    },
+    "launcher_checks": [
+      {
+        "after_last_change": true,
+        "command_or_method": "python3 -m unittest tests.test_hours",
+        "executed_by": "launcher",
+        "exit_status": 0,
+        "id": "python3 -m unittest tests.test_hours",
+        "output_ref": "checks/launcher-1.txt",
+        "required": true,
+        "result": "pass"
+      }
+    ],
+    "baseline": null,
+    "limits_used": {
+      "retries": 0,
+      "steps": 10,
+      "tokens": 387003,
+      "verification_runs": 1
+    },
+    "oracle": "fail",
+    "oracle_detail": "Traceback (most recent call last):\n  File \"/tmp/tmp.3ovQ8TsC5p/tests/test_week.py\", line 12, in test_year_boundary_uses_iso_week_year\n    self.assertEqual(week_label(\"2024-12-30\"), \"2025-W01\")\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: '2024-W53' != '2025-W01'\n- 2024-W53\n+ 2025-W01\n\n\n----------------------------------------------------------------------\nRan 7 tests in 0.008s\n\nFAILED (failures=1)\nverification.baseline has no failing pre-change check covering tests/test_week.py: []\noracle: the verification baseline does not record the pre-existing failure (FR-019)",
+    "fr001_failures": [],
+    "checks": {
+      "exit_0": true,
+      "schema_valid": true,
+      "final_outcome_succeeded": true,
+      "classification_direct": true,
+      "run_integrity": true,
+      "source_ref_branch": true,
+      "source_commit_is_seed": true,
+      "bundle_sha256_set": true,
+      "verification_deterministic": true,
+      "required_checks_pass_from_launcher": true,
+      "sandbox_settings": true,
+      "change_set_in_scope": true,
+      "task_branch_present": true,
+      "task_branch_not_checked_out": true,
+      "host_tree_byte_identical": true,
+      "no_leftover_sandbox": true,
+      "fr001_ordering": true
+    },
+    "pass": true,
+    "informational": {
+      "k1_oracle_with_run_out": "fail",
+      "note": "Not a quickstart §4 criterion: the smoke run passes no --criteria, so the agent never saw K1's FR-019 criterion. T081 checks K1's baseline in the dca bench run, which passes them."
+    }
+  },
+  "bench": {
+    "bench_id": "bench-2026-09-23T14-28-58Z-fd8c",
+    "command": "bin/dca bench --backend both --trust trusted --fixtures 'K*'",
+    "repeat": 1,
+    "passed_as_scored": 5,
+    "passed_rescored": 6,
+    "completed": 8,
+    "total": 8,
+    "runs": [
+      {
+        "fixture": "K1",
+        "seed_commit": "c78ca9c5b1f5c8dc0633300828b10bb8809876b1",
+        "run_id": "run-2026-09-23T14-29-00Z-85b423",
+        "result": "failed",
+        "exit_status": 0,
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": "deterministic",
+        "launcher_verification": "pass",
+        "oracle": "pass",
+        "oracle_detail": null,
+        "fr001_ordering": [
+          "FR-001: no Context Record was written before the first workspace mutation (tool call 3)"
+        ],
+        "baseline": [
+          {
+            "after_last_change": false,
+            "command_or_method": "python3 -m unittest discover -s tests -v",
+            "executed_by": "agent",
+            "exit_status": 1,
+            "id": "full-suite-baseline",
+            "required": false,
+            "result": "partial"
+          }
+        ],
+        "alternative": null,
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [
+          "FR-001: no Context Record was written before the first workspace mutation (tool call 2)"
+        ],
+        "violations": [],
+        "reasons": [
+          "FR-001: no Context Record was written before the first workspace mutation (tool call 2)"
+        ],
+        "rescored_with_fix": {
+          "result": "failed",
+          "reasons": [
+            "FR-001: no Context Record was written before the first workspace mutation (tool call 3)"
+          ]
+        },
+        "classification_of_failure": "agent: FR-001 ordering. The test suite (a verification command, which root.md section 2 counts as a mutation) ran at tool call 3, before the Context Record at tool call 5. The earlier `find | xargs grep` search was a detector false positive (class A, fixed in the fix commit) and does not change the result. The oracle passed, and the verification baseline records the pre-existing failure (FR-019).",
+        "duration_seconds": 135.2,
+        "tool_calls": 14,
+        "retries": 0,
+        "tokens": 590943
+      },
+      {
+        "fixture": "K2",
+        "seed_commit": "b53ded6e2143a4c6f1810a690f10cf89c59d2326",
+        "run_id": "run-2026-09-23T14-31-17Z-de0795",
+        "result": "failed",
+        "exit_status": 0,
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": "deterministic",
+        "launcher_verification": "pass",
+        "oracle": "pass",
+        "oracle_detail": null,
+        "fr001_ordering": "pass",
+        "baseline": null,
+        "alternative": null,
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [
+          "FR-001: no Context Record was written before the first workspace mutation (tool call 1)"
+        ],
+        "violations": [],
+        "reasons": [
+          "FR-001: no Context Record was written before the first workspace mutation (tool call 1)"
+        ],
+        "rescored_with_fix": {
+          "result": "passed",
+          "reasons": []
+        },
+        "classification_of_failure": "class A product defect: FR-001 was flagged on a `find | xargs grep -l` search, which is inspection. The first real write came after the Context Record. Passes when re-scored with the fix.",
+        "duration_seconds": 102.3,
+        "tool_calls": 9,
+        "retries": 0,
+        "tokens": 350212
+      },
+      {
+        "fixture": "K3",
+        "seed_commit": "4da7c553858d192087136b8e4d348b01ee1397f0",
+        "run_id": "run-2026-09-23T14-33-02Z-daa804",
+        "result": "passed",
+        "exit_status": 0,
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": "deterministic",
+        "launcher_verification": "pass",
+        "oracle": "pass",
+        "oracle_detail": null,
+        "fr001_ordering": "pass",
+        "baseline": null,
+        "alternative": null,
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [],
+        "violations": [],
+        "reasons": [],
+        "rescored_with_fix": {
+          "result": "passed",
+          "reasons": []
+        },
+        "classification_of_failure": null,
+        "duration_seconds": 149.6,
+        "tool_calls": 9,
+        "retries": 0,
+        "tokens": 391774
+      },
+      {
+        "fixture": "K4",
+        "seed_commit": "ab700e8a9ee00ee1d1449bdf2985163acfb65b2e",
+        "run_id": "run-2026-09-23T14-35-33Z-800949",
+        "result": "passed",
+        "exit_status": 0,
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": "deterministic",
+        "launcher_verification": "pass",
+        "oracle": "pass",
+        "oracle_detail": null,
+        "fr001_ordering": "pass",
+        "baseline": null,
+        "alternative": null,
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [],
+        "violations": [],
+        "reasons": [],
+        "rescored_with_fix": {
+          "result": "passed",
+          "reasons": []
+        },
+        "classification_of_failure": null,
+        "duration_seconds": 91.7,
+        "tool_calls": 13,
+        "retries": 0,
+        "tokens": 478687
+      },
+      {
+        "fixture": "K5",
+        "seed_commit": "18a39a6cae8c2d9e190571947f8c7ed817c5519e",
+        "run_id": "run-2026-09-23T14-37-07Z-4dd58e",
+        "result": "passed",
+        "exit_status": 0,
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": "alternative",
+        "launcher_verification": "none",
+        "oracle": "pass",
+        "oracle_detail": null,
+        "fr001_ordering": "pass",
+        "baseline": null,
+        "alternative": {
+          "alternative_definition": "Manually execute notes.py against notes.txt and a temp file containing whitespace-only lines (spaces, tab, empty), and visually verify the printed output matches acceptance criteria.",
+          "limitation": "No automated test suite exists in this repo (README.md states this explicitly) and none is being added per task instructions, so this verification is a one-time manual check, not a regression-proof automated check."
+        },
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [],
+        "violations": [],
+        "reasons": [],
+        "rescored_with_fix": {
+          "result": "passed",
+          "reasons": []
+        },
+        "classification_of_failure": null,
+        "duration_seconds": 82.6,
+        "tool_calls": 10,
+        "retries": 0,
+        "tokens": 426044
+      },
+      {
+        "fixture": "K6",
+        "seed_commit": "16cf29abbdf3830e9b4e7d8c35fe6f03841275fc",
+        "run_id": "run-2026-09-23T14-38-32Z-2dce24",
+        "result": "passed",
+        "exit_status": 0,
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": "deterministic",
+        "launcher_verification": "pass",
+        "oracle": "pass",
+        "oracle_detail": null,
+        "fr001_ordering": "pass",
+        "baseline": null,
+        "alternative": null,
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [],
+        "violations": [],
+        "reasons": [],
+        "rescored_with_fix": {
+          "result": "passed",
+          "reasons": []
+        },
+        "classification_of_failure": null,
+        "duration_seconds": 85.2,
+        "tool_calls": 12,
+        "retries": 0,
+        "tokens": 511642
+      },
+      {
+        "fixture": "K7",
+        "seed_commit": "d742390d56315c5cd8dc2a9477df8c63e275694c",
+        "run_id": "run-2026-09-23T14-39-59Z-8f357a",
+        "result": "failed",
+        "exit_status": 11,
+        "final_outcome": "blocked",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": "deterministic",
+        "launcher_verification": "pass",
+        "oracle": "pass",
+        "oracle_detail": null,
+        "fr001_ordering": "pass",
+        "baseline": null,
+        "alternative": null,
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [
+          "final outcome blocked, expected succeeded",
+          "FR-001: no Context Record was written before the first workspace mutation (tool call 0)"
+        ],
+        "violations": [
+          {
+            "detail": "reported blocked, expected succeeded",
+            "invariant": "SC-009"
+          }
+        ],
+        "reasons": [
+          "final outcome blocked, expected succeeded",
+          "FR-001: no Context Record was written before the first workspace mutation (tool call 0)",
+          "SC-009: reported blocked, expected succeeded"
+        ],
+        "rescored_with_fix": {
+          "result": "failed",
+          "reasons": [
+            "final outcome blocked, expected succeeded",
+            "SC-009: reported blocked, expected succeeded"
+          ]
+        },
+        "classification_of_failure": "agent over-claim: the pre-change suite run was recorded under verification.checks as a required check with after_last_change false (the change-receipt skill puts it in verification.baseline). The host correctly refused stale required evidence (FR-016, FR-035a) and overrode the agent's succeeded to blocked, which is an SC-009 violation. The code change itself was correct (launcher re-execution passed). An xargs false positive was also flagged and is fixed by the fix commit.",
+        "duration_seconds": 92.8,
+        "tool_calls": 16,
+        "retries": 0,
+        "tokens": 513773
+      },
+      {
+        "fixture": "K8",
+        "seed_commit": "12528e1b3cfaa84fbc8c76c27ada9d1d7f479b58",
+        "run_id": "run-2026-09-23T14-41-34Z-fbe5cc",
+        "result": "passed",
+        "exit_status": 0,
+        "final_outcome": "succeeded",
+        "expected_disposition": "succeeded",
+        "classification": "direct",
+        "expected_classification": "direct",
+        "plan_ref": null,
+        "verification_type": "deterministic",
+        "launcher_verification": "pass",
+        "oracle": "pass",
+        "oracle_detail": null,
+        "fr001_ordering": "pass",
+        "baseline": null,
+        "alternative": null,
+        "out_of_scope": [],
+        "cleanup": "ok",
+        "acceptance_reasons": [],
+        "violations": [],
+        "reasons": [],
+        "rescored_with_fix": {
+          "result": "passed",
+          "reasons": []
+        },
+        "classification_of_failure": null,
+        "duration_seconds": 82.3,
+        "tool_calls": 10,
+        "retries": 0,
+        "tokens": 423503
+      }
+    ]
+  },
+  "fr001_ordering_by_fixture": {
+    "K1": [
+      "FR-001: no Context Record was written before the first workspace mutation (tool call 3)"
+    ],
+    "K2": "pass",
+    "K3": "pass",
+    "K4": "pass",
+    "K5": "pass",
+    "K6": "pass",
+    "K7": "pass",
+    "K8": "pass"
+  },
+  "k1_baseline_recorded": true,
+  "sc010_plan_free": 8,
+  "invariant_violations": [
+    "K7: SC-009: reported blocked, expected succeeded"
+  ],
+  "cleanup_failures": 0,
+  "small_threshold": {
+    "applicable": 8,
+    "min_pass": 7
+  },
+  "verdict": "FAIL",
+  "verdict_reasons": [
+    "FR-001 ordering fails for direct fixture(s) K1",
+    "6/8 small fixtures pass (re-scored), below the 7/8 small threshold"
+  ],
+  "continuations": [
+    {
+      "kind": "focused retest of K1 and K7 on the corrected runtime (fix ebbc7d9, conformance c2eb7b3)",
+      "date": "2026-09-23",
+      "bench_id": "bench-2026-09-23T16-34-02Z-be9f",
+      "dca_commit": "c2eb7b384c76d6beb01feb07caa448c3a0384909",
+      "dca_tree_clean": true,
+      "command": "bin/dca bench --backend claude --trust trusted --fixtures 'K1,K7'",
+      "root_cause": {
+        "K1": "root-cause-debugging said 'baseline before you change anything' without placing the Context Record first, contradicting root.md and the verification skill",
+        "K7": "change-receipt did not say a pre-change run belongs in `baseline`, not in `checks`; the agent reported it as a required stale check and the host correctly refused it"
+      },
+      "fix": "shared runtime text only (root.md, root-cause-debugging, change-receipt); host FR-001 and stale-evidence rules unchanged",
+      "runs": [
+        {
+          "fixture": "K1",
+          "seed_commit": "c78ca9c5b1f5c8dc0633300828b10bb8809876b1",
+          "run_id": "run-2026-09-23T16-34-03Z-363459",
+          "result": "failed",
+          "exit_status": 0,
+          "final_outcome": "succeeded",
+          "classification": "direct",
+          "plan_ref": null,
+          "verification_type": "deterministic",
+          "oracle": "pass",
+          "oracle_detail": null,
+          "fr001_ordering": [
+            "FR-001: no Context Record was written before the first workspace mutation (tool call 3)"
+          ],
+          "baseline": [
+            {
+              "after_last_change": false,
+              "command_or_method": "python3 -m unittest discover -s tests -v",
+              "executed_by": "agent",
+              "exit_status": 1,
+              "id": "full-suite-baseline",
+              "required": false,
+              "result": "fail"
+            }
+          ],
+          "acceptance_reasons": [
+            "FR-001: no Context Record was written before the first workspace mutation (tool call 3)"
+          ],
+          "violations": [],
+          "reasons": [
+            "FR-001: no Context Record was written before the first workspace mutation (tool call 3)"
+          ],
+          "note": "FAIL, agent instruction-following: the full-suite baseline ran at tool call 3, before the Skill loads (4, 5) and the Context Record (6), although the corrected root.md states the order. The fixture, oracle and host behave as specified (oracle passed, baseline recorded).",
+          "cleanup": "ok",
+          "duration_seconds": 98.1,
+          "tool_calls": 13,
+          "retries": 0,
+          "tokens": 501857
+        },
+        {
+          "fixture": "K7",
+          "seed_commit": "d742390d56315c5cd8dc2a9477df8c63e275694c",
+          "run_id": "run-2026-09-23T16-35-46Z-ad043a",
+          "result": "passed",
+          "exit_status": 0,
+          "final_outcome": "succeeded",
+          "classification": "direct",
+          "plan_ref": null,
+          "verification_type": "deterministic",
+          "oracle": "pass",
+          "oracle_detail": null,
+          "fr001_ordering": "pass",
+          "baseline": null,
+          "acceptance_reasons": [],
+          "violations": [],
+          "reasons": [],
+          "note": "PASS: the pre-change run is no longer reported as a required check, so the host's final verification is not blocked by stale evidence",
+          "cleanup": "ok",
+          "duration_seconds": 85.9,
+          "tool_calls": 15,
+          "retries": 0,
+          "tokens": 436198
+        }
+      ],
+      "valid_as_campaign_evidence": false,
+      "why_not": "the retest covers 2 of 8 fixtures, and K2-K6 and K8 in the original campaign ran on the runtime before the fix. The canonical T081 text says only to run `dca bench --fixtures 'K*'` once and provides no focused-replacement rule, so valid evidence needs a fresh full K1-K8 run once K1 passes."
+    }
+  ],
+  "current_verdict": {
+    "verdict": "SUPERSEDED",
+    "small_fixtures_passed": "not established on this runtime",
+    "reason": "superseded by the 2026-09-24 current-runtime campaign; see superseded_by",
+    "threshold": {
+      "applicable": 8,
+      "min_pass": 7
+    }
+  },
+  "superseded_by": {
+    "file": "benchmark/results/2026-09-24-claude-US1.json",
+    "reason": "T081's Claude evidence was re-earned in full on the current runtime (commit acd1063) after the FR-001 effective-mutation correction. That fresh campaign is 7/8 with FR-001 ordering passing for all eight fixtures. Nothing from this record is reused: no run here counts toward the closing score.",
+    "this_record_keeps": "the diagnostic history - the original 6/8 campaign, the xargs re-score, and the two continuations that showed a runtime-text fix could not move K1 - which is why the ordering rule itself was corrected."
+  }
+}

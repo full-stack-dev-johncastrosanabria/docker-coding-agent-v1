@@ -1,0 +1,21 @@
+{
+  "id": "K3",
+  "category": "small",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "Change the shipped defaults in app/defaults.ini: the server should listen on port 8443, and the cache should be enabled with a time-to-live of 300 seconds. Leave every other setting as it is.",
+  "acceptance_criteria": [
+    "the shipped defaults load with port 8443, the cache enabled and a cache TTL of 300 seconds",
+    "every other default (host, workers, log level) is unchanged, and the file keeps its sections and keys",
+    "the configuration loader and its validation are unchanged",
+    "the existing tests pass without being weakened"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "direct",
+  "allowed_change_scope": ["app/defaults.ini", "tests/*.py"],
+  "prohibited_checks": ["no-test-weakening"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/override-in-code.patch", "golden/bad/wrong-section.patch", "golden/bad/extra-change.patch"]}
+}

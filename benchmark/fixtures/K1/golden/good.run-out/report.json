@@ -1,0 +1,14 @@
+{
+  "_comment": "The completion-report fields K1's oracle reads in an acceptance run (RUN_OUT): the pre-change baseline records the unrelated week-label failure as pre-existing (FR-019).",
+  "final_outcome": "succeeded",
+  "verification": {
+    "type": "deterministic",
+    "baseline": [
+      {"id": "full suite (before the change)", "command_or_method": "python3 -m unittest discover -s tests -t .", "required": false, "executed_by": "agent", "after_last_change": false, "result": "fail", "exit_status": 1},
+      {"id": "hours tests (before the change)", "command_or_method": "python3 -m unittest tests.test_hours", "required": true, "executed_by": "agent", "after_last_change": false, "result": "pass", "exit_status": 0}
+    ],
+    "checks": [
+      {"id": "python3 -m unittest tests.test_hours", "command_or_method": "python3 -m unittest tests.test_hours", "required": true, "executed_by": "launcher", "after_last_change": true, "result": "pass", "exit_status": 0}
+    ]
+  }
+}

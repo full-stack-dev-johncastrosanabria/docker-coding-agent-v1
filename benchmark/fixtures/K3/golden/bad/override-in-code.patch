@@ -1,0 +1,12 @@
+diff --git a/app/config.py b/app/config.py
+index 8ddb076..b6028f9 100644
+--- a/app/config.py
++++ b/app/config.py
+@@ -20,6 +20,7 @@ def load(path=DEFAULTS):
+         "cache_ttl_seconds": parser.getint("cache", "ttl_seconds"),
+         "log_level": parser.get("logging", "level"),
+     }
++    settings.update(port=8443, cache_enabled=True, cache_ttl_seconds=300)
+     if not 1 <= settings["port"] <= 65535:
+         raise ValueError(f"port {settings['port']} is out of range")
+     if settings["workers"] < 1:

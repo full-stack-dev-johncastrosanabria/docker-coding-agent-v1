@@ -1,0 +1,18 @@
+diff --git a/settings/values.py b/settings/values.py
+index c172029..d9c24f0 100644
+--- a/settings/values.py
++++ b/settings/values.py
+@@ -2,10 +2,10 @@
+ 
+ 
+ def parse_bool(text):
+-    """"true" is True and "false" is False. Anything else raises ValueError."""
+-    if text == "true":
++    """True for "true", "yes" or "1"; False for "false", "no" or "0"."""
++    if text in ("true", "yes", "1"):
+         return True
+-    if text == "false":
++    if text in ("false", "no", "0"):
+         return False
+     raise ValueError(f"not a boolean: {text!r}")
+ 

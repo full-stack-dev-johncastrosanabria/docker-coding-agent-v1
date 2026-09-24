@@ -43,6 +43,19 @@ def _codex(tool, tool_input, agent="root"):
             "tool_input": tool_input, "cwd": "/workspace"}
 
 
+#: Probes with this prefix run before a Context Record exists; all others run after one is staged.
+ORDERING_PREFIX = "ordering."
+
+#: A valid Context Record, staged the way a run's agent writes it (FR-001).
+CONTEXT_RECORD = {
+    "classification": {"value": "direct", "reason": "T062 gate probe"},
+    "repository_map": {"scope": "minimal", "target_files": ["answer.txt"]},
+    "verification_approach": {"type": "deterministic", "checks": [
+        {"id": "sh check.sh", "command_or_method": "sh check.sh", "required": True}]},
+    "plan_ref": None,
+}
+
+
 def payloads(backend):
     """{name: (payload, expected_exit, deny_class_or_None, env_prefix)} for one backend."""
     make = _claude if backend == "claude" else _codex
@@ -71,6 +84,15 @@ def payloads(backend):
                                       0, None, ""),
         "allow.delegate_reviewer": (make(delegate, {target: reviewer, "prompt": "probe"}),
                                     0, None, ""),
+
+        # --- FR-001 (T081): the gate refuses verification and file changes until a Context Record
+        # exists, and only those. These run BEFORE the harness stages a record; every other probe
+        # runs after it, as it would in a real run (see ORDERING_PREFIX). ---------------------------
+        "ordering.read_before_record": (make(read, {"path": "/workspace/README.md"}), 0, None, ""),
+        "ordering.inspect_before_record": (make(shell, {"command": "ls /workspace"}), 0, None, ""),
+        "ordering.verify_before_record": (make(shell, {"command": "sh check.sh"}), 2, 8, ""),
+        "ordering.write_before_record": (make(write, {"path": "/workspace/answer.txt",
+                                                      "content": "ready\n"}), 2, 3, ""),
 
         # --- item 6B / item 4 marker: the sensitive-path denial ----------------------------------
         "deny.credential_read": (make(read, {"path": CREDENTIAL_PATH}), 2, 2, ""),

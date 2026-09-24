@@ -116,8 +116,26 @@ provenance. The in-VM gate may read its scope set only to classify cooperatively
 | `plan_ref` | string \| null | required for planned tasks: the Plan written to `/run/dca/out/plan.md` before the first workspace mutation (FR-008); `null` for direct tasks |
 | `written_at` | timestamp | must precede the first workspace mutation |
 
-**First workspace mutation**: the first tool call, **attempted or executed**, that can change
-the workspace or candidate repository state. That includes file writes, edits, deletes, renames
+**First workspace mutation**: the first tool call that **can change** the workspace or candidate
+repository state **and was not refused before it ran** - the first *effective* mutation. A call the policy gate refused before
+it ran is an **attempted** mutation: it stays in the event stream and in the
+gate log, which are the run's retained artifacts, and in the host's own analysis
+(`first_attempted_mutation`, the per-call `mutation` and `refused_before_execution` flags), but the
+workspace never saw it, so the ordering rules do not measure from it. Both points are kept: `first_attempted_mutation`
+and `first_effective_mutation`. FR-001 and FR-008 measure from the effective one; everything else
+that reads mutations - retry accounting, the reviewer and researcher invariants, safety, approval and
+DENY accounting - continues to read attempts, unchanged. `dca bench` honours a refusal read out of a
+tool response only when the host's own gate log records that refusal, because a response is payload;
+a structural `hook_blocked` event needs no corroboration. That corroboration is defence in
+depth, not proof - the gate log is VM-originated (*policy-gate* contract, *Run state*).
+
+The runtime instruction in `runtime/instructions/root.md` is deliberately **stricter** than this
+scoring rule: it tells the agent the first workspace mutation is the first such call "attempted or
+executed", so the agent should not even attempt one before writing the record. Guidance that keeps
+the agent away from the boundary is not the rule that scores it, and the two are meant to differ.
+
+A call counts as a mutation when it can change the workspace or candidate repository state. That
+includes file writes, edits, deletes, renames
 and directory changes in the workspace, git operations that change the index, refs or worktree,
 dependency installation, formatting or regeneration, and any shell command the policy gate
 doesn't classify as read-only inspection (build and verification commands included, since they
@@ -125,7 +143,8 @@ can change the workspace). **Not** mutations: reads and read-only inspection (fi
 listing, search, read-only git status/log/diff/show), writes confined to the run scratch dir
 `/run/dca/out/` (such as `context.json`, `plan.md` and `report.agent.json`), skill loading, and
 delegation to the researcher or reviewer. The Context Record must exist before the first
-workspace mutation; the benchmark checks this from the event stream (FR-001).
+**effective** workspace mutation; the benchmark checks this from the event stream, corroborated by
+the gate log (FR-001).
 
 ### Plan (planned tasks only)
 `{scope, constraints, steps[], verification_approach, deviations[]}`, written to

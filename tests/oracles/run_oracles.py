@@ -7,6 +7,10 @@ For each fixture in benchmark/fixtures/:
   * every `golden/bad/*.patch` FAILS it - each is a plausible wrong answer (a weakened test, a
     partial fix, a workaround in the wrong place) the oracle must not accept.
 
+A golden patch may have run outputs beside it, `<name>.run-out/` (for example the `report.json`
+fields an acceptance oracle reads). They are passed to the oracle as `RUN_OUT`, exactly as an
+acceptance run passes the run's own outputs, so the report-side checks are validated too.
+
 Golden patches are repository-owned, so this runs the oracle on the host. Agent-produced
 candidates never do: `dca bench` runs those in the pinned base image, offline.
 
@@ -51,6 +55,14 @@ def candidate(fixture, patch, workdir):
     return repo
 
 
+def run_out(fixture, patch):
+    """`<name>.run-out/` beside a golden patch, or None."""
+    if patch is None or not patch.endswith(".patch"):
+        return None
+    path = os.path.join(fixture["_dir"], patch[:-len(".patch")] + ".run-out")
+    return path if os.path.isdir(path) else None
+
+
 def check(fixture):
     """Every violated expectation, as readable strings. Empty means the oracle is sound."""
     problems = []
@@ -66,7 +78,8 @@ def check(fixture):
     workdir = tempfile.mkdtemp(prefix=f"dca-oracle-{fixture['id']}-")
     try:
         for patch, expected in cases:
-            verdict, detail = bench.run_oracle_on_host(fixture, candidate(fixture, patch, workdir))
+            verdict, detail = bench.run_oracle_on_host(fixture, candidate(fixture, patch, workdir),
+                                                       run_out=run_out(fixture, patch))
             if verdict != expected:
                 problems.append(f"{patch or 'the seed'}: oracle {verdict}, expected {expected}"
                                 f" ({detail[-300:]})")

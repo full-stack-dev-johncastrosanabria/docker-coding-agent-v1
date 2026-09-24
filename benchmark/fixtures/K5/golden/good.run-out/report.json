@@ -1,0 +1,20 @@
+{
+  "_comment": "The completion-report fields K5's oracle reads in an acceptance run (RUN_OUT): FR-014a alternative verification with its definition and limitation.",
+  "final_outcome": "succeeded",
+  "verification": {
+    "type": "alternative",
+    "alternative_definition": "Run python3 notes.py on a scratch notes file containing empty lines, whitespace-only lines and an indented note, and on the default notes.txt, and compare the printed output line by line with the expected numbering and text.",
+    "limitation": "Deterministic verification for the affected behavior was unavailable: the repository has no test suite, so the evidence is the observed output of these runs.",
+    "checks": [
+      {
+        "id": "observe notes.py output",
+        "command_or_method": "python3 notes.py /run/dca/out/scratch-notes.txt; python3 notes.py",
+        "required": true,
+        "executed_by": "agent",
+        "after_last_change": true,
+        "result": "pass",
+        "exit_status": 0
+      }
+    ]
+  }
+}

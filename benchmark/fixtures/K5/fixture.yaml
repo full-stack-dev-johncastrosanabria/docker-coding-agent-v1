@@ -1,0 +1,19 @@
+{
+  "id": "K5",
+  "category": "small",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "notes.py prints every line of the notes file with a number, blank lines included. Change it so that lines that are empty or contain only whitespace are skipped, and the remaining notes are numbered consecutively from 1. The printed text of each remaining note stays exactly as it is today. This repository has no automated tests, and this change must not add any.",
+  "acceptance_criteria": [
+    "empty and whitespace-only lines are not printed",
+    "the remaining notes are numbered consecutively from 1, in file order, and each note's printed text is unchanged",
+    "only notes.py changes: no test suite or other file is added"
+  ],
+  "verification": {"type": "alternative"},
+  "expected_disposition": "succeeded",
+  "expected_classification": "direct",
+  "allowed_change_scope": ["notes.py"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/original-line-numbers.patch", "golden/bad/keeps-whitespace-lines.patch", "golden/bad/strips-note-text.patch", "golden/bad/no-limitation.patch", "golden/bad/claims-deterministic.patch"]}
+}

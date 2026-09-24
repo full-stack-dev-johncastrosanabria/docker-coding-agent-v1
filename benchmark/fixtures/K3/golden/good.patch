@@ -1,0 +1,20 @@
+diff --git a/app/defaults.ini b/app/defaults.ini
+index 28425b6..7548ae2 100644
+--- a/app/defaults.ini
++++ b/app/defaults.ini
+@@ -2,12 +2,12 @@
+ 
+ [server]
+ host = 127.0.0.1
+-port = 8080
++port = 8443
+ workers = 2
+ 
+ [cache]
+-enabled = false
+-ttl_seconds = 60
++enabled = true
++ttl_seconds = 300
+ 
+ [logging]
+ level = info

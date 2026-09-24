@@ -35,6 +35,7 @@ abort (exit 4), never `abnormal`, and never confused with the host's authoritati
 because the host is the authority on direct/planned semantics.
 """
 
+import collections
 import json
 import os
 import re
@@ -53,6 +54,18 @@ except ImportError:  # loaded by path in tests and in the sandbox
         shellparse = _ilu.module_from_spec(_spec)
         _sys.modules["dca_shellparse"] = shellparse
         _spec.loader.exec_module(shellparse)
+
+
+# The shell classifier lives in shellparse (T081), shared with the in-VM policy gate.
+SCRATCH_DIR = shellparse.SCRATCH_DIR
+READ_ONLY_PROGRAMS = shellparse.READ_ONLY_PROGRAMS
+READ_ONLY_GIT = shellparse.READ_ONLY_GIT
+shell_is_read_only = shellparse.shell_is_read_only
+shell_scratch_writes = shellparse.shell_scratch_writes
+_command_text = shellparse._command_text
+_target_paths = shellparse._target_paths
+_under_scratch = shellparse._under_scratch
+_inspects = shellparse._inspects
 
 
 # --- the pinned runtime's typed outer events ------------------------------------------------------
@@ -96,9 +109,13 @@ RECOGNIZED_EVENTS = OBSERVED_EVENTS | NATIVE_CEILING_EVENTS
 TOOL_CALL_EVENT = "tool_call"
 TERMINAL_EVENT = "stream_stopped"
 #: Types that carry an ATTEMPTED tool call. They are never counted as steps - a blocked call was
-#: not dispatched - but an attempted mutation still means the agent tried to change the workspace,
-#: which is what FR-001's ordering rule is about.
+#: not dispatched - but the attempt is kept, because an attempt is what retries, the reviewer and
+#: researcher invariants and the diagnostics read. An attempt is NOT a change: FR-001 and FR-008
+#: measure ordering from the first EFFECTIVE mutation, the first attempted mutation the gate did not
+#: refuse, because a refused call never reached the workspace. See
+#: `ToolCallRecord.effective_mutation` and data-model *First workspace mutation*.
 ATTEMPT_EVENTS = frozenset({"tool_call", "hook_blocked", "tool_call_confirmation"})
+
 #: The event that carries a tool call's arguments one fragment at a time, before the
 #: dispatched `tool_call` itself arrives.
 PARTIAL_EVENT = "partial_tool_call"
@@ -120,7 +137,6 @@ NATIVE_CEILING = "native_ceiling"
 #: Where the run scratch directory lives inside the VM. Writes confined to it are run EVIDENCE -
 #: `context.json`, `plan.md`, `report.agent.json` - and data-model.md is explicit that they are not
 #: workspace mutations. Recording the plan cannot be the thing the plan has to precede.
-SCRATCH_DIR = "/run/dca/out"
 CONTEXT_RECORD = "context.json"
 PLAN_FILE = "plan.md"
 
@@ -142,25 +158,6 @@ READ_ONLY_TOOLS = frozenset({
 #: Tools whose effect depends on their arguments: a shell command may be inspection or a build.
 SHELL_TOOLS = frozenset({"bash", "sh", "shell", "run_command", "run_shell_command", "execute",
                          "exec", "terminal"})
-
-#: Programs that only look. Deliberately short: anything absent is treated as a mutation, which is
-#: the fail-closed direction for an ordering rule (an early first-mutation can only make the
-#: Context Record look late, never make a late one look early). `echo`, `printf` and `cd` (T075)
-#: print or change the shell's directory only; the 005-007 runs showed them as false early
-#: mutations. Any file they write goes through a redirection, which is checked separately.
-READ_ONLY_PROGRAMS = frozenset({
-    "ls", "cat", "head", "tail", "grep", "egrep", "fgrep", "rg", "ag", "find", "wc", "file",
-    "stat", "pwd", "basename", "dirname", "tree", "du", "df", "diff", "cmp", "which", "type",
-    "date", "whoami", "readlink", "realpath", "sort", "uniq", "cut", "tr", "nl", "column",
-    "md5sum", "sha256sum", "shasum", "true", "false", "test", "echo", "printf", "cd",
-})
-
-#: `git` subcommands that only read. `git branch` and `git checkout` are absent on purpose: both
-#: change refs or the worktree depending on their arguments.
-READ_ONLY_GIT = frozenset({
-    "status", "log", "diff", "show", "ls-files", "ls-tree", "rev-parse", "cat-file", "blame",
-    "describe", "shortlog", "grep", "rev-list", "for-each-ref", "show-ref",
-})
 
 
 def _arguments(call):
@@ -228,169 +225,6 @@ class StreamedArguments:
         return value if isinstance(value, dict) else None
 
 
-def _command_text(arguments):
-    if not arguments:
-        return None
-    for key in ("command", "cmd", "script", "shell_command", "commandLine"):
-        value = arguments.get(key)
-        if isinstance(value, str) and value.strip():
-            return value
-    return None
-
-
-def _target_paths(arguments):
-    if not arguments:
-        return []
-    paths = []
-    for key in ("path", "file_path", "filePath", "file", "target", "destination", "dest", "source"):
-        value = arguments.get(key)
-        if isinstance(value, str) and value:
-            paths.append(value)
-    # Multi-target tools (Codex's create_directory) name every target in a `paths` list.
-    listed = arguments.get("paths")
-    if isinstance(listed, list):
-        paths += [item for item in listed if isinstance(item, str) and item]
-    return paths
-
-
-def _under_scratch(path, scratch_dir):
-    normalized = os.path.normpath(path)
-    scratch = os.path.normpath(scratch_dir)
-    return normalized == scratch or normalized.startswith(scratch + os.sep)
-
-
-#: Redirections that write no file: to /dev/null, or duplicating or closing a descriptor.
-_HARMLESS_REDIRECTION = re.compile(r"(?:\d*|&)>>?\s*/dev/null\b|\d*>&(?:\d+|-)")
-
-#: Arguments with which an otherwise inspecting program writes, deletes or runs something.
-#: Short options match inside a cluster (`sort -uo out`); long ones also match `--opt=value`.
-_WRITING_ARGUMENTS = {
-    "sort": ("-o", "--output"),
-    "tree": ("-o",),
-    "file": ("-C", "--compile"),
-    "rg": ("--pre",),
-    "find": ("-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0",
-             "-fprintf", "-fls"),
-}
-
-
-def _redirects_to_a_file(command):
-    """True when `command` sends output anywhere but /dev/null.
-
-    The text is checked as written, so a `>` inside quotes or a heredoc body also counts. That
-    over-reports on purpose: an early first mutation can only make the Context Record look late,
-    and an extra mutation can only make a retry count sooner - never hide a write.
-    """
-    return ">" in _HARMLESS_REDIRECTION.sub(" ", command)
-
-
-def _writes_by_argument(program, words):
-    for word in words:
-        for option in _WRITING_ARGUMENTS.get(program, ()):
-            if option.startswith("--"):
-                if word == option or word.startswith(option + "="):
-                    return True
-            elif len(option) == 2:
-                if word.startswith("-") and not word.startswith("--") and option[1] in word[1:]:
-                    return True
-            elif word == option:
-                return True
-    # `uniq INPUT OUTPUT` writes OUTPUT.
-    return program == "uniq" and len([word for word in words if not word.startswith("-")]) > 1
-
-
-def shell_is_read_only(command):
-    """True only when EVERY segment of `command` is known inspection that writes no file.
-
-    An unparseable command is not read-only. That mirrors the policy gate's class 28: a command the
-    host cannot analyse is never given the benefit of the doubt. Neither is one that redirects
-    output to a file or passes an inspecting program an argument that makes it write.
-    """
-    parsed = shellparse.parse(command)
-    if not parsed.ok or not parsed.segments or _redirects_to_a_file(command):
-        return False
-    return all(_inspects(segment) for segment in parsed.segments)
-
-
-def _inspects(segment):
-    """True when one parsed segment only looks (its redirections are judged by the caller)."""
-    program = (segment.program or "").rsplit("/", 1)[-1]
-    words = list(segment.argv[1:])
-    if program == "git":
-        argv = [word for word in words if not word.startswith("-")]
-        return bool(argv) and argv[0] in READ_ONLY_GIT and not any(
-            word == "--output" or word.startswith("--output=") for word in words)
-    if words == ["--version"] and "/" not in (segment.program or ""):
-        return True     # a program on PATH asked only for its version (T075)
-    return program in READ_ONLY_PROGRAMS and not _writes_by_argument(program, words)
-
-
-#: An output redirection and its target. `>&N` (duplicating a descriptor) has no target.
-_OUTPUT_REDIRECTION = re.compile(
-    r"(?:\d+|&)?>>?\|?[ \t]*(?![&>])('[^']*'|\"[^\"]*\"|[^\s;&|<>()]+)")
-#: A heredoc operator and its delimiter. A quoted delimiter turns off expansion in the body.
-_HEREDOC = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
-#: Characters that let the shell decide the path at run time: never a provable scratch target.
-_EXPANDING = re.compile(r"[$`*?~\[{]")
-
-
-def _without_heredoc_bodies(command):
-    """`command` minus its heredoc bodies, or None when a body can run a command.
-
-    A body is data unless its delimiter is unquoted and it contains a command substitution, which
-    the shell runs while expanding the document.
-    """
-    kept, pending = [], []
-    for line in command.split("\n"):
-        if pending:
-            delimiter, strip_tabs, expands = pending[0]
-            if (line.lstrip("\t") if strip_tabs else line) == delimiter:
-                pending.pop(0)
-            elif expands and ("$(" in line or "`" in line):
-                return None
-            continue
-        kept.append(line)
-        pending += [(delimiter, dash == "-", not quote)
-                    for dash, quote, delimiter in _HEREDOC.findall(line)]
-    return None if pending else "\n".join(kept)
-
-
-def shell_scratch_writes(command, scratch_dir=SCRATCH_DIR):
-    """The scratch-dir paths `command` writes, when it can write nothing else; None otherwise.
-
-    data-model.md: writes confined to `/run/dca/out/` are not workspace mutations. A shell command
-    qualifies only when every segment is inspection or a `mkdir` of scratch directories, and every
-    output redirection targets `/dev/null` or a literal absolute path inside the scratch dir.
-    Anything the host cannot prove - a relative or variable target, a substitution, a leftover `>`
-    it could not attribute - is not scratch-only.
-    """
-    parsed = shellparse.parse(command)
-    body = _without_heredoc_bodies(command)
-    if not parsed.ok or not parsed.segments or body is None:
-        return None
-    body = _HARMLESS_REDIRECTION.sub(" ", body)
-    matches = list(_OUTPUT_REDIRECTION.finditer(body))
-    if body.count(">") != sum(match.group(0).count(">") for match in matches):
-        return None
-    written = []
-    for match in matches:
-        target = match.group(1).strip("'\"")
-        if _EXPANDING.search(target) or not os.path.isabs(target) \
-                or not _under_scratch(target, scratch_dir):
-            return None
-        written.append(os.path.normpath(target))
-    for segment in parsed.segments:
-        if (segment.program or "").rsplit("/", 1)[-1] == "mkdir":
-            directories = [word for word in segment.argv[1:] if not word.startswith("-")]
-            if not directories or any(_EXPANDING.search(d) or not os.path.isabs(d)
-                                      or not _under_scratch(d, scratch_dir)
-                                      for d in directories):
-                return None
-        elif not _inspects(segment):
-            return None
-    return written
-
-
 class ToolCallRecord:
     """One attempted or dispatched tool call, with what the host could tell about it."""
 
@@ -419,6 +253,39 @@ class ToolCallRecord:
         self.scratch_only = bool(self.paths) and all(
             _under_scratch(path, scratch_dir) for path in self.paths)
         self.mutation = self._is_mutation()
+
+    @property
+    def not_dispatched(self):
+        """The runtime never dispatched this call, so the workspace cannot have changed.
+
+        `hook_blocked` (a gate refusal) and `tool_call_confirmation` (a call awaiting a decision)
+        both land here. Only the first is a refusal, but neither executed, which is all the ordering
+        rules need. Neither can be impersonated from inside the sandbox: they are outer event types,
+        and rule 1 means only `tool_call` dispatches. A confirmation cannot later execute without
+        re-arriving as its own dispatched `tool_call`, and in this harness it cannot be approved at
+        all - the launcher gives the runtime no stdin (`launcher.execute_agent`, `stdin=DEVNULL`), so
+        G3 records it rejected.
+        """
+        return not self.dispatched
+
+    @property
+    def refused_by_response(self):
+        """Dispatched, but the gate's hook refused it before the tool ran (Claude's only signal)."""
+        return self.dispatched and gate_refused_response(self.response, self.name)
+
+    @property
+    def refused_before_execution(self):
+        """This call did not reach the workspace: the gate refused it, or it never dispatched."""
+        return self.not_dispatched or self.refused_by_response
+
+    @property
+    def effective_mutation(self):
+        """An ATTEMPTED mutation that actually reached the workspace (FR-001, FR-008 ordering).
+
+        A refused attempt stays fully visible - `mutation`, the record and the denial are all still
+        reported - but it changed nothing, so it is not where the ordering rules measure from.
+        """
+        return self.mutation and not self.refused_before_execution
 
     def _is_mutation(self):
         lowered = self.name.lower()
@@ -455,6 +322,8 @@ class ToolCallRecord:
         return {"order": self.order, "id": self.id, "name": self.name, "agent": self.agent,
                 "timestamp": self.timestamp, "dispatched": self.dispatched,
                 "mutation": self.mutation, "scratch_only": self.scratch_only,
+                "refused_before_execution": self.refused_before_execution,
+                "effective_mutation": self.effective_mutation,
                 "command": self.command}
 
 
@@ -518,6 +387,54 @@ FAILURE_MARKERS = (
 )
 
 
+# --- gate denials -----------------------------------------------------------------------------
+
+#: How each backend says the policy gate refused a call BEFORE it ran.
+#:
+#: Codex (docker-agent) emits a structural `hook_blocked` event, so `dispatched` already carries the
+#: fact and nothing has to be read out of payload. Claude Code has no such event: the call is
+#: dispatched, counted as a step, and the refusal arrives ONLY as the hook's error text in the
+#: response. That text is payload, and rule 2 of this module's contract is that payload never
+#: carries authority, so the envelope below is matched deliberately narrowly and an unrecognized
+#: response leaves the call EFFECTIVE. The bias is the safe one: a missed refusal keeps FR-001
+#: strict, while a false refusal would excuse a real pre-record mutation.
+#: Every message the gate refuses a call with. All three exit 2 and all three mean the tool never
+#: ran: an outright DENY, an ASK with no matching grant, and the class-29 advisory step limit
+#: (`policy_gate.EXIT_DENY`; contract *policy-gate.md*). Matching only the first would leave an
+#: unparseable mutating command - class 28, ASK - scored as a change the workspace never saw.
+GATE_MARKERS = ("DCA_DENY", "DCA_APPROVAL_REQUIRED", "DCA_LIMIT")
+#: The gate's own hook path, as the runtime prints it when the gate refuses. Requiring it narrows
+#: the envelope further; it can only tighten the match, never loosen it.
+GATE_HOOK_PATH = "[/opt/dca/bin/dca-gate]:"
+CLAUDE_DENIAL_PREFIX = "PreToolUse:"
+CLAUDE_DENIAL_INFIX = " hook error:"
+
+
+def gate_refused_response(response, tool_name):
+    """True when `response` is the gate's refusal of a call on THIS tool, not merely its output.
+
+    Only the Claude shape is matched here. A Codex refusal arrives as a `hook_blocked` event with no
+    `tool_call` at all, so it is already covered structurally by `ToolCallRecord.not_dispatched`;
+    matching its response text as well would add a branch that no genuine refusal can reach and that
+    payload could reach, with nothing to bind it to the tool it claims.
+
+    Three things must all hold: the envelope is at the start of the response, it carries the gate's
+    own hook path, and it names THIS record's tool. A shell command's stdout therefore cannot excuse
+    itself unless it also impersonates its own tool - and `dca bench` will not honour even that
+    unless the host-written gate log records a matching refusal
+    (`bench.corroborated_ordering_point`). That is defence in depth, not proof: see the caveat there.
+    """
+    if not isinstance(response, str) or not any(m in response for m in GATE_MARKERS):
+        return False
+    text = response.strip()
+    if not text.startswith(CLAUDE_DENIAL_PREFIX) or CLAUDE_DENIAL_INFIX not in text:
+        return False
+    if GATE_HOOK_PATH not in text:
+        return False
+    named = text[len(CLAUDE_DENIAL_PREFIX):text.index(CLAUDE_DENIAL_INFIX)].strip()
+    return bool(tool_name) and named.lower() == str(tool_name).lower()
+
+
 def response_outcome(text):
     """`pass` / `fail` / `unknown` for one check execution, from its tool response only."""
     if text is None:
@@ -570,6 +487,7 @@ class RunAnalysis:
         self.native_ceiling = None
         self.host_stop_reason = None
         self.first_mutation = None
+        self.first_effective_mutation = None
         self.context_record_at = None
         self.plan_at = None
         self.stop_reason = None
@@ -580,13 +498,28 @@ class RunAnalysis:
         return self.stream in (COMPLETE, HOST_TERMINATED)
 
     @property
+    def first_attempted_mutation(self):
+        """The first mutation the agent TRIED, refused or not. `first_mutation`'s explicit name.
+
+        Kept as the meaning of `first_mutation` so that every existing consumer - the retry
+        accountant, the diagnostics and the reviewer/researcher invariants - keeps reading what it
+        always read. FR-001/FR-008 are the only rules that moved to the effective point.
+        """
+        return self.first_mutation
+
+    @property
     def context_precedes_first_mutation(self):
-        """FR-001/FR-008 ordering. No mutation at all trivially satisfies it."""
-        if self.first_mutation is None:
+        """FR-001/FR-008 ordering, measured at the first EFFECTIVE mutation.
+
+        A call the gate refused never changed the workspace, so it cannot be the moment the
+        workspace first changed. The attempt is still recorded and still reported; it just is not
+        what this rule measures. No effective mutation at all trivially satisfies the rule.
+        """
+        if self.first_effective_mutation is None:
             return True
         if self.context_record_at is None:
             return False
-        return self.context_record_at < self.first_mutation
+        return self.context_record_at < self.first_effective_mutation
 
     def counters(self):
         return {"steps": self.steps, "retries": self.retries,
@@ -607,6 +540,8 @@ class RunAnalysis:
             "limit_reached": self.limit_reached,
             "native_ceiling": self.native_ceiling,
             "first_mutation": self.first_mutation,
+            "first_attempted_mutation": self.first_attempted_mutation,
+            "first_effective_mutation": self.first_effective_mutation,
             "context_record_at": self.context_record_at,
             "plan_ref_written": self.plan_at is not None,
             "token_usage": self.token_usage,
@@ -805,14 +740,25 @@ def _session_cost(typed, key):
 
 
 def _account_ordering(result, scratch_dir):
-    """First workspace mutation, and when the Context Record and Plan were written (FR-001)."""
+    """First workspace mutation, and when the Context Record and Plan were written (FR-001).
+
+    `first_mutation` stays the ATTEMPTED point, counting refused calls, because that is what the
+    retry accountant, the reviewer and researcher invariants and the diagnostics read.
+    `first_effective_mutation` is the point the ordering rules measure from. An evidence write the
+    gate refused produced no file, so it is not credited as the record or the plan being written -
+    the same principle, applied to the evidence side.
+    """
     for record in result.tool_calls:
+        if result.first_mutation is None and record.mutation:
+            result.first_mutation = record.order
+        if result.first_effective_mutation is None and record.effective_mutation:
+            result.first_effective_mutation = record.order
+        if record.refused_before_execution:
+            continue
         if result.context_record_at is None and record.writes(CONTEXT_RECORD, scratch_dir):
             result.context_record_at = record.order
         if result.plan_at is None and record.writes(PLAN_FILE, scratch_dir):
             result.plan_at = record.order
-        if result.first_mutation is None and record.mutation:
-            result.first_mutation = record.order
 
 
 def _account_retries(result, verification_commands):
@@ -950,7 +896,6 @@ class StreamAccountant:
         self.retries = 0
         self.verification_runs = 0
         self.tokens = 0
-        self.first_mutation = None
         self.context_record_at = None
         self._sessions = {}
         self._streamed = StreamedArguments()
@@ -979,8 +924,6 @@ class StreamAccountant:
             self.steps += 1
             if self.context_record_at is None and record.writes(CONTEXT_RECORD, self.scratch_dir):
                 self.context_record_at = record.order
-            if self.first_mutation is None and record.mutation:
-                self.first_mutation = record.order
             self._recount_retries()
             return True
         if kind in ATTEMPT_EVENTS and kind != TOOL_CALL_EVENT:
@@ -989,8 +932,6 @@ class StreamAccountant:
                 record = ToolCallRecord(len(self.tool_calls), event, False, self.scratch_dir,
                                         streamed=self._streamed)
                 self.tool_calls.append(record)
-                if self.first_mutation is None and record.mutation:
-                    self.first_mutation = record.order
             return True
         if kind == "tool_call_response":
             identifier = event.get("tool_call_id")
@@ -1014,6 +955,22 @@ class StreamAccountant:
             self.tokens = sum(item["input"] + item["output"] for item in self._sessions.values())
             return True
         return False
+
+    @property
+    def first_mutation(self):
+        """The first ATTEMPTED mutation so far. Derived, never latched.
+
+        `effective_mutation` depends on a call's response, which arrives after the call, so a latched
+        value computed when the record was appended would be wrong for the one backend the
+        distinction exists for. Deriving both on demand is what keeps this class and `analyze()` from
+        giving two different answers to one question - the drift the class docstring warns about.
+        """
+        return next((r.order for r in self.tool_calls if r.mutation), None)
+
+    @property
+    def first_effective_mutation(self):
+        """The first mutation so far that the gate did not refuse. Derived, never latched."""
+        return next((r.order for r in self.tool_calls if r.effective_mutation), None)
 
     def _recount_retries(self):
         if not self.verification_commands:

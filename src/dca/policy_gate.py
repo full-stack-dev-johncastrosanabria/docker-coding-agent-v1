@@ -22,6 +22,15 @@ outside class 26 and is logged as `class: null` with `rule: class26-positive-com
 `class: 26` with `decision: allow`. The skill NAME is never sufficient - the copy under the trusted
 skill root must match the canonical kit manifest - so an invalid manifest denies every skill load.
 
+CONTEXT RECORD FIRST (FR-001, T081). Until a valid Context Record exists at <run>/out/context.json,
+a call that would change the workspace is refused: a shell command that is not provably inspection
+(a build, test or baseline run counts, data-model.md), and a file-writing tool aimed outside the
+scratch dir. Reads, git inspection and writes to the scratch dir stay open, so the agent can
+research and write the record. The refusal carries the class the call would otherwise have (8 for
+shell, 3 for file writes): the action classes stay exactly 1-31. Both backends reach it through the
+same normalize(), and shell commands are judged by the same shellparse.command_effect the host's
+FR-001 detector uses.
+
 This gate is a COOPERATIVE control. The agent has sudo in the VM and can alter it. The enforcement
 boundary is host-side: the microVM, the sbx network policy, the credential proxy, host limits and
 host-authoritative grants.
@@ -272,7 +281,79 @@ MUTATING = frozenset({"write", "edit", "notebookedit", "write_file", "edit_file"
 READ_ONLY_EXEMPT = frozenset({"git_diff", "git_status", "git_log", "read", "grep", "glob",
                               "read_file", "list_directory", "search"})
 DELEGATION_TOOLS = frozenset({"transfer_task", "task", "agent"})
+#: Shell tools (the host detector's list): a command here is inspection, scratch-only or a change.
+SHELL_TOOLS = frozenset({"bash", "sh", "shell", "run_command", "run_shell_command", "execute",
+                         "exec", "terminal"})
+#: Tools that write files. Aimed outside the scratch dir, a call by one of them is a change.
+WORKSPACE_WRITERS = frozenset({"write", "edit", "multiedit", "notebookedit", "write_file",
+                               "edit_file", "create_file", "delete_file", "move_file",
+                               "apply_patch", "create_directory", "remove_directory"})
+_MAX_RECORD_BYTES = 1_000_000
 SKILL_TOOLS = frozenset({"read_skill", "read_skill_file", "skill"})
+
+
+def _record_problem(record):
+    """Why `record` is not a Context Record (FR-001), or None. The same test the host applies to the
+    retrieved record (dca.bench._context_record_problem)."""
+    if not isinstance(record, dict):
+        return "it is not a JSON object"
+    classification = record.get("classification")
+    if not isinstance(classification, dict) or classification.get("value") not in ("direct", "planned") \
+            or not str(classification.get("reason") or "").strip():
+        return "it has no classification with a reason"
+    if not isinstance(record.get("repository_map"), dict):
+        return "it has no repository_map"
+    approach = record.get("verification_approach")
+    if not isinstance(approach, dict) or approach.get("type") not in ("deterministic", "alternative"):
+        return "it has no verification_approach"
+    return None
+
+
+def context_record_problem():
+    """None when a valid Context Record exists; otherwise why it does not.
+
+    Anything the gate cannot establish - no file, a directory, an unreadable or oversized file,
+    invalid JSON, a duplicate key - is "no record": it never reads as satisfied.
+    """
+    path = os.path.join(_RUN_DIR, "out", "context.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = fh.read(_MAX_RECORD_BYTES + 1)
+    except FileNotFoundError:
+        return "none has been written yet"
+    except (OSError, ValueError) as exc:
+        return f"it cannot be read ({type(exc).__name__})"
+    if len(raw) > _MAX_RECORD_BYTES:
+        return "it is too large"
+    try:
+        record = json.loads(raw, object_pairs_hook=_no_duplicate_keys)
+    except ValueError:
+        return "it is not valid JSON"
+    return _record_problem(record)
+
+
+def workspace_change_class(entry, shellparse, scratch):
+    """The action class of a call FR-001 counts as a workspace change, or None for one that is not.
+
+    Shell: 8 unless every segment is inspection or a scratch-only write (28 for a command that does
+    not parse); a shell call whose command the gate cannot read is a change. File writers: 3 unless every target is inside `scratch`, the
+    run's scratch dir (run.json, the same source class 6 uses).
+    Every other tool - reads, git inspection, delegation, skills - changes nothing.
+    """
+    lowered = entry["tool"].lower()
+    if lowered in SHELL_TOOLS:
+        command = shellparse._command_text(entry["input"])
+        if command is None:
+            return 8
+        if not shellparse.parse(command).ok:
+            return 28       # the class it would otherwise have; the ordering refusal opens no request
+        return 8 if shellparse.command_effect(command, scratch)[0] == "mutate" else None
+    if lowered in WORKSPACE_WRITERS:
+        paths = shellparse._target_paths(entry["input"])
+        if paths and all(shellparse._under_scratch(path, scratch) for path in paths):
+            return None
+        return 3
+    return None
 
 
 def decide(entry, run, policy, grants, shellparse):
@@ -325,6 +406,18 @@ def decide(entry, run, policy, grants, shellparse):
         if decision == "ASK":
             _require_grant(action_class, target, grants, decisions)
         return action_class, None, target
+
+    # --- Context Record first (FR-001) ---------------------------------------------------------
+    change_class = workspace_change_class(
+        entry, shellparse,
+        run.get("scratch") if isinstance(run.get("scratch"), str) and run.get("scratch") else shellparse.SCRATCH_DIR)
+    if change_class is not None:
+        problem = context_record_problem()
+        if problem is not None:
+            raise Deny(change_class,
+                       "Context Record is required before verification may run or any file "
+                       "changes: write /run/dca/out/context.json (classification, repository_map, "
+                       f"verification_approach) first - {problem}")
 
     # --- shell parseability ----------------------------------------------------------------------
     command = entry["input"].get("command") or entry["input"].get("cmd")

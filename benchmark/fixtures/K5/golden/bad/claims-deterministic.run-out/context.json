@@ -1,0 +1,17 @@
+{
+  "_comment": "The Context Record fields K5's oracle reads.",
+  "classification": {
+    "value": "direct",
+    "reason": "one loop in one script"
+  },
+  "verification_approach": {
+    "type": "deterministic",
+    "checks": [
+      {
+        "id": "observe notes.py output",
+        "command_or_method": "python3 notes.py",
+        "required": true
+      }
+    ]
+  }
+}

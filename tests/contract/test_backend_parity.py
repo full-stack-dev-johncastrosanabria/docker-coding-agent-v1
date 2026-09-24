@@ -264,6 +264,34 @@ class TestInstructionParity(ParityCase):
                          digest(self.kit / "agents" / "instructions" / "root.md"))
 
 
+class TestEvidenceOrderingParity(ParityCase):
+    """T081: the ordering contract reaches both backends through the same bytes."""
+
+    ORDERING = ("write the context record first, then run the baseline, then change anything",
+                "evidence for a required check is the run made after your last edit")
+
+    def squash(self, path):
+        return " ".join(Path(path).read_text(encoding="utf-8").lower().split())
+
+    def test_35_both_backends_are_given_the_ordering_in_their_root_instruction(self):
+        self.need("claude", "codex")
+        for label, path in (("claude", self.kit / "backends" / "claude" / "CLAUDE.md"),
+                            ("codex", self.kit / "agents" / "instructions" / "root.md")):
+            for phrase in self.ORDERING:
+                with self.subTest(backend=label, phrase=phrase):
+                    self.assertIn(phrase, self.squash(path))
+
+    def test_36_both_backends_load_the_baseline_and_receipt_rules_from_the_same_skill_bytes(self):
+        self.need("claude", "codex")
+        for name, phrase in (("root-cause-debugging", "after the context record is written"),
+                             ("change-receipt", "never record a pre-change run in `checks`")):
+            shared = self.kit / "skills" / name / "SKILL.md"
+            claude = self.kit / "backends" / "claude" / "skills" / name / "SKILL.md"
+            with self.subTest(skill=name):
+                self.assertIn(phrase, self.squash(shared))
+                self.assertEqual(digest(claude), digest(shared))
+
+
 # --- 4. the same skills, from a trusted source ---------------------------------------------------
 
 

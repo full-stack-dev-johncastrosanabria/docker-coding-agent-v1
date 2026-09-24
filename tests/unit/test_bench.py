@@ -48,6 +48,12 @@ eligibility = _load("dca_eligibility", ROOT / "src" / "dca" / "eligibility.py")
 rules = _load("dca_eligibility_rules", ROOT / "gates" / "eligibility_rules.py")
 
 EXPECTED_IDS = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
+SMALL_ACCEPTANCE_IDS = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8"]
+
+
+def reliability_suite():
+    """The committed reliability fixtures (R1-R10); the acceptance fixtures have their own tests."""
+    return [f for f in bench.discover() if bench.RELIABILITY_ID.match(f["id"])]
 
 
 def record(**overrides):
@@ -62,14 +68,14 @@ FIXTURE = {"expected_disposition": "succeeded"}
 
 
 class TestFixtureSuite(unittest.TestCase):
-    """The committed suite: schema-valid, deterministic, and the shape the benchmark promises."""
+    """The committed reliability suite: schema-valid, deterministic, and the shape it promises."""
 
     def test_01_every_fixture_is_discovered_in_natural_order_and_is_schema_valid(self):
         fixtures = bench.discover()
-        self.assertEqual([f["id"] for f in fixtures], EXPECTED_IDS)
+        self.assertEqual([f["id"] for f in fixtures], SMALL_ACCEPTANCE_IDS + EXPECTED_IDS)
 
     def test_02_small_fixtures_are_direct_and_medium_fixtures_are_planned(self):
-        for fixture in bench.discover():
+        for fixture in reliability_suite():
             with self.subTest(fixture=fixture["id"]):
                 expected = "direct" if fixture["category"] == "small" else "planned"
                 self.assertEqual(fixture["expected_classification"], expected)
@@ -77,7 +83,7 @@ class TestFixtureSuite(unittest.TestCase):
                 self.assertEqual(fixture["expected_disposition"], "succeeded")
 
     def test_03_every_fixture_has_hidden_evidence_and_deterministic_verification(self):
-        for fixture in bench.discover():
+        for fixture in reliability_suite():
             with self.subTest(fixture=fixture["id"]):
                 self.assertEqual(fixture["verification"]["type"], "deterministic")
                 self.assertTrue(fixture["verification"]["commands"])
@@ -413,6 +419,48 @@ class TestBenchRuns(unittest.TestCase):
         self.assertEqual(len({r["seed_commit"] for r in document["runs"]}), 1)
 
 
+    def run_acceptance_fixture(self, **script):
+        """K2 with the fake launcher, in a plain `--fixtures` run, recording what the oracle saw."""
+        fixtures = bench.discover(selection="K2,R1")
+        script.setdefault("patch", os.path.join(fixtures[0]["_dir"], fixtures[0]["golden"]["good"]))
+        os.environ["DCA_FAKE_RUN"] = json.dumps(script)
+        seen = []
+
+        def oracle(fixture, candidate, run_out=None):
+            seen.append((fixture["id"], run_out))
+            return bench.run_oracle_on_host(fixture, candidate, run_out=run_out)
+
+        runner = bench.Bench(["claude"], fixtures=fixtures[:1], repo_root=str(ROOT),
+                             bench_id="b-test", sbx=self.sbx, oracle=oracle,
+                             dca_command=[sys.executable, str(FAKE_DCA)], log=self.logs.append,
+                             work_root=str(self.dir / "work"),
+                             results_root=str(self.dir / "results"))
+        return runner.run()["runs"][0], seen
+
+    def test_59_an_acceptance_fixture_is_held_to_the_acceptance_checks_in_a_fixtures_run(self):
+        # T081/T083/T086 validate K*, M* and F* with `dca bench --fixtures`: those runs must check
+        # FR-001 ordering and give the oracle the run's outputs, exactly as the protocol does.
+        run, seen = self.run_acceptance_fixture()
+        self.assertEqual(run["result"], bench.PASSED, run["reasons"])
+        self.assertEqual((run["acceptance_reasons"], run["violations"]), ([], []))
+        self.assertEqual(seen, [("K2", str(self.dir / "work" / "b-test" / "claude-K2-1" / "run"))])
+
+    def test_59a_a_workspace_edit_before_the_context_record_fails_an_acceptance_fixture(self):
+        edit = {"type": "tool_call", "agent_name": "root", "tool_call": {
+            "id": "e", "type": "function", "function": {
+                "name": "edit_file", "arguments": json.dumps({"path": "/workspace/todo/store.py"})}}}
+        run, _ = self.run_acceptance_fixture(events=[edit])
+        self.assertEqual(run["result"], bench.FAILED)
+        self.assertTrue(any(r.startswith("FR-001: no Context Record was written before the first "
+                                         "workspace mutation") for r in run["reasons"]),
+                        run["reasons"])
+
+    def test_59b_a_reliability_fixture_keeps_the_reliability_scoring(self):
+        _, document = self.run_bench(selection="R1")
+        run = document["runs"][0]
+        self.assertEqual(run["result"], bench.PASSED, run["reasons"])
+        self.assertNotIn("acceptance_reasons", run)
+
 class TestSummary(unittest.TestCase):
     def test_60_rates_durations_and_counts(self):
         rows = [dict(record(), backend="claude", result=bench.PASSED, duration_seconds=10),
@@ -529,14 +577,16 @@ class TestReliabilityNamespace(unittest.TestCase):
         self.dir.mkdir(parents=True)
 
     def test_90_the_reliability_suite_is_exactly_r1_to_r10(self):
-        self.assertEqual([f["id"] for f in bench.discover()],
+        self.assertEqual([f["id"] for f in reliability_suite()],
                          [f"R{i}" for i in range(1, 11)])
+        self.assertEqual([f["id"] for f in bench.acceptance_fixtures(bench.discover())],
+                         SMALL_ACCEPTANCE_IDS, "no reliability fixture counts as acceptance")
 
-    def test_91_no_committed_fixture_uses_an_acceptance_id(self):
-        for directory in sorted((ROOT / "benchmark" / "fixtures").iterdir()):
-            if directory.is_dir():
-                with self.subTest(fixture=directory.name):
-                    self.assertRegex(directory.name, r"^R([1-9]|10)$")
+    def test_91_the_committed_acceptance_fixtures_are_exactly_the_ones_created_so_far(self):
+        # T079/T080 created K1-K8; M*, F* and S* arrive with T082-T094, never under an R name.
+        names = sorted(d.name for d in (ROOT / "benchmark" / "fixtures").iterdir() if d.is_dir())
+        self.assertEqual([n for n in names if not re.fullmatch(r"R([1-9]|10)", n)],
+                         sorted(SMALL_ACCEPTANCE_IDS))
 
     def test_92_the_baseline_keeps_its_historical_ids_and_maps_them(self):
         baseline = json.loads(self.BASELINE.read_text())
@@ -782,6 +832,96 @@ class TestAcceptanceChecks(AcceptanceCase):
         blocked = report_doc(final_outcome="blocked", run_integrity={"sandbox_created": False})
         self.assertEqual(self.checks(blocked, context=None, fixture=dict(
             self.FIXTURE, expected_disposition="blocked"))[0], [])
+
+    # --- FR-001 measures from the first EFFECTIVE mutation, corroborated by the gate log ---------
+
+    #: A Claude-backend refusal: the call IS dispatched and only the hook's error text says it was
+    #: refused. That text is payload, so `bench` honours it only when the host's own gate log agrees.
+    DENIED_EDIT = call("e", "edit_file", {"path": "/workspace/src/a.py"})
+    DENY_RESPONSE = event("tool_call_response", tool_call_id="e", response=(
+        "PreToolUse:edit_file hook error: [/opt/dca/bin/dca-gate]: DCA_DENY 3: Context Record is "
+        "required before verification may run or any file changes: run/out/context.json is absent"))
+
+    def gate_log(self, out, *records):
+        with open(os.path.join(out, "gate.log.jsonl"), "w", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(json.dumps(record) + "\n")
+
+    @staticmethod
+    def deny(tool):
+        return {"agent": "root", "class": 3, "decision": "deny", "tool": tool,
+                "counters": {"steps_used": 0, "retries_used": 0}, "ts": "2026-09-24T00:00:00Z"}
+
+    @staticmethod
+    def allow(tool):
+        return {"agent": "root", "class": 1, "decision": "allow", "tool": tool,
+                "counters": {"steps_used": 0, "retries_used": 0}, "ts": "2026-09-24T00:00:00Z"}
+
+    def test_118a_a_denied_pre_record_mutation_the_gate_log_confirms_passes_fr001(self):
+        out = self.run_out(report_doc(), [self.DENIED_EDIT, self.DENY_RESPONSE, WRITE_CONTEXT])
+        self.gate_log(out, self.deny("edit_file"), self.allow("write_file"))
+        reasons, violations = bench.acceptance_checks(self.FIXTURE, self.VALID, out)
+        self.assertEqual(reasons, [])
+        self.assertEqual(violations, [])
+
+    def test_118b_a_denial_the_gate_log_does_not_confirm_is_not_honoured(self):
+        """Fail closed: a stream that claims a refusal the host never made still fails FR-001."""
+        out = self.run_out(report_doc(), [self.DENIED_EDIT, self.DENY_RESPONSE, WRITE_CONTEXT])
+        self.gate_log(out, self.allow("edit_file"), self.allow("write_file"))
+        reasons, _ = bench.acceptance_checks(self.FIXTURE, self.VALID, out)
+        self.assertTrue(any(r.startswith("FR-001") for r in reasons), reasons)
+
+    def test_118c_without_a_gate_log_a_response_based_denial_is_not_honoured(self):
+        out = self.run_out(report_doc(), [self.DENIED_EDIT, self.DENY_RESPONSE, WRITE_CONTEXT])
+        reasons, _ = bench.acceptance_checks(self.FIXTURE, self.VALID, out)
+        self.assertTrue(any(r.startswith("FR-001") for r in reasons), reasons)
+
+    def test_118d_a_structural_refusal_needs_no_corroboration(self):
+        """`hook_blocked` is an outer event type, so the sandbox cannot fake it (events rule 1)."""
+        blocked = event("hook_blocked", tool_call={
+            "id": "e", "type": "function",
+            "function": {"name": "edit_file",
+                         "arguments": json.dumps({"path": "/workspace/src/a.py"})}})
+        out = self.run_out(report_doc(), [blocked, WRITE_CONTEXT])
+        self.assertEqual(bench.acceptance_checks(self.FIXTURE, self.VALID, out), ([], []))
+
+    def test_118e_each_logged_denial_excuses_only_one_call(self):
+        second = call("e2", "edit_file", {"path": "/workspace/src/b.py"})
+        second_response = event("tool_call_response", tool_call_id="e2", response=(
+            "PreToolUse:edit_file hook error: [/opt/dca/bin/dca-gate]: DCA_DENY 3: nope"))
+        out = self.run_out(report_doc(), [self.DENIED_EDIT, self.DENY_RESPONSE,
+                                          second, second_response, WRITE_CONTEXT])
+        self.gate_log(out, self.deny("edit_file"))       # one refusal logged, two claimed
+        reasons, _ = bench.acceptance_checks(self.FIXTURE, self.VALID, out)
+        self.assertTrue(any(r.startswith("FR-001") for r in reasons), reasons)
+
+    def test_118f_a_refusal_of_a_read_only_call_leaves_no_spendable_credit(self):
+        """Every claim spends a logged refusal, so a genuine deny cannot be harvested."""
+        looked = call("r", "Bash", {"command": "cat /run/dca/cagent/chatgpt-auth.json"})
+        looked_deny = event("tool_call_response", tool_call_id="r", response=(
+            "PreToolUse:Bash hook error: [/opt/dca/bin/dca-gate]: DCA_DENY 2: sensitive path"))
+        mutated = call("m", "Bash", {"command": "printf x >> /workspace/src/a.py"})
+        mutated_claim = event("tool_call_response", tool_call_id="m", response=(
+            "PreToolUse:Bash hook error: [/opt/dca/bin/dca-gate]: DCA_DENY 8: nope"))
+        out = self.run_out(report_doc(), [looked, looked_deny, mutated, mutated_claim,
+                                          WRITE_CONTEXT])
+        self.gate_log(out, self.deny("Bash"))     # one genuine refusal, of the read-only call
+        reasons, _ = bench.acceptance_checks(self.FIXTURE, self.VALID, out)
+        self.assertTrue(any(r.startswith("FR-001") for r in reasons), reasons)
+
+    def test_118g_a_refusal_logged_for_another_agent_does_not_corroborate(self):
+        """The budget is keyed on agent and tool, not tool alone."""
+        out = self.run_out(report_doc(), [self.DENIED_EDIT, self.DENY_RESPONSE, WRITE_CONTEXT])
+        self.gate_log(out, dict(self.deny("edit_file"), agent="researcher"))
+        reasons, _ = bench.acceptance_checks(self.FIXTURE, self.VALID, out)
+        self.assertTrue(any(r.startswith("FR-001") for r in reasons), reasons)
+
+    def test_118h_a_refusal_logged_under_another_class_does_not_corroborate(self):
+        """When the response names a class, the logged refusal must agree."""
+        out = self.run_out(report_doc(), [self.DENIED_EDIT, self.DENY_RESPONSE, WRITE_CONTEXT])
+        self.gate_log(out, dict(self.deny("edit_file"), **{"class": 27}))
+        reasons, _ = bench.acceptance_checks(self.FIXTURE, self.VALID, out)
+        self.assertTrue(any(r.startswith("FR-001") for r in reasons), reasons)
 
     def test_119_planned_runs_need_plan_before_mutation_and_an_identical_review(self):
         planned = {"classification": {"value": "planned", "reason": "contract change"},
@@ -1093,6 +1233,106 @@ class TestOracleInterface(AcceptanceCase):
         self.assertEqual(verdict, "fail")
         self.assertEqual(bench.oracle_violations(detail),
                          [{"invariant": "SC-006", "detail": "canary in report.md"}])
+
+
+class TestSmallAcceptanceFixtures(unittest.TestCase):
+    """T079/T080: the eight small acceptance fixtures, checked before any provider run.
+
+    tests/oracles/test_oracles.py proves each oracle on its golden patches; this checks the rest
+    of what a campaign relies on: the US1 contract fields, runnable required checks, a stable seed,
+    the starting condition each task describes, and reference solutions inside their scope.
+    """
+
+    def setUp(self):
+        self.fixtures = {f["id"]: f for f in bench.acceptance_fixtures(bench.discover())}
+        self.dir = WORK / "small-acceptance"
+        shutil.rmtree(self.dir, ignore_errors=True)
+        self.dir.mkdir(parents=True)
+
+    def seed(self, fid, name="repo"):
+        return bench.build_seed(str(Path(self.fixtures[fid]["_dir"]) / "seed"), str(self.dir / name))
+
+    def test_170_k1_to_k8_are_small_direct_fixtures_that_always_apply(self):
+        self.assertEqual(list(self.fixtures), SMALL_ACCEPTANCE_IDS)
+        for fid, fixture in self.fixtures.items():
+            with self.subTest(fixture=fid):
+                self.assertEqual((fixture["category"], fixture["trust_level"],
+                                  fixture["gate_condition"], fixture["expected_disposition"],
+                                  fixture["expected_classification"]),
+                                 ("small", "both", "always", "succeeded", "direct"))
+                text = " ".join([fixture["task"], *fixture["acceptance_criteria"]]).lower()
+                self.assertNotRegex(text, r"claude|codex|anthropic|openai", "provider-neutral")
+        self.assertIn("no-new-dependency-without-grant", self.fixtures["K6"]["prohibited_checks"])
+
+    def test_171_verification_is_deterministic_except_k5_which_has_no_established_check(self):
+        for fid, fixture in self.fixtures.items():
+            with self.subTest(fixture=fid):
+                if fid == "K5":     # FR-014a: alternative verification, nothing to re-execute
+                    self.assertEqual(fixture["verification"], {"type": "alternative"})
+                else:
+                    self.assertEqual(fixture["verification"]["type"], "deterministic")
+                    self.assertTrue(fixture["verification"]["commands"])
+
+    def test_172_every_fixture_carries_its_oracle_and_goldens(self):
+        for fid, fixture in self.fixtures.items():
+            directory = Path(fixture["_dir"])
+            with self.subTest(fixture=fid):
+                self.assertTrue((directory / fixture["oracle"]).is_file())
+                self.assertTrue((directory / fixture["golden"]["good"]).is_file())
+                self.assertGreaterEqual(len(fixture["golden"]["bad"]), 2)
+                for patch in fixture["golden"]["bad"]:
+                    self.assertTrue((directory / patch).is_file(), patch)
+                self.assertFalse((directory / "seed" / "hidden").exists())
+                for report in directory.glob("golden/**/*.run-out/*.json"):
+                    json.loads(report.read_text())
+        # The report-side checks (FR-019, FR-014a, SC-010) are validated by golden run outputs.
+        for fid in ("K1", "K5", "K8"):
+            with self.subTest(run_out=fid):
+                self.assertTrue((Path(self.fixtures[fid]["_dir"]) / "golden" / "good.run-out"
+                                 / "report.json").is_file())
+
+    def test_173_every_seed_builds_to_one_stable_commit(self):
+        commits = {}
+        for fid in self.fixtures:
+            with self.subTest(fixture=fid):
+                commits[fid] = self.seed(fid, f"{fid}-a")
+                self.assertEqual(self.seed(fid, f"{fid}-b"), commits[fid])
+        self.assertEqual(len(set(commits.values())), len(commits))
+
+    def test_174_every_required_check_runs_on_the_seed(self):
+        for fid, fixture in self.fixtures.items():
+            for command in fixture["verification"].get("commands") or []:
+                with self.subTest(fixture=fid, command=command):
+                    self.seed(fid, fid)
+                    run = subprocess.run(command, shell=True, cwd=self.dir / fid,
+                                         capture_output=True, text=True,
+                                         env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+                    self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+
+    def test_175_k1_starts_with_exactly_one_unrelated_failing_test(self):
+        # FR-019: the pre-existing failure the baseline must record is there before any change.
+        self.seed("K1")
+        run = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+                             cwd=self.dir / "repo", capture_output=True, text=True,
+                             env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn("FAILED (failures=1)", run.stderr)
+        self.assertIn("test_year_boundary_uses_iso_week_year (tests.test_week", run.stderr)
+
+    def test_176_every_reference_solution_stays_inside_the_allowed_scope(self):
+        for fid, fixture in self.fixtures.items():
+            with self.subTest(fixture=fid):
+                patch = (Path(fixture["_dir"]) / fixture["golden"]["good"]).read_text()
+                paths = re.findall(r"^diff --git a/\S+ b/(\S+)$", patch, re.M)
+                self.assertTrue(paths)
+                self.assertEqual(bench.out_of_scope([{"path": p} for p in paths],
+                                                    fixture["allowed_change_scope"]), [])
+
+    def test_177_the_acceptance_count_now_holds_every_small_fixture(self):
+        # The full protocol stays refused until T082-T094 add the other 20 applicable fixtures.
+        with self.assertRaises(errors.PreconditionError) as caught:
+            bench.acceptance_plan(bench.discover(), "trusted", False, THRESHOLDS)
+        self.assertIn("'small': 8, 'medium': 0", str(caught.exception))
 
 
 if __name__ == "__main__":

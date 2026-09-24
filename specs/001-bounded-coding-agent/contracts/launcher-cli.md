@@ -198,7 +198,11 @@ a real `dca run` subprocess, results go to `benchmark/results/<bench-id>/benchma
 the exit status is 0 only when every run passed. `--acceptance` (T075/T076) runs the acceptance
 definitions (every fixture except R1-R10) under the committed `benchmark/thresholds.yaml` and exits
 0 only when every selected backend is accepted. Until T079-T094 create the 28-fixture suite its
-applicable set is not 28, so it is refused (exit 3) before anything runs.
+applicable set is not 28, so it is refused (exit 3) before anything runs. An acceptance fixture
+selected without `--acceptance` (`--fixtures 'K*'`, as T081, T083 and T086 validate each story) is
+scored by the same per-fixture rules as below: its oracle receives `RUN_OUT`, and the generic checks
+include FR-001 ordering, the planned-task checks and the expected limit. The counting, thresholds,
+repeats and preconditions stay `--acceptance`'s alone.
 
 Fixtures are selected per backend by `gate_condition`. Exactly one of S5a (untrusted
 fail-closed, expected `blocked`) and S5b (untrusted egress/G9) applies to each backend.
@@ -233,8 +237,10 @@ fail-closed, expected `blocked`) and S5b (untrusted egress/G9) applies to each b
   - the report is schema-valid;
   - scope and cleanup;
   - FR-001: the Context Record, with classification and reason, a Repository Map and a
-    verification approach, is written before the first workspace mutation;
-  - for planned runs, `plan.md` precedes the first mutation, and success needs `plan_ref` and an
+    verification approach, is written before the first EFFECTIVE workspace mutation (a call the
+    gate refused never reached the workspace; data-model *First workspace mutation*);
+  - for planned runs, `plan.md` precedes that same first effective mutation, and success needs
+    `plan_ref` and an
     identical review;
   - the `expected_limit`.
 

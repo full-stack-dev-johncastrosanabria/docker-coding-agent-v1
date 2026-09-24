@@ -275,5 +275,50 @@ class TestOtherSkills(unittest.TestCase):
         self.assertIn("the host recomputes the outcome", body)
 
 
+class TestEvidenceOrdering(unittest.TestCase):
+    """T081: the two orderings a live run got wrong, stated once for both backends.
+
+    The Context Record comes before the baseline, because a baseline run is a verification command
+    and so the first workspace mutation (FR-001); and only a run made after the last edit is final
+    evidence, so a pre-change run is the baseline and never a required check.
+    """
+
+    def test_60_root_md_puts_the_context_record_before_the_baseline_and_every_check(self):
+        body = normalized(INSTRUCTIONS / "root.md")
+        self.assertIn("a baseline run is itself a verification command", body)
+        self.assertIn("write the context record first, then run the baseline, then change anything",
+                      body)
+
+    def test_61_root_md_says_only_a_run_after_the_last_edit_is_final_evidence(self):
+        body = normalized(INSTRUCTIONS / "root.md")
+        self.assertIn("evidence for a required check is the run made after your last edit", body)
+        self.assertIn("`verification.baseline`", body)
+        self.assertIn("never in `verification.checks`", body)
+
+    def test_62_the_baseline_skill_no_longer_contradicts_the_ordering(self):
+        body = normalized(SKILLS / "root-cause-debugging" / "SKILL.md")
+        self.assertIn("baseline first, before you change anything", body)
+        self.assertIn("after the context record is written", body)
+        self.assertIn("counts as the first workspace mutation", body)
+        self.assertIn("`verification.baseline`", body)
+
+    def test_63_change_receipt_separates_baseline_from_final_checks(self):
+        body = normalized(SKILLS / "change-receipt" / "SKILL.md")
+        self.assertIn("`baseline` holds the runs made before your change", body)
+        self.assertIn("`checks` holds only runs made after your last edit", body)
+        self.assertIn("never record a pre-change run in `checks`", body)
+        self.assertIn("a different id", body)
+
+    def test_64_no_skill_tells_the_agent_to_run_anything_before_the_context_record(self):
+        # The contradiction behind the K1 failure: every instruction that says "before you change
+        # anything" must also place the Context Record ahead of it.
+        for name in ("root-cause-debugging", "verification"):
+            body = normalized(SKILLS / name / "SKILL.md")
+            with self.subTest(skill=name):
+                self.assertTrue("context record" in body or "context.json" in body)
+                self.assertRegex(body, r"before the first (build or verification command|workspace "
+                                       r"mutation)|after the context record is written")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,36 @@
+diff --git a/tests/test_store.py b/tests/test_store.py
+index 7487071..e859954 100644
+--- a/tests/test_store.py
++++ b/tests/test_store.py
+@@ -23,6 +23,16 @@ class TestTodoList(unittest.TestCase):
+         with self.assertRaises(KeyError):
+             TodoList().complete(7)
+ 
++    def test_removed_item_is_gone_and_its_id_is_not_reused(self):
++        todos = TodoList()
++        todos.add("a")
++        second = todos.add("b")
++        todos.remove(second)
++        self.assertEqual(todos.pending(), ["a"])
++        self.assertEqual(todos.add("c"), 3)
++        with self.assertRaises(KeyError):
++            todos.remove(second)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/todo/store.py b/todo/store.py
+index c46334c..ac46ebb 100644
+--- a/todo/store.py
++++ b/todo/store.py
+@@ -21,6 +21,10 @@ class TodoList:
+         """Mark an item done. An unknown id raises KeyError."""
+         self._items[item_id]["done"] = True
+ 
++    def remove(self, item_id):
++        """Delete an item, done or not. An unknown id raises KeyError."""
++        del self._items[item_id]
++
+     def pending(self):
+         """Titles of the items not yet done, in the order they were added."""
+         return [item["title"] for item in self._items.values() if not item["done"]]
