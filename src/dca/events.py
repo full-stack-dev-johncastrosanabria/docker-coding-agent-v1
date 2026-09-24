@@ -112,6 +112,11 @@ TERMINAL_EVENT = "stream_stopped"
 #: not dispatched - but an attempted mutation still means the agent tried to change the workspace,
 #: which is what FR-001's ordering rule is about.
 ATTEMPT_EVENTS = frozenset({"tool_call", "hook_blocked", "tool_call_confirmation"})
+#: An attempt is not the same as a change. FR-001/FR-008 measure ordering from the first EFFECTIVE
+#: mutation - the first attempted mutation the gate did NOT refuse - because a refused call never
+#: reached the workspace. Every other reader of `mutation` (retries, the reviewer and researcher
+#: invariants, diagnostics) keeps the attempted meaning, and the attempt stays in the record either
+#: way. See `ToolCallRecord.effective_mutation` and data-model *First workspace mutation*.
 #: The event that carries a tool call's arguments one fragment at a time, before the
 #: dispatched `tool_call` itself arrives.
 PARTIAL_EVENT = "partial_tool_call"
@@ -250,6 +255,34 @@ class ToolCallRecord:
             _under_scratch(path, scratch_dir) for path in self.paths)
         self.mutation = self._is_mutation()
 
+    @property
+    def denied_structurally(self):
+        """The runtime never dispatched this call, so the workspace cannot have changed.
+
+        `hook_blocked` and `tool_call_confirmation` both land here. Neither can be impersonated from
+        inside the sandbox: they are outer event types, and rule 1 means only `tool_call` dispatches.
+        """
+        return not self.dispatched
+
+    @property
+    def denied_by_response(self):
+        """The call was dispatched, but the gate's own hook refused it before the tool ran."""
+        return self.dispatched and gate_denied_response(self.response, self.name)
+
+    @property
+    def denied(self):
+        """The gate refused this call, by either backend's reporting."""
+        return self.denied_structurally or self.denied_by_response
+
+    @property
+    def effective_mutation(self):
+        """An ATTEMPTED mutation that actually reached the workspace (FR-001, FR-008 ordering).
+
+        A refused attempt stays fully visible - `mutation`, the record and the denial are all still
+        reported - but it changed nothing, so it is not where the ordering rules measure from.
+        """
+        return self.mutation and not self.denied
+
     def _is_mutation(self):
         lowered = self.name.lower()
         if lowered in READ_ONLY_TOOLS:
@@ -285,6 +318,7 @@ class ToolCallRecord:
         return {"order": self.order, "id": self.id, "name": self.name, "agent": self.agent,
                 "timestamp": self.timestamp, "dispatched": self.dispatched,
                 "mutation": self.mutation, "scratch_only": self.scratch_only,
+                "denied": self.denied, "effective_mutation": self.effective_mutation,
                 "command": self.command}
 
 
@@ -348,6 +382,42 @@ FAILURE_MARKERS = (
 )
 
 
+# --- gate denials -----------------------------------------------------------------------------
+
+#: How each backend says the policy gate refused a call BEFORE it ran.
+#:
+#: Codex (docker-agent) emits a structural `hook_blocked` event, so `dispatched` already carries the
+#: fact and nothing has to be read out of payload. Claude Code has no such event: the call is
+#: dispatched, counted as a step, and the refusal arrives ONLY as the hook's error text in the
+#: response. That text is payload, and rule 2 of this module's contract is that payload never
+#: carries authority, so the envelope below is matched deliberately narrowly and an unrecognized
+#: response leaves the call EFFECTIVE. The bias is the safe one: a missed refusal keeps FR-001
+#: strict, while a false refusal would excuse a real pre-record mutation.
+GATE_MARKER = "DCA_DENY"
+CLAUDE_DENIAL_PREFIX = "PreToolUse:"
+CLAUDE_DENIAL_INFIX = " hook error:"
+CODEX_DENIAL_PREFIX = "Tool call blocked by hook:"
+
+
+def gate_denied_response(response, tool_name):
+    """True when `response` is the gate's refusal of a call on THIS tool, not merely its output.
+
+    `tool_name` must match the tool the Claude envelope names, so a shell command whose stdout
+    happens to quote a refusal cannot excuse itself unless it also impersonates its own tool. The
+    remaining impersonation is closed one layer up, where `dca bench` corroborates the excuse
+    against the host-written gate log (see `bench.corroborated_ordering_point`).
+    """
+    if not isinstance(response, str) or GATE_MARKER not in response:
+        return False
+    text = response.strip()
+    if text.startswith(CODEX_DENIAL_PREFIX):
+        return True
+    if text.startswith(CLAUDE_DENIAL_PREFIX) and CLAUDE_DENIAL_INFIX in text:
+        named = text[len(CLAUDE_DENIAL_PREFIX):text.index(CLAUDE_DENIAL_INFIX)].strip()
+        return bool(tool_name) and named.lower() == str(tool_name).lower()
+    return False
+
+
 def response_outcome(text):
     """`pass` / `fail` / `unknown` for one check execution, from its tool response only."""
     if text is None:
@@ -400,6 +470,7 @@ class RunAnalysis:
         self.native_ceiling = None
         self.host_stop_reason = None
         self.first_mutation = None
+        self.first_effective_mutation = None
         self.context_record_at = None
         self.plan_at = None
         self.stop_reason = None
@@ -410,13 +481,28 @@ class RunAnalysis:
         return self.stream in (COMPLETE, HOST_TERMINATED)
 
     @property
+    def first_attempted_mutation(self):
+        """The first mutation the agent TRIED, refused or not. `first_mutation`'s explicit name.
+
+        Kept as the meaning of `first_mutation` so that every existing consumer - the retry
+        accountant, the diagnostics and the reviewer/researcher invariants - keeps reading what it
+        always read. FR-001/FR-008 are the only rules that moved to the effective point.
+        """
+        return self.first_mutation
+
+    @property
     def context_precedes_first_mutation(self):
-        """FR-001/FR-008 ordering. No mutation at all trivially satisfies it."""
-        if self.first_mutation is None:
+        """FR-001/FR-008 ordering, measured at the first EFFECTIVE mutation.
+
+        A call the gate refused never changed the workspace, so it cannot be the moment the
+        workspace first changed. The attempt is still recorded and still reported; it just is not
+        what this rule measures. No effective mutation at all trivially satisfies the rule.
+        """
+        if self.first_effective_mutation is None:
             return True
         if self.context_record_at is None:
             return False
-        return self.context_record_at < self.first_mutation
+        return self.context_record_at < self.first_effective_mutation
 
     def counters(self):
         return {"steps": self.steps, "retries": self.retries,
@@ -437,6 +523,8 @@ class RunAnalysis:
             "limit_reached": self.limit_reached,
             "native_ceiling": self.native_ceiling,
             "first_mutation": self.first_mutation,
+            "first_attempted_mutation": self.first_attempted_mutation,
+            "first_effective_mutation": self.first_effective_mutation,
             "context_record_at": self.context_record_at,
             "plan_ref_written": self.plan_at is not None,
             "token_usage": self.token_usage,
@@ -643,6 +731,8 @@ def _account_ordering(result, scratch_dir):
             result.plan_at = record.order
         if result.first_mutation is None and record.mutation:
             result.first_mutation = record.order
+        if result.first_effective_mutation is None and record.effective_mutation:
+            result.first_effective_mutation = record.order
 
 
 def _account_retries(result, verification_commands):
@@ -781,6 +871,7 @@ class StreamAccountant:
         self.verification_runs = 0
         self.tokens = 0
         self.first_mutation = None
+        self.first_effective_mutation = None
         self.context_record_at = None
         self._sessions = {}
         self._streamed = StreamedArguments()
@@ -811,6 +902,8 @@ class StreamAccountant:
                 self.context_record_at = record.order
             if self.first_mutation is None and record.mutation:
                 self.first_mutation = record.order
+            if self.first_effective_mutation is None and record.effective_mutation:
+                self.first_effective_mutation = record.order
             self._recount_retries()
             return True
         if kind in ATTEMPT_EVENTS and kind != TOOL_CALL_EVENT:
@@ -821,6 +914,8 @@ class StreamAccountant:
                 self.tool_calls.append(record)
                 if self.first_mutation is None and record.mutation:
                     self.first_mutation = record.order
+                if self.first_effective_mutation is None and record.effective_mutation:
+                    self.first_effective_mutation = record.order
             return True
         if kind == "tool_call_response":
             identifier = event.get("tool_call_id")

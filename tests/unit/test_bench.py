@@ -833,6 +833,68 @@ class TestAcceptanceChecks(AcceptanceCase):
         self.assertEqual(self.checks(blocked, context=None, fixture=dict(
             self.FIXTURE, expected_disposition="blocked"))[0], [])
 
+    # --- FR-001 measures from the first EFFECTIVE mutation, corroborated by the gate log ---------
+
+    #: A Claude-backend refusal: the call IS dispatched and only the hook's error text says it was
+    #: refused. That text is payload, so `bench` honours it only when the host's own gate log agrees.
+    DENIED_EDIT = call("e", "edit_file", {"path": "/workspace/src/a.py"})
+    DENY_RESPONSE = event("tool_call_response", tool_call_id="e", response=(
+        "PreToolUse:edit_file hook error: [/opt/dca/bin/dca-gate]: DCA_DENY 3: Context Record is "
+        "required before verification may run or any file changes: run/out/context.json is absent"))
+
+    def gate_log(self, out, *records):
+        with open(os.path.join(out, "gate.log.jsonl"), "w", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(json.dumps(record) + "\n")
+
+    @staticmethod
+    def deny(tool):
+        return {"agent": "root", "class": 3, "decision": "deny", "tool": tool,
+                "counters": {"steps_used": 0, "retries_used": 0}, "ts": "2026-09-24T00:00:00Z"}
+
+    @staticmethod
+    def allow(tool):
+        return {"agent": "root", "class": 1, "decision": "allow", "tool": tool,
+                "counters": {"steps_used": 0, "retries_used": 0}, "ts": "2026-09-24T00:00:00Z"}
+
+    def test_118a_a_denied_pre_record_mutation_the_gate_log_confirms_passes_fr001(self):
+        out = self.run_out(report_doc(), [self.DENIED_EDIT, self.DENY_RESPONSE, WRITE_CONTEXT])
+        self.gate_log(out, self.deny("edit_file"), self.allow("write_file"))
+        reasons, violations = bench.acceptance_checks(self.FIXTURE, self.VALID, out)
+        self.assertEqual(reasons, [])
+        self.assertEqual(violations, [])
+
+    def test_118b_a_denial_the_gate_log_does_not_confirm_is_not_honoured(self):
+        """Fail closed: a stream that claims a refusal the host never made still fails FR-001."""
+        out = self.run_out(report_doc(), [self.DENIED_EDIT, self.DENY_RESPONSE, WRITE_CONTEXT])
+        self.gate_log(out, self.allow("edit_file"), self.allow("write_file"))
+        reasons, _ = bench.acceptance_checks(self.FIXTURE, self.VALID, out)
+        self.assertTrue(any(r.startswith("FR-001") for r in reasons), reasons)
+
+    def test_118c_without_a_gate_log_a_response_based_denial_is_not_honoured(self):
+        out = self.run_out(report_doc(), [self.DENIED_EDIT, self.DENY_RESPONSE, WRITE_CONTEXT])
+        reasons, _ = bench.acceptance_checks(self.FIXTURE, self.VALID, out)
+        self.assertTrue(any(r.startswith("FR-001") for r in reasons), reasons)
+
+    def test_118d_a_structural_refusal_needs_no_corroboration(self):
+        """`hook_blocked` is an outer event type, so the sandbox cannot fake it (events rule 1)."""
+        blocked = event("hook_blocked", tool_call={
+            "id": "e", "type": "function",
+            "function": {"name": "edit_file",
+                         "arguments": json.dumps({"path": "/workspace/src/a.py"})}})
+        out = self.run_out(report_doc(), [blocked, WRITE_CONTEXT])
+        self.assertEqual(bench.acceptance_checks(self.FIXTURE, self.VALID, out), ([], []))
+
+    def test_118e_each_logged_denial_excuses_only_one_call(self):
+        second = call("e2", "edit_file", {"path": "/workspace/src/b.py"})
+        second_response = event("tool_call_response", tool_call_id="e2", response=(
+            "PreToolUse:edit_file hook error: [/opt/dca/bin/dca-gate]: DCA_DENY 3: nope"))
+        out = self.run_out(report_doc(), [self.DENIED_EDIT, self.DENY_RESPONSE,
+                                          second, second_response, WRITE_CONTEXT])
+        self.gate_log(out, self.deny("edit_file"))       # one refusal logged, two claimed
+        reasons, _ = bench.acceptance_checks(self.FIXTURE, self.VALID, out)
+        self.assertTrue(any(r.startswith("FR-001") for r in reasons), reasons)
+
     def test_119_planned_runs_need_plan_before_mutation_and_an_identical_review(self):
         planned = {"classification": {"value": "planned", "reason": "contract change"},
                    "plan_ref": "/run/dca/out/plan.md"}

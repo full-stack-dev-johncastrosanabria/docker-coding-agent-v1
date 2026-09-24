@@ -441,6 +441,66 @@ def _context_record_problem(path):
     return None
 
 
+def gate_denials_by_tool(out_dir):
+    """Per-tool count of the refusals the HOST logged, or None when there is no gate log to read.
+
+    `events` reads a Claude refusal out of the tool response, which is payload the sandbox can
+    influence. The gate log is written by the gate itself inside the VM and copied out by the
+    launcher, so it is the authority on what was actually refused.
+    """
+    path = os.path.join(out_dir, "gate.log.jsonl")
+    if not os.path.isfile(path):
+        return None
+    counts = {}
+    try:
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(record, dict) and record.get("decision") == "deny":
+                    tool = record.get("tool")
+                    key = str(tool).lower() if tool else ""
+                    counts[key] = counts.get(key, 0) + 1
+    except OSError:
+        return None
+    return counts
+
+
+def corroborated_ordering_point(analysis, out_dir):
+    """The tool call FR-001 and FR-008 measure the first workspace change from.
+
+    `analysis.first_effective_mutation` already excuses the calls the gate refused. This adds the
+    corroboration that makes the excuse safe to score on:
+
+    * a STRUCTURAL refusal (`hook_blocked`, never dispatched) is an outer event type and cannot be
+      impersonated from inside the sandbox, so it is taken at face value;
+    * a refusal read out of a Claude tool RESPONSE is payload, so it is honoured only when the
+      host's own gate log records a refusal for that tool which no earlier excuse has claimed;
+    * anything uncorroborated counts as a real mutation, which keeps the ordering rules strict.
+    """
+    budget = gate_denials_by_tool(out_dir)
+    for record in analysis.tool_calls:
+        if not record.mutation:
+            continue
+        if not record.denied:
+            return record.order
+        if record.denied_structurally:
+            continue
+        if budget is None:
+            return record.order
+        key = str(record.name).lower() if record.name else ""
+        if budget.get(key, 0) > 0:
+            budget[key] -= 1
+            continue
+        return record.order
+    return None
+
+
 def ordering_failures(report, out_dir):
     """FR-001 and the planned-task generic checks (FR-008, FR-020, FR-022), from the run itself.
 
@@ -453,7 +513,10 @@ def ordering_failures(report, out_dir):
     if not os.path.isfile(events_path):
         return ["FR-001: the run left no event stream to check the ordering against"]
     analysis = events_module.analyze_file(events_path)
-    first = analysis.first_mutation
+    # FR-001/FR-008 measure from the first mutation that actually reached the workspace. A refused
+    # attempt stays in the stream, in the gate log and in the per-call records; it is simply not
+    # where the workspace first changed.
+    first = corroborated_ordering_point(analysis, out_dir)
     failures = []
     if first is not None:
         if analysis.context_record_at is None or analysis.context_record_at >= first:

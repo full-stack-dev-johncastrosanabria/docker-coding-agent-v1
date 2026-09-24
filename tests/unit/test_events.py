@@ -551,12 +551,26 @@ class TestFirstMutation(unittest.TestCase):
                                 exit_status=0)
         self.assertEqual(result.first_mutation, 0)
 
-    def test_64_an_attempted_but_blocked_mutation_still_counts(self):
+    def test_64_a_blocked_mutation_is_an_attempt_but_not_an_effective_change(self):
+        """The attempt stays fully visible; it is just not where the workspace first changed.
+
+        Before the FR-001 semantic correction this asserted the opposite ordering verdict: a call the
+        gate refused was counted as the first workspace mutation even though the workspace never saw
+        it, which made the gate's own enforcement unable to produce a passing run.
+        """
         result = events.analyze(stream(
             call("a", "write_file", {"path": "src/x.py"}, kind="hook_blocked"),
             call("b", "write_file", self.CONTEXT)), exit_status=0)
+        # the attempt is recorded, and still an attempted mutation
         self.assertEqual(result.first_mutation, 0)
-        self.assertFalse(result.context_precedes_first_mutation)
+        self.assertEqual(result.first_attempted_mutation, 0)
+        self.assertTrue(result.tool_calls[0].mutation)
+        self.assertTrue(result.tool_calls[0].denied)
+        self.assertTrue(result.tool_calls[0].denied_structurally)
+        # but it changed nothing, so FR-001 ordering does not measure from it
+        self.assertFalse(result.tool_calls[0].effective_mutation)
+        self.assertIsNone(result.first_effective_mutation)
+        self.assertTrue(result.context_precedes_first_mutation)
 
     def test_65_delegation_and_skill_loading_are_not_mutations(self):
         result = events.analyze(stream(
@@ -744,6 +758,151 @@ class TestReporting(unittest.TestCase):
     def test_72_as_dict_is_json_serializable(self):
         result = events.analyze(stream(call("a", "read_file")), exit_status=0)
         json.dumps(result.as_dict())
+
+
+class TestEffectiveMutation(unittest.TestCase):
+    """FR-001 measures from the first EFFECTIVE workspace mutation (approved semantic correction).
+
+    A call the policy gate refused before it ran is still an ATTEMPTED mutation and stays visible in
+    every place evidence is read from - the record, `first_attempted_mutation`, the gate log - but it
+    did not change the workspace, so the ordering rules do not measure from it. Safety, approval and
+    DENY accounting are untouched: this is only about where "first change" is.
+    """
+
+    CONTEXT = {"path": "/run/dca/out/context.json", "content": "{}"}
+    EDIT = {"path": "src/x.py", "content": "edit"}
+
+    #: What the gate's refusal looks like coming back through each backend. Claude Code has no
+    #: `hook_blocked` event: the call is dispatched and only the hook's error text tells the story.
+    CLAUDE_DENY = ("PreToolUse:%s hook error: [/opt/dca/bin/dca-gate]: "
+                   "DCA_DENY 8: Context Record is required before verification may run or any "
+                   "file changes: run/out/context.json is absent")
+    CODEX_DENY = ("Tool call blocked by hook: DCA_DENY 8: Context Record is required before "
+                  "verification may run or any file changes: run/out/context.json is absent")
+
+    def test_73_a_successful_mutation_before_the_context_record_fails_fr001(self):
+        result = events.analyze(stream(
+            call("a", "write_file", self.EDIT),
+            call("b", "write_file", self.CONTEXT)), exit_status=0)
+        self.assertEqual(result.first_attempted_mutation, 0)
+        self.assertEqual(result.first_effective_mutation, 0)
+        self.assertFalse(result.context_precedes_first_mutation)
+
+    def test_74_a_gate_denied_mutation_before_the_record_is_an_attempt_only(self):
+        for backend, lines in (
+                ("codex", [call("a", "write_file", self.EDIT, kind="hook_blocked"),
+                           response("a", self.CODEX_DENY)]),
+                ("claude", [call("a", "Write", self.EDIT),
+                            response("a", self.CLAUDE_DENY % "Write")])):
+            with self.subTest(backend=backend):
+                result = events.analyze(stream(*lines, call("z", "write_file", self.CONTEXT)),
+                                        exit_status=0)
+                record = result.tool_calls[0]
+                self.assertTrue(record.mutation, "the attempt must stay an attempted mutation")
+                self.assertTrue(record.denied)
+                self.assertFalse(record.effective_mutation)
+                self.assertEqual(result.first_attempted_mutation, 0)
+                self.assertIsNone(result.first_effective_mutation)
+                self.assertTrue(result.context_precedes_first_mutation)
+                # and the attempt is still carried in the serialized evidence
+                self.assertEqual(record.as_dict()["mutation"], True)
+                self.assertEqual(record.as_dict()["denied"], True)
+                self.assertEqual(record.as_dict()["effective_mutation"], False)
+
+    def test_75_the_record_followed_by_a_successful_mutation_passes_fr001(self):
+        result = events.analyze(stream(
+            call("a", "write_file", self.CONTEXT),
+            call("b", "write_file", self.EDIT)), exit_status=0)
+        self.assertEqual(result.context_record_at, 0)
+        self.assertEqual(result.first_effective_mutation, 1)
+        self.assertTrue(result.context_precedes_first_mutation)
+
+    def test_76_a_denied_prohibited_action_stays_visible(self):
+        """Safety/policy denials are still events, still records, still attributed."""
+        sensitive = ("PreToolUse:Read hook error: [/opt/dca/bin/dca-gate]: DCA_DENY 2: Read "
+                     "excluded-sensitive path (policy.sensitive_globs, credential paths): "
+                     "/run/dca/cagent/chatgpt-auth.json")
+        skill = "Tool call blocked by hook: DCA_DENY 26: skill 'x' has no verifiable trusted source"
+        result = events.analyze(stream(
+            call("a", "Read", {"path": "/run/dca/cagent/chatgpt-auth.json"}),
+            response("a", sensitive),
+            call("b", "read_skill", {"name": "x"}, kind="hook_blocked"),
+            response("b", skill)), exit_status=0)
+        self.assertEqual(len(result.tool_calls), 2)
+        self.assertIn("DCA_DENY 2", result.tool_calls[0].response)
+        self.assertIn("DCA_DENY 26", result.tool_calls[1].response)
+        # neither is a mutation to begin with, so nothing about them was excused
+        self.assertIsNone(result.first_attempted_mutation)
+        self.assertIsNone(result.first_effective_mutation)
+
+    def test_77_a_blocked_sub_agent_mutation_stays_visible_with_its_attribution(self):
+        """FR-004's "zero mutating calls by the researcher" still has its evidence."""
+        blocked = json.dumps({"type": "hook_blocked", "agent_name": "researcher",
+                              "tool_call": {"id": "r1", "type": "function",
+                                            "function": {"name": "write_file",
+                                                         "arguments": json.dumps(self.EDIT)}}})
+        result = events.analyze(stream(blocked, call("z", "write_file", self.CONTEXT)),
+                                exit_status=0)
+        record = result.tool_calls[0]
+        self.assertEqual(record.agent, "researcher")
+        self.assertTrue(record.mutation, "the researcher's attempt must remain countable")
+        self.assertFalse(record.effective_mutation)
+        self.assertEqual(result.first_attempted_mutation, 0)
+
+    def test_78_step_and_retry_accounting_do_not_change(self):
+        """Steps count dispatched calls only, and retries still key off dispatched records."""
+        blocked = events.analyze(stream(
+            call("a", "write_file", self.EDIT, kind="hook_blocked"),
+            call("b", "read_file", {"path": "src/x.py"})), exit_status=0)
+        self.assertEqual(blocked.steps, 1, "a blocked call is not a step, as before")
+        cycle = events.analyze(stream(
+            call("a", "write_file", self.CONTEXT),
+            call("b", "Bash", {"command": "pytest -q"}),
+            response("b", "1 failed\nexit status 1"),
+            call("c", "write_file", self.EDIT),
+            call("d", "Bash", {"command": "pytest -q"}),
+            response("d", "2 passed")), exit_status=0,
+            verification_commands=["pytest -q"])
+        self.assertEqual(cycle.verification_runs, 2)
+        self.assertEqual(cycle.retries, 1)
+        self.assertEqual(cycle.steps, 4)
+
+    def test_79_claude_and_codex_denials_normalize_to_the_same_verdict(self):
+        claude = events.analyze(stream(
+            call("a", "Bash", {"command": "python3 -m unittest discover -s tests"}),
+            response("a", self.CLAUDE_DENY % "Bash"),
+            call("b", "write_file", self.CONTEXT)), exit_status=0)
+        codex = events.analyze(stream(
+            call("a", "Bash", {"command": "python3 -m unittest discover -s tests"},
+                 kind="hook_blocked"),
+            response("a", self.CODEX_DENY),
+            call("b", "write_file", self.CONTEXT)), exit_status=0)
+        for name, result in (("claude", claude), ("codex", codex)):
+            with self.subTest(backend=name):
+                self.assertEqual(result.first_attempted_mutation, 0)
+                self.assertIsNone(result.first_effective_mutation)
+                self.assertTrue(result.context_precedes_first_mutation)
+        # the ONE difference that must remain: Claude dispatched the call, so it cost a step
+        self.assertEqual((claude.steps, codex.steps), (2, 1))
+
+    def test_80_an_unproven_denial_does_not_excuse_the_call(self):
+        """Fail closed. Response text is payload, so only the gate's own envelope counts."""
+        quoted = "gate.log.jsonl: {\"decision\": \"deny\", \"class\": 8} DCA_DENY 8: ..."
+        cases = {
+            "output merely quotes a refusal": quoted,
+            "envelope names a different tool": self.CLAUDE_DENY % "Read",
+            "no gate marker at all": "PreToolUse:Bash hook error: something else",
+            "empty": "",
+        }
+        for label, text in cases.items():
+            with self.subTest(case=label):
+                result = events.analyze(stream(
+                    call("a", "Bash", {"command": "make build"}),
+                    response("a", text),
+                    call("b", "write_file", self.CONTEXT)), exit_status=0)
+                self.assertFalse(result.tool_calls[0].denied_by_response)
+                self.assertEqual(result.first_effective_mutation, 0)
+                self.assertFalse(result.context_precedes_first_mutation)
 
 
 if __name__ == "__main__":

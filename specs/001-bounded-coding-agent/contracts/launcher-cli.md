@@ -237,7 +237,8 @@ fail-closed, expected `blocked`) and S5b (untrusted egress/G9) applies to each b
   - the report is schema-valid;
   - scope and cleanup;
   - FR-001: the Context Record, with classification and reason, a Repository Map and a
-    verification approach, is written before the first workspace mutation;
+    verification approach, is written before the first EFFECTIVE workspace mutation (a call the
+    gate refused never reached the workspace; data-model *First workspace mutation*);
   - for planned runs, `plan.md` precedes the first mutation, and success needs `plan_ref` and an
     identical review;
   - the `expected_limit`.
