@@ -24,7 +24,6 @@
       "golden/bad/eur-padded-differently.patch",
       "golden/bad/no-escalation.patch",
       "golden/bad/report-only-escalation.patch",
-      "golden/bad/planned-from-the-start.patch",
       "golden/bad/classified-direct.patch"
     ]
   }

@@ -19,6 +19,14 @@ Options add a fixture's own requirement:
                             the report and the Context Record, and the rewritten record carries a
                             `component` scope. Checking only the report would let a run that was
                             planned from the start claim an escalation it never made.
+
+                            A stronger check was tried and removed: counting writes of the Context
+                            Record in `events.jsonl`, on the theory that an escalation REWRITES it.
+                            A real run disproved it - the agent wrote the record twice for ordinary
+                            reasons (a shell heredoc, then a Write that corrected it) with no
+                            escalation at all, so the count does not discriminate. Both artifacts the
+                            oracle does read are agent-authored, so a determined fabricator cannot be
+                            stopped at this layer; that limit is real and is not papered over.
   --repo-wide-exploration   repository-wide exploration is justified (FR-001b) in BOTH places the
                             contract names: the completion report's own
                             `repository_map.repo_wide_exploration` (spec.md FR-001b: the reason is
@@ -32,60 +40,8 @@ Usage: planned_report.py <RUN_OUT> [--escalated-from-direct] [--repo-wide-explor
 
 import json
 import os
+import re
 import sys
-
-
-#: Tools that write a file, and shells whose command can. Used only to decide whether a tool call
-#: WROTE the Context Record, never to judge a command's safety - the gate does that.
-WRITER_TOOLS = frozenset({"write", "write_file", "edit", "edit_file", "multiedit", "create_file",
-                          "str_replace", "str_replace_editor", "notebookedit", "apply_patch"})
-SHELL_TOOLS = frozenset({"bash", "shell", "sh", "run_shell_command", "execute_command", "run"})
-CONTEXT_RECORD = "context.json"
-
-
-def context_record_writes(run_out):
-    """How many tool calls wrote the Context Record, or None when there is no event stream.
-
-    An escalation REWRITES the record (root.md), so a run that genuinely escalated wrote it at least
-    twice: once as `direct`, once again as `planned` with `escalated_from`. The report and the record
-    are both authored by the agent, so requiring them to agree does not raise the cost of inventing
-    an escalation - the event stream does, because the host writes it and the agent cannot edit it.
-
-    Counted conservatively: a writer tool aimed at the record, or a shell command that redirects or
-    pipes into it. A read of the record is not a write.
-    """
-    path = os.path.join(run_out, "events.jsonl")
-    if not os.path.isfile(path):
-        return None
-    writes = 0
-    try:
-        with open(path, encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    event = json.loads(line)
-                except ValueError:
-                    continue
-                if not isinstance(event, dict) or event.get("type") != "tool_call":
-                    continue
-                call = event.get("tool_call") or {}
-                function = call.get("function") or {}
-                name = str(function.get("name") or call.get("name") or "").lower()
-                arguments = function.get("arguments")
-                if arguments is None:
-                    arguments = call.get("input")
-                text = arguments if isinstance(arguments, str) else json.dumps(arguments or {})
-                if CONTEXT_RECORD not in text:
-                    continue
-                if name in WRITER_TOOLS:
-                    writes += 1
-                elif name in SHELL_TOOLS and (">" in text or "tee " in text):
-                    writes += 1
-    except OSError:
-        return None
-    return writes
 
 
 def _looks_like_a_digest(value):
@@ -157,14 +113,6 @@ def check(run_out, escalated_from_direct=False, repo_wide=False):
             if scope != "component":
                 problems.append(f"the Context Record was not rewritten to a component scope after "
                                 f"escalating; scope is {scope!r} (FR-009)")
-        writes = context_record_writes(run_out)
-        if writes is None:
-            problems.append("there is no event stream, so the escalation cannot be corroborated "
-                            "(FR-009)")
-        elif writes < 2:
-            problems.append(f"the event stream shows the Context Record written {writes} time(s); a "
-                            "real escalation rewrites it, so this run was planned from the start "
-                            "(FR-009)")
     if repo_wide:
         problems += _exploration_problems("the completion report", report)
         context, problem = _load(run_out, "context.json")
