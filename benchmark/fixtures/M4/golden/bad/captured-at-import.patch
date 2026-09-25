@@ -1,0 +1,76 @@
+diff --git a/api/handlers.py b/api/handlers.py
+index 9337eca..29c5848 100644
+--- a/api/handlers.py
++++ b/api/handlers.py
+@@ -1,8 +1,10 @@
+ """HTTP handlers."""
+ 
+-from legacy.timeutil import stamp
++from core.clock import now
++
++AT = now()
+ 
+ 
+ def health():
+     """The health payload."""
+-    return {"status": "ok", "at": stamp()}
++    return {"status": "ok", "at": AT}
+diff --git a/jobs/cleanup.py b/jobs/cleanup.py
+index db93c35..7ca757a 100644
+--- a/jobs/cleanup.py
++++ b/jobs/cleanup.py
+@@ -1,8 +1,10 @@
+ """Background cleanup."""
+ 
+-from legacy import stamp
++from core.clock import now
++
++AT = now()
+ 
+ 
+ def sweep(count):
+     """Report a completed sweep."""
+-    return f"swept {count} at {stamp()}"
++    return f"swept {count} at {AT}"
+diff --git a/legacy/__init__.py b/legacy/__init__.py
+deleted file mode 100644
+index 4cab58e..0000000
+--- a/legacy/__init__.py
++++ /dev/null
+@@ -1,5 +0,0 @@
+-"""Deprecated package. `stamp` is re-exported here for older imports."""
+-
+-from legacy.timeutil import stamp
+-
+-__all__ = ["stamp"]
+diff --git a/legacy/timeutil.py b/legacy/timeutil.py
+deleted file mode 100644
+index 98e2583..0000000
+--- a/legacy/timeutil.py
++++ /dev/null
+@@ -1,8 +0,0 @@
+-"""Deprecated time helpers, kept only until every caller has moved off them."""
+-
+-from core.clock import FIXED
+-
+-
+-def stamp():
+-    """Deprecated. Returns exactly what core.clock.now() returns."""
+-    return FIXED
+diff --git a/reports/monthly.py b/reports/monthly.py
+index 5e75521..1ec9ab3 100644
+--- a/reports/monthly.py
++++ b/reports/monthly.py
+@@ -1,8 +1,10 @@
+ """The monthly report."""
+ 
+-import legacy.timeutil as timeutil
++from core.clock import now
++
++AT = now()
+ 
+ 
+ def header():
+     """The report header."""
+-    return f"monthly report {timeutil.stamp()}"
++    return f"monthly report {AT}"

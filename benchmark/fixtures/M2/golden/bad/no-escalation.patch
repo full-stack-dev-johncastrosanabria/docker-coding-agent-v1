@@ -1,0 +1,55 @@
+diff --git a/billing/money.py b/billing/money.py
+index 1e49262..19c7a1e 100644
+--- a/billing/money.py
++++ b/billing/money.py
+@@ -2,5 +2,5 @@
+ 
+ 
+ def cents_to_text(cents):
+-    """Format an amount of cents as dollars, for example 1234 -> '$12.34'."""
+-    return f"${cents // 100}.{cents % 100}"
++    """Format an amount of cents as dollars, for example 1234 -> '$12.34' and 5 -> '$0.05'."""
++    return f"${cents // 100}.{cents % 100:02d}"
+diff --git a/billing/summary.py b/billing/summary.py
+index ac13386..b0be501 100644
+--- a/billing/summary.py
++++ b/billing/summary.py
+@@ -1,9 +1,11 @@
+-"""The monthly summary. It formats its own amounts."""
++"""The monthly summary. Money formatting comes from the one shared formatter."""
++
++from billing.money import cents_to_text
+ 
+ 
+ def monthly_summary(months):
+     """One row per month. `months` is a sequence of (label, cents)."""
+     rows = []
+     for label, cents in months:
+-        rows.append(f"{label} {cents // 100}.{cents % 100}")
++        rows.append(f"{label} {cents_to_text(cents).lstrip('$')}")
+     return "\n".join(rows)
+diff --git a/tests/test_padding.py b/tests/test_padding.py
+new file mode 100644
+index 0000000..bab64b9
+--- /dev/null
++++ b/tests/test_padding.py
+@@ -0,0 +1,19 @@
++import unittest
++
++from billing.money import cents_to_text
++from billing.summary import monthly_summary
++
++
++class TestPadding(unittest.TestCase):
++    def test_single_digit_cents_are_padded(self):
++        self.assertEqual(cents_to_text(5), "$0.05")
++
++    def test_zero_cents(self):
++        self.assertEqual(cents_to_text(0), "$0.00")
++
++    def test_the_summary_uses_the_same_rule(self):
++        self.assertEqual(monthly_summary([("jan", 5)]), "jan 0.05")
++
++
++if __name__ == "__main__":
++    unittest.main()

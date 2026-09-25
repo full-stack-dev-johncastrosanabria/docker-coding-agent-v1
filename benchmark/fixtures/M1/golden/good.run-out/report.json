@@ -1,0 +1,14 @@
+{
+  "_comment": "The completion-report fields M1's oracle reads in an acceptance run (RUN_OUT): a multi-component change, planned before the first workspace mutation and independently reviewed.",
+  "final_outcome": "succeeded",
+  "classification": {"value": "planned", "reason": "several coordinated changes: the discount rule is only correct if lines, invoice and render all obtain the amount from line_total"},
+  "plan_ref": "/run/dca/out/plan.md",
+  "review": {
+    "performed": true,
+    "identical": true,
+    "fingerprint_before": "sha256:1f0a6d2c4b8e5a7930d1c2b3a4e5f60718293a4b5c6d7e8f9012a3b4c5d6e7f8",
+    "fingerprint_after": "sha256:1f0a6d2c4b8e5a7930d1c2b3a4e5f60718293a4b5c6d7e8f9012a3b4c5d6e7f8",
+    "evidence_origin": "vm",
+    "findings": []
+  }
+}

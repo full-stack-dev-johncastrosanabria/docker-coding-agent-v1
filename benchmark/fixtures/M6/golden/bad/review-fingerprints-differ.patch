@@ -1,0 +1,76 @@
+diff --git a/library/desk.py b/library/desk.py
+index 25ec07d..1aceb7d 100644
+--- a/library/desk.py
++++ b/library/desk.py
+@@ -1,9 +1,12 @@
+ """The front desk."""
+ 
+-from library.loans import renew
++from library.loans import RenewalLimit, renew
+ 
+ 
+ def handle_renewal(loan):
+     """Renew a loan and report the outcome to the borrower."""
+-    renew(loan)
++    try:
++        renew(loan)
++    except RenewalLimit:
++        return f"{loan.item} cannot be renewed again"
+     return f"{loan.item} renewed, now {loan.weeks} weeks"
+diff --git a/library/loans.py b/library/loans.py
+index 9fe20ae..30ab315 100644
+--- a/library/loans.py
++++ b/library/loans.py
+@@ -1,5 +1,11 @@
+ """Loans and their renewals."""
+ 
++RENEWAL_LIMIT = 2
++
++
++class RenewalLimit(Exception):
++    """A loan has already been renewed as often as it may be."""
++
+ 
+ class Loan:
+     """A borrowed item."""
+@@ -11,7 +17,13 @@ class Loan:
+ 
+ 
+ def renew(loan, weeks=2):
+-    """Extend a loan by `weeks` and count the renewal. Returns the loan."""
++    """Extend a loan by `weeks` and count the renewal. Returns the loan.
++
++    Raises `RenewalLimit`, leaving the loan untouched, once it has been renewed `RENEWAL_LIMIT`
++    times.
++    """
++    if loan.renewals >= RENEWAL_LIMIT:
++        raise RenewalLimit(f"{loan.item} has been renewed {loan.renewals} times")
+     loan.weeks += weeks
+     loan.renewals += 1
+     return loan
+diff --git a/tests/test_renewal_limit.py b/tests/test_renewal_limit.py
+new file mode 100644
+index 0000000..733bef3
+--- /dev/null
++++ b/tests/test_renewal_limit.py
+@@ -0,0 +1,20 @@
++import unittest
++
++from library.desk import handle_renewal
++from library.loans import Loan, RenewalLimit, renew
++
++
++class TestRenewalLimit(unittest.TestCase):
++    def test_a_third_renewal_is_refused(self):
++        loan = renew(renew(Loan("atlas")))
++        with self.assertRaises(RenewalLimit):
++            renew(loan)
++        self.assertEqual((loan.weeks, loan.renewals), (6, 2))
++
++    def test_the_desk_reports_the_refusal(self):
++        loan = renew(renew(Loan("atlas")))
++        self.assertEqual(handle_renewal(loan), "atlas cannot be renewed again")
++
++
++if __name__ == "__main__":
++    unittest.main()

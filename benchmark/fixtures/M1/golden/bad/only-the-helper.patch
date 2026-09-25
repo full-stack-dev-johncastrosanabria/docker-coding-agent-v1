@@ -1,0 +1,26 @@
+diff --git a/pricing/lines.py b/pricing/lines.py
+index 19798cd..4c22acf 100644
+--- a/pricing/lines.py
++++ b/pricing/lines.py
+@@ -1,13 +1,17 @@
+ """Line-item arithmetic. Every amount is a whole number of cents."""
+ 
+ 
+-def line_total(quantity, unit_price):
+-    """The total for one invoice line.
++def line_total(quantity, unit_price, discount_percent=0):
++    """The total for one invoice line, after its discount.
+ 
+-    `quantity` and `unit_price` are non-negative integers.
++    `quantity` and `unit_price` are non-negative integers. `discount_percent` is a whole percentage
++    from 0 to 100, and its amount is rounded down to whole cents.
+     """
+     if quantity < 0:
+         raise ValueError("quantity must not be negative")
+     if unit_price < 0:
+         raise ValueError("unit_price must not be negative")
+-    return quantity * unit_price
++    if discount_percent < 0 or discount_percent > 100:
++        raise ValueError("discount_percent must be between 0 and 100")
++    subtotal = quantity * unit_price
++    return subtotal - (subtotal * discount_percent) // 100

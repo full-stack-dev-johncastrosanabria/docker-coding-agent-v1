@@ -1,0 +1,18 @@
+{
+  "_comment": "The fields M2's oracle reads (RUN_OUT): the task read as a one-line format fix, was escalated to planned once the duplicated arithmetic was found, and was planned and reviewed (FR-009).",
+  "final_outcome": "succeeded",
+  "classification": {
+    "value": "planned",
+    "reason": "the same cents arithmetic is duplicated in billing/summary.py, so padding is only correct if both surfaces change together and the rule ends up defined once",
+    "escalated_from": "direct"
+  },
+  "plan_ref": "/run/dca/out/plan.md",
+  "review": {
+    "performed": true,
+    "identical": true,
+    "fingerprint_before": "sha256:a3d9f1b25c7e408693a1b2c3d4e5f60718293a4b5c6d7e8f9012a3b4c5d6e7f8",
+    "fingerprint_after": "sha256:a3d9f1b25c7e408693a1b2c3d4e5f60718293a4b5c6d7e8f9012a3b4c5d6e7f8",
+    "evidence_origin": "vm",
+    "findings": []
+  }
+}

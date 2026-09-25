@@ -1,0 +1,16 @@
+{
+  "_comment": "The fields M6's oracle reads (RUN_OUT): a contract change to what renew refuses, planned and independently reviewed with equal fingerprints.",
+  "final_outcome": "succeeded",
+  "classification": {"value": "planned", "reason": "a contract change: renew now refuses a call it used to accept, and the front desk must change with it"},
+  "plan_ref": "/run/dca/out/plan.md",
+  "review": {
+    "performed": true,
+    "identical": true,
+    "fingerprint_before": "sha256:5b8c0e19a2d7f36418293a4b5c6d7e8f9012a3b4c5d6e7f8a9b0c1d2e3f40516",
+    "fingerprint_after": "sha256:5b8c0e19a2d7f36418293a4b5c6d7e8f9012a3b4c5d6e7f8a9b0c1d2e3f40516",
+    "evidence_origin": "vm",
+    "findings": [
+      {"category": "behaviour-change", "severity": "info", "evidence": "renew now raises RenewalLimit at two renewals; handle_renewal reports it", "status": "resolved"}
+    ]
+  }
+}

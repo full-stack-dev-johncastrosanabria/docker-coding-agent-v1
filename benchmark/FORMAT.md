@@ -5,7 +5,7 @@ Each fixture is a directory `benchmark/fixtures/<id>/`, and its `fixture.yaml` m
 JSON-compatible YAML, read with the stdlib `json` module only. IDs follow the schema. The committed
 reliability suite is `R1`–`R10`: `R1`–`R8` are small/direct tasks and `R9`, `R10` are medium/planned
 tasks. `K*`, `M*`, `F*` and `S*` are the acceptance fixtures that T079–T089, T092 and T094 create;
-`K1`–`K8` (small, T079/T080) exist so far. Before 007 the reliability suite was `K1`–`K8`, `M1`,
+`K1`–`K8` (small, T079/T080) and `M1`, `M2`, `M4`, `M6` (medium/planned, T082) exist so far. Before 007 the reliability suite was `K1`–`K8`, `M1`,
 `M2`; the mapping is in the [baseline](baselines/reliability-2026-09-22.md#fixture-ids).
 
 | Path | Purpose |

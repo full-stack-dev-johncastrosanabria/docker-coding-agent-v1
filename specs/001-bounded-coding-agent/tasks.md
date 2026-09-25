@@ -843,7 +843,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
 **Independent Test**: `dca bench --fixtures 'M1,M2,M4,M6'` passes, with `classification.value: planned`, `plan_ref`, a review record and FR-001 ordering (spec US2).
 
-- [ ] T082 [P] [US2] **Test** Create fixtures `benchmark/fixtures/M1`, `M2`, `M4`, `M6` in the T074 format:
+- [X] T082 [P] [US2] **Test** *(010-dca-us2-planned-work, 2026-09-24: M1, M2, M4 and M6 created and validated deterministically before any provider run - all 22 oracles pass on the seed, `good.patch` and every `bad/*.patch`; each M seed rebuilds to one stable commit; schema, IDs, counts and metadata check out. A shared `benchmark/tools/planned_report.py` asserts the planned-work record for all four, with `--escalated-from-direct` for M2 and `--repo-wide-exploration` for M4. An independent review of the first draft found four blocking defects - M2's criteria telegraphed the coupling and so prevented FR-009 from ever being measured, M2's and M4's oracles judged source by grep instead of by AST, M4's clock test compared values instead of counting reads, and M6's hidden tests used a single item name - all fixed and each verified against the real oracle. Evidence: oracle tests pass.)* Create fixtures `benchmark/fixtures/M1`, `M2`, `M4`, `M6` in the T074 format:
   - **M1**: multi-component; the plan must precede the first workspace mutation (FR-008);
   - **M2**: **FR-009**: the task reads as a small direct change but requires multi-component edits, so the oracle requires `classification.value: planned` with `classification.escalated_from: direct`;
   - **M4**: needs justified repository-wide search (FR-001b);

@@ -1,0 +1,7 @@
+{
+  "_comment": "Rejected: the change is correct, but it was carried out as direct work. A coordinated two-module change enforcing one rule is planned (FR-009), and nothing recorded the escalation.",
+  "final_outcome": "succeeded",
+  "classification": {"value": "direct", "reason": "a one-line format fix"},
+  "plan_ref": null,
+  "review": {"performed": true, "identical": true, "evidence_origin": "vm", "findings": []}
+}

@@ -1,0 +1,36 @@
+{
+  "_comment": "Rejected: this run treated a contract change across three packages as direct work.",
+  "classification": {
+    "value": "direct",
+    "reason": "swap one helper for another"
+  },
+  "repository_map": {
+    "scope": "minimal",
+    "target_files": [
+      "api/handlers.py",
+      "jobs/cleanup.py",
+      "reports/monthly.py",
+      "legacy/__init__.py",
+      "legacy/timeutil.py"
+    ],
+    "related_tests": [
+      "tests/test_surfaces.py"
+    ],
+    "conventions": [
+      "stdlib only",
+      "core.clock is the one clock"
+    ],
+    "repo_wide_exploration": {
+      "performed": true,
+      "reason": "the task states the call sites are not listed and are not confined to one package; the helper is also reached through a re-export and a module-attribute call, so the uses cannot be found without searching the whole repository"
+    }
+  },
+  "verification_approach": {
+    "type": "deterministic",
+    "checks": [
+      "python3 -m unittest discover -s tests -t ."
+    ]
+  },
+  "plan_ref": null,
+  "written_at": "2000-01-01T00:00:00Z"
+}

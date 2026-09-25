@@ -1,0 +1,7 @@
+{
+  "_comment": "Rejected: planned, planned-for and reviewed, but the run never records that the task first read as direct, so FR-009's escalation is unproven.",
+  "final_outcome": "succeeded",
+  "classification": {"value": "planned", "reason": "two coordinated edits enforcing one padding rule"},
+  "plan_ref": "/run/dca/out/plan.md",
+  "review": {"performed": true, "identical": true, "evidence_origin": "vm", "findings": []}
+}

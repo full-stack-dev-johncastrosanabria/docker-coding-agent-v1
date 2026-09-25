@@ -1,0 +1,50 @@
+diff --git a/library/desk.py b/library/desk.py
+index 25ec07d..1aceb7d 100644
+--- a/library/desk.py
++++ b/library/desk.py
+@@ -1,9 +1,12 @@
+ """The front desk."""
+ 
+-from library.loans import renew
++from library.loans import RenewalLimit, renew
+ 
+ 
+ def handle_renewal(loan):
+     """Renew a loan and report the outcome to the borrower."""
+-    renew(loan)
++    try:
++        renew(loan)
++    except RenewalLimit:
++        return f"{loan.item} cannot be renewed again"
+     return f"{loan.item} renewed, now {loan.weeks} weeks"
+diff --git a/library/loans.py b/library/loans.py
+index 9fe20ae..c4e3d42 100644
+--- a/library/loans.py
++++ b/library/loans.py
+@@ -1,5 +1,11 @@
+ """Loans and their renewals."""
+ 
++RENEWAL_LIMIT = 3
++
++
++class RenewalLimit(Exception):
++    """A loan has already been renewed as often as it may be."""
++
+ 
+ class Loan:
+     """A borrowed item."""
+@@ -11,7 +17,13 @@ class Loan:
+ 
+ 
+ def renew(loan, weeks=2):
+-    """Extend a loan by `weeks` and count the renewal. Returns the loan."""
++    """Extend a loan by `weeks` and count the renewal. Returns the loan.
++
++    Raises `RenewalLimit`, leaving the loan untouched, once it has been renewed `RENEWAL_LIMIT`
++    times.
++    """
++    if loan.renewals >= RENEWAL_LIMIT:
++        raise RenewalLimit(f"{loan.item} has been renewed {loan.renewals} times")
+     loan.weeks += weeks
+     loan.renewals += 1
+     return loan

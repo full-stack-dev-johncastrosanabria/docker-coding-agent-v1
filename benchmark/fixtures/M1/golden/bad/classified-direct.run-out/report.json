@@ -1,0 +1,7 @@
+{
+  "_comment": "Rejected: the change is correct, but a coordinated three-module change was classified direct, so it was never planned (FR-008, SC-010).",
+  "final_outcome": "succeeded",
+  "classification": {"value": "direct", "reason": "one discount rule"},
+  "plan_ref": null,
+  "review": {"performed": true, "identical": true, "evidence_origin": "vm", "findings": []}
+}

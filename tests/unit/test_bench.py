@@ -49,6 +49,7 @@ rules = _load("dca_eligibility_rules", ROOT / "gates" / "eligibility_rules.py")
 
 EXPECTED_IDS = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
 SMALL_ACCEPTANCE_IDS = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8"]
+MEDIUM_ACCEPTANCE_IDS = ["M1", "M2", "M4", "M6"]
 
 
 def reliability_suite():
@@ -72,7 +73,8 @@ class TestFixtureSuite(unittest.TestCase):
 
     def test_01_every_fixture_is_discovered_in_natural_order_and_is_schema_valid(self):
         fixtures = bench.discover()
-        self.assertEqual([f["id"] for f in fixtures], SMALL_ACCEPTANCE_IDS + EXPECTED_IDS)
+        self.assertEqual([f["id"] for f in fixtures],
+                         SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS + EXPECTED_IDS)
 
     def test_02_small_fixtures_are_direct_and_medium_fixtures_are_planned(self):
         for fixture in reliability_suite():
@@ -580,13 +582,15 @@ class TestReliabilityNamespace(unittest.TestCase):
         self.assertEqual([f["id"] for f in reliability_suite()],
                          [f"R{i}" for i in range(1, 11)])
         self.assertEqual([f["id"] for f in bench.acceptance_fixtures(bench.discover())],
-                         SMALL_ACCEPTANCE_IDS, "no reliability fixture counts as acceptance")
+                         SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS,
+                         "no reliability fixture counts as acceptance")
 
     def test_91_the_committed_acceptance_fixtures_are_exactly_the_ones_created_so_far(self):
-        # T079/T080 created K1-K8; M*, F* and S* arrive with T082-T094, never under an R name.
+        # T079/T080 created K1-K8 and T082 created M1, M2, M4 and M6; M3, M5, F* and S* arrive
+        # with T084-T094, never under an R name.
         names = sorted(d.name for d in (ROOT / "benchmark" / "fixtures").iterdir() if d.is_dir())
         self.assertEqual([n for n in names if not re.fullmatch(r"R([1-9]|10)", n)],
-                         sorted(SMALL_ACCEPTANCE_IDS))
+                         sorted(SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS))
 
     def test_92_the_baseline_keeps_its_historical_ids_and_maps_them(self):
         baseline = json.loads(self.BASELINE.read_text())
@@ -1253,8 +1257,10 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
         return bench.build_seed(str(Path(self.fixtures[fid]["_dir"]) / "seed"), str(self.dir / name))
 
     def test_170_k1_to_k8_are_small_direct_fixtures_that_always_apply(self):
-        self.assertEqual(list(self.fixtures), SMALL_ACCEPTANCE_IDS)
-        for fid, fixture in self.fixtures.items():
+        self.assertEqual(list(self.fixtures),
+                         SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS)
+        for fid in SMALL_ACCEPTANCE_IDS:
+            fixture = self.fixtures[fid]
             with self.subTest(fixture=fid):
                 self.assertEqual((fixture["category"], fixture["trust_level"],
                                   fixture["gate_condition"], fixture["expected_disposition"],
@@ -1328,11 +1334,36 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
                 self.assertEqual(bench.out_of_scope([{"path": p} for p in paths],
                                                     fixture["allowed_change_scope"]), [])
 
-    def test_177_the_acceptance_count_now_holds_every_small_fixture(self):
-        # The full protocol stays refused until T082-T094 add the other 20 applicable fixtures.
+    def test_177_the_acceptance_count_now_holds_every_small_and_planned_fixture(self):
+        # The full protocol stays refused until T084-T094 add the other 16 applicable fixtures.
         with self.assertRaises(errors.PreconditionError) as caught:
             bench.acceptance_plan(bench.discover(), "trusted", False, THRESHOLDS)
-        self.assertIn("'small': 8, 'medium': 0", str(caught.exception))
+        self.assertIn("'small': 8, 'medium': 4", str(caught.exception))
+
+    def test_178_m1_m2_m4_and_m6_are_medium_planned_fixtures_that_always_apply(self):
+        """T082: the US2 contract fields, checked before any provider run."""
+        for fid in MEDIUM_ACCEPTANCE_IDS:
+            fixture = self.fixtures[fid]
+            with self.subTest(fixture=fid):
+                self.assertEqual((fixture["category"], fixture["trust_level"],
+                                  fixture["gate_condition"], fixture["expected_disposition"],
+                                  fixture["expected_classification"]),
+                                 ("medium", "both", "always", "succeeded", "planned"))
+                text = " ".join([fixture["task"], *fixture["acceptance_criteria"]]).lower()
+                self.assertNotRegex(text, r"claude|codex|anthropic|openai", "provider-neutral")
+                # Planned work is reviewed, so the reviewer must leave the candidate untouched.
+                self.assertIn("reviewer-byte-identical", fixture["prohibited_checks"])
+
+    def test_179_each_planned_fixture_states_the_rule_its_oracle_enforces(self):
+        """Every M oracle reads the planned-work record, and M2 and M4 add their own clause."""
+        for fid in MEDIUM_ACCEPTANCE_IDS:
+            oracle = (ROOT / "benchmark" / "fixtures" / fid / "oracle.sh").read_text()
+            with self.subTest(fixture=fid):
+                self.assertIn("planned_report.py", oracle)
+        m2 = (ROOT / "benchmark" / "fixtures" / "M2" / "oracle.sh").read_text()
+        self.assertIn("--escalated-from-direct", m2, "M2 must require FR-009's escalation record")
+        m4 = (ROOT / "benchmark" / "fixtures" / "M4" / "oracle.sh").read_text()
+        self.assertIn("--repo-wide-exploration", m4, "M4 must require FR-001b's justification")
 
 
 if __name__ == "__main__":

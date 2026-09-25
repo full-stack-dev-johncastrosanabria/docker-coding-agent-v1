@@ -1,0 +1,7 @@
+{
+  "_comment": "Rejected: the change is correct and was planned, but planned work succeeded with no independent review (FR-020).",
+  "final_outcome": "succeeded",
+  "classification": {"value": "planned", "reason": "several coordinated changes across the pricing package"},
+  "plan_ref": "/run/dca/out/plan.md",
+  "review": {"performed": false, "identical": false, "evidence_origin": "vm", "findings": []}
+}

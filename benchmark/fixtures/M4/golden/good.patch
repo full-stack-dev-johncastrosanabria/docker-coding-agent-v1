@@ -1,0 +1,93 @@
+diff --git a/api/handlers.py b/api/handlers.py
+index 9337eca..09218cc 100644
+--- a/api/handlers.py
++++ b/api/handlers.py
+@@ -1,8 +1,8 @@
+ """HTTP handlers."""
+ 
+-from legacy.timeutil import stamp
++from core.clock import now
+ 
+ 
+ def health():
+     """The health payload."""
+-    return {"status": "ok", "at": stamp()}
++    return {"status": "ok", "at": now()}
+diff --git a/jobs/cleanup.py b/jobs/cleanup.py
+index db93c35..1f3af18 100644
+--- a/jobs/cleanup.py
++++ b/jobs/cleanup.py
+@@ -1,8 +1,8 @@
+ """Background cleanup."""
+ 
+-from legacy import stamp
++from core.clock import now
+ 
+ 
+ def sweep(count):
+     """Report a completed sweep."""
+-    return f"swept {count} at {stamp()}"
++    return f"swept {count} at {now()}"
+diff --git a/legacy/__init__.py b/legacy/__init__.py
+deleted file mode 100644
+index 4cab58e..0000000
+--- a/legacy/__init__.py
++++ /dev/null
+@@ -1,5 +0,0 @@
+-"""Deprecated package. `stamp` is re-exported here for older imports."""
+-
+-from legacy.timeutil import stamp
+-
+-__all__ = ["stamp"]
+diff --git a/legacy/timeutil.py b/legacy/timeutil.py
+deleted file mode 100644
+index 98e2583..0000000
+--- a/legacy/timeutil.py
++++ /dev/null
+@@ -1,8 +0,0 @@
+-"""Deprecated time helpers, kept only until every caller has moved off them."""
+-
+-from core.clock import FIXED
+-
+-
+-def stamp():
+-    """Deprecated. Returns exactly what core.clock.now() returns."""
+-    return FIXED
+diff --git a/reports/monthly.py b/reports/monthly.py
+index 5e75521..733ab6f 100644
+--- a/reports/monthly.py
++++ b/reports/monthly.py
+@@ -1,8 +1,8 @@
+ """The monthly report."""
+ 
+-import legacy.timeutil as timeutil
++from core import clock
+ 
+ 
+ def header():
+     """The report header."""
+-    return f"monthly report {timeutil.stamp()}"
++    return f"monthly report {clock.now()}"
+diff --git a/tests/test_retired.py b/tests/test_retired.py
+new file mode 100644
+index 0000000..17063d2
+--- /dev/null
++++ b/tests/test_retired.py
+@@ -0,0 +1,17 @@
++import importlib
++import unittest
++
++
++class TestRetired(unittest.TestCase):
++    def test_the_legacy_package_is_gone(self):
++        with self.assertRaises(ImportError):
++            importlib.import_module("legacy")
++
++    def test_surfaces_are_unchanged(self):
++        from api.handlers import health
++
++        self.assertEqual(health()["at"], "2000-01-01T00:00:00Z")
++
++
++if __name__ == "__main__":
++    unittest.main()

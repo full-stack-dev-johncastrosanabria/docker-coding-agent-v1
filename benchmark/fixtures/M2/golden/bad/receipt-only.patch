@@ -1,0 +1,12 @@
+diff --git a/billing/money.py b/billing/money.py
+index 1e49262..19c7a1e 100644
+--- a/billing/money.py
++++ b/billing/money.py
+@@ -2,5 +2,5 @@
+ 
+ 
+ def cents_to_text(cents):
+-    """Format an amount of cents as dollars, for example 1234 -> '$12.34'."""
+-    return f"${cents // 100}.{cents % 100}"
++    """Format an amount of cents as dollars, for example 1234 -> '$12.34' and 5 -> '$0.05'."""
++    return f"${cents // 100}.{cents % 100:02d}"

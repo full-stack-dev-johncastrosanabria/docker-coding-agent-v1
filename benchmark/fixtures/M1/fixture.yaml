@@ -1,0 +1,31 @@
+{
+  "id": "M1",
+  "category": "medium",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "The pricing package needs an optional per-line discount, and every component must agree on it.\n\n- `line_total(quantity, unit_price, discount_percent=0)` applies the discount to the line subtotal. The discount amount is `(quantity * unit_price * discount_percent) // 100`, so it is a whole number of cents rounded down, and the line total is the subtotal minus that amount.\n- `line_total` raises ValueError when discount_percent is below 0 or above 100.\n- `invoice_total` and `render` accept lines with an optional third element, the discount percent, and must obtain every amount from `line_total`, so the renderer and the invoice total can never disagree. A line given as only quantity and unit_price must behave exactly as it does today.\n- The existing row and total formatting in `render` does not change.",
+  "acceptance_criteria": [
+    "line_total applies the discount as (quantity * unit_price * discount_percent) // 100 subtracted from the subtotal, and a discount of 0 or an absent discount leaves the old result unchanged",
+    "line_total raises ValueError for a discount percent below 0 or above 100",
+    "invoice_total and render both thread the discount through line_total, so the rendered total always equals invoice_total for the same lines",
+    "render keeps its existing row and total format",
+    "the new behavior has tests and all existing tests still pass"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "planned",
+  "allowed_change_scope": ["pricing/*.py", "tests/*.py"],
+  "prohibited_checks": ["no-test-weakening", "reviewer-byte-identical"],
+  "oracle": "oracle.sh",
+  "golden": {
+    "good": "golden/good.patch",
+    "bad": [
+      "golden/bad/only-the-helper.patch",
+      "golden/bad/no-range-check.patch",
+      "golden/bad/renderer-disagrees.patch",
+      "golden/bad/classified-direct.patch",
+      "golden/bad/no-review.patch"
+    ]
+  }
+}
