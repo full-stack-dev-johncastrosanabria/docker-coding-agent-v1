@@ -1,0 +1,34 @@
+{
+  "_comment": "The Context Record as REWRITTEN after the escalation: planned, escalated_from direct, component scope.",
+  "classification": {
+    "value": "direct",
+    "reason": "one function in one module"
+  },
+  "repository_map": {
+    "scope": "minimal",
+    "target_files": [
+      "billing/usd.py",
+      "billing/eur.py"
+    ],
+    "related_tests": [
+      "tests/test_usd.py",
+      "tests/test_eur.py",
+      "tests/test_books.py"
+    ],
+    "conventions": [
+      "stdlib only",
+      "the cents part reads the same in both locales"
+    ],
+    "repo_wide_exploration": {
+      "performed": false
+    }
+  },
+  "verification_approach": {
+    "type": "deterministic",
+    "checks": [
+      "python3 -m unittest discover -s tests -t ."
+    ]
+  },
+  "plan_ref": null,
+  "written_at": "2000-01-01T00:00:00Z"
+}

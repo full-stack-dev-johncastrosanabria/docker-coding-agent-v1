@@ -1,5 +1,5 @@
 {
-  "_comment": "The fields M2's oracle reads (RUN_OUT). A bounded read supported direct; padding format_usd made the pre-existing ledger reconciliation test fail, revealing billing/eur.py, so the run escalated once.",
+  "_comment": "Rejected: the report AND the Context Record both claim the escalation, but the event stream shows the record written only once - the run was planned from the start and the escalation is invented. This is the case only the event-stream check can reject.",
   "final_outcome": "succeeded",
   "classification": {
     "value": "planned",
