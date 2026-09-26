@@ -320,5 +320,118 @@ class TestEvidenceOrdering(unittest.TestCase):
                                        r"mutation)|after the context record is written")
 
 
+class TestPlannedWorkDiscipline(unittest.TestCase):
+    """T083: the two disciplines live runs kept missing, made operational in the shipped text.
+
+    Both misses were procedural, not semantic. The criteria for planned work and the meaning of
+    `review.identical` were already correct and are unchanged; what was absent was the moment at
+    which the agent is told to apply them - a checklist at the first mutation, and a statement of
+    what a fingerprint field may contain. These assertions pin the operational wording, one topic
+    per assertion, for the same reason the rest of this module does: a rewrite that drops one
+    sentence would otherwise pass while the behaviour it produced silently regressed.
+    """
+
+    def setUp(self):
+        self.root = normalized(INSTRUCTIONS / "root.md")
+        self.receipt = normalized(SKILLS / "change-receipt" / "SKILL.md")
+
+    def test_70_coordinated_multi_surface_changes_are_planned(self):
+        self.assertIn("needing more than one implementation surface to move together for one rule "
+                      "to hold is several coordinated changes", self.root)
+
+    def test_71_a_contract_change_is_named_by_what_it_alters(self):
+        self.assertIn("altering what an existing operation accepts, refuses, raises or exposes "
+                      "through a signature, a public field or a file is a contract change",
+                      self.root)
+
+    def test_72_size_is_never_the_reason_to_classify_direct(self):
+        self.assertIn("a small diff, a simple edit and a low line count are not evidence of direct "
+                      "work", self.root)
+
+    def test_73_the_criteria_are_re_checked_at_the_first_mutation(self):
+        self.assertIn("before the first workspace mutation, check all four, in this order",
+                      self.root)
+        self.assertIn("re-read the planned criteria above and name the one that applies or confirm "
+                      "none does", self.root)
+
+    def test_74_planned_work_needs_the_plan_and_plan_ref_before_any_mutation(self):
+        for phrase in ("on planned work `/run/dca/out/plan.md` exists",
+                       "on planned work the context record's `plan_ref` names it",
+                       "only then may you run the baseline, edit a file, or run a check"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.root)
+
+    def test_75_escalation_stops_mutating_and_plans_before_continuing(self):
+        for phrase in ("stop mutating the workspace at the point you discover the work exceeds "
+                       "direct bounds",
+                       "rewrite the context record as planned with `escalated_from: direct` and a "
+                       "`component` scope, write `/run/dca/out/plan.md`, set `plan_ref`, and only "
+                       "then continue"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.root)
+
+    def test_76_escalation_is_neither_retroactive_nor_inventable(self):
+        # FR-009 unchanged: the earlier mutations stay what they were, and a record may never
+        # describe an escalation that did not happen.
+        self.assertIn("the mutations you already made remain what they were", self.root)
+        self.assertIn("neither record may ever describe an escalation that did not happen",
+                      self.root)
+
+    def test_77_the_report_names_where_the_machine_computed_fingerprint_is_recorded(self):
+        self.assertIn("/run/dca/state/fingerprints.jsonl", self.receipt)
+        self.assertIn("you may read that file; you may not write it", self.receipt)
+
+    def test_78_review_identical_requires_two_equal_real_digests(self):
+        self.assertIn("`review.identical: true` is allowed only when** both fields hold a real "
+                      "digest and the two digests are equal", self.receipt)
+
+    def test_79_prose_and_placeholders_are_not_fingerprint_evidence(self):
+        self.assertIn("each field must hold an actual digest", self.receipt)
+        for rejected in ("prose", "a placeholder", "`not recorded`",
+                         "a description of what you would have hashed"):
+            with self.subTest(rejected=rejected):
+                self.assertIn(rejected, self.receipt)
+        self.assertIn("is not a fingerprint; it reads as no evidence at all", self.receipt)
+
+    def test_80_missing_fingerprint_evidence_is_declared_not_asserted(self):
+        self.assertIn("if a side was not captured, do not claim it", self.receipt)
+        self.assertIn("a planned task is not `succeeded` on a review you cannot evidence",
+                      self.receipt)
+
+
+class TestRuntimeTextIsProviderNeutral(unittest.TestCase):
+    """The shipped instructions must read the same to every backend.
+
+    The remediation was prompted by misses seen on particular backends, so the risk it introduces is
+    wording that helps one of them and not the other. Nothing the agent reads may name a provider, a
+    model or a benchmark fixture: an instruction that does is tuning, not a contract.
+    """
+
+    #: Every markdown file an agent actually reads inside the VM.
+    def shipped(self):
+        return sorted(list(INSTRUCTIONS.glob("*.md"))
+                      + [SKILLS / name / "SKILL.md" for name in RUNTIME_SKILLS])
+
+    def test_85_no_provider_or_model_is_named(self):
+        forbidden = re.compile(r"claude|codex|anthropic|openai|chatgpt|gpt-|sonnet|opus|gemini",
+                               re.I)
+        for path in self.shipped():
+            with self.subTest(path=str(path.relative_to(ROOT))):
+                self.assertIsNone(forbidden.search(text(path)),
+                                  "shipped runtime text must not name a provider or model")
+
+    def test_86_no_benchmark_fixture_is_named(self):
+        # A fixture id in the instructions would make the agent's behaviour a function of the
+        # benchmark rather than of the contract.
+        fixture = re.compile(r"\b[A-Z][0-9]\b|\bfixture\b", re.I)
+        for path in self.shipped():
+            with self.subTest(path=str(path.relative_to(ROOT))):
+                found = [m.group(0) for m in fixture.finditer(text(path))]
+                # `fixtures` as a category of repository content is allowed in the trust boundary;
+                # a fixture IDENTIFIER is not.
+                self.assertEqual([f for f in found if not f.lower().startswith("fixture")], [],
+                                 "shipped runtime text must not name a benchmark fixture")
+
+
 if __name__ == "__main__":
     unittest.main()

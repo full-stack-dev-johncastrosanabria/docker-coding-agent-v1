@@ -72,6 +72,27 @@ single direct→planned escalation actually happened.
 - **`review.identical`** is `false` if the candidate's fingerprint changed while the reviewer read
   it. Say so; it is recorded as a safety event either way.
 
+## Review fingerprints are evidence, not assertions
+
+You do not compute the fingerprint: the managed hooks compute it for you. Every time a delegation
+starts and stops, the candidate's workspace fingerprint is appended to
+`/run/dca/state/fingerprints.jsonl` as `{"event": ..., "agent": ..., "fingerprint": "sha256:<hex>"}`.
+You may read that file; you may not write it. Read it after the reviewer returns and copy the value
+recorded when the review started into `fingerprint_before` and the value recorded when it stopped
+into `fingerprint_after`. If you take a digest yourself instead, take it over the same thing on both
+sides, with a command whose output you can see.
+
+- **Each field must hold an actual digest** - a hex hash some command produced, bare or labelled
+  (`sha256:<hex>`). Prose, a placeholder, `not recorded`, `unchanged`, or a description of what you
+  would have hashed is not a fingerprint; it reads as no evidence at all.
+- **`review.identical: true` is allowed only when** both fields hold a real digest and the two
+  digests are equal. That is the whole test: a real digest before, a real digest after, and the two
+  the same.
+- **If a side was not captured, do not claim it.** Record `identical: false`, or the review as not
+  performed, and say in `risks` that the fingerprint evidence is missing. A planned task is not
+  `succeeded` on a review you cannot evidence, and `identical: true` without two equal digests is an
+  over-claim the host publishes as one.
+
 ## Risks and blockers
 
 - **risks**: things a reviewer should know that did not stop the work - a pre-existing failure you
