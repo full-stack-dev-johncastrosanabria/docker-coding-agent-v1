@@ -1,10 +1,9 @@
 {
-  "_comment": "The fields M2's oracle reads (RUN_OUT). A bounded read supported direct; padding format_usd made the pre-existing ledger reconciliation test fail, revealing billing/eur.py, so the run escalated once.",
+  "_comment": "The fields M2's oracle reads (RUN_OUT). The agent read the tests covering the changed file - which the bounded direct map requires - saw the second locale, and classified planned on the first pass. No escalation happened, so escalated_from is correctly ABSENT: this is what a correct run looks like (FR-009 is conditional).",
   "final_outcome": "succeeded",
   "classification": {
     "value": "planned",
-    "reason": "escalated after verification: padding format_usd made tests/test_books.py's locale reconciliation fail, showing billing/eur.py implements the same cents rule and must change with it",
-    "escalated_from": "direct"
+    "reason": "Several coordinated changes: tests/test_books.py requires format_usd and format_eur to render cents identically, so both formatters must be padded together to enforce one rule"
   },
   "plan_ref": "/run/dca/out/plan.md",
   "review": {

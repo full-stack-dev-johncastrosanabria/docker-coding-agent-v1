@@ -1,8 +1,9 @@
 {
-  "_comment": "The Context Record as REWRITTEN after the escalation: planned, escalated_from direct, component scope.",
+  "_comment": "Rejected: escalated_from is 'planned'. The only escalation the contract allows is direct -> planned, and the report schema admits no other value (FR-009).",
   "classification": {
     "value": "planned",
-    "reason": "escalated after verification revealed a second locale implementing the same cents rule"
+    "reason": "escalated after verification revealed a second locale implementing the same cents rule",
+    "escalated_from": "planned"
   },
   "repository_map": {
     "scope": "component",

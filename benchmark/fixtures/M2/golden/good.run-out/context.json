@@ -1,9 +1,8 @@
 {
-  "_comment": "The Context Record as REWRITTEN after the escalation: planned, escalated_from direct, component scope.",
+  "_comment": "The Context Record: planned from the first pass, component scope, and no escalated_from because no escalation occurred.",
   "classification": {
     "value": "planned",
-    "reason": "escalated after verification revealed a second locale implementing the same cents rule",
-    "escalated_from": "direct"
+    "reason": "planned on the first pass: two locales enforce one cents rule"
   },
   "repository_map": {
     "scope": "component",

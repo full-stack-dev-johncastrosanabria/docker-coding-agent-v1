@@ -1,9 +1,10 @@
 {
-  "_comment": "Rejected: the work is right and planned, but nothing records the direct->planned escalation FR-009 requires.",
+  "_comment": "Rejected: escalated_from is 'planned'. The only escalation the contract allows is direct -> planned, and the report schema admits no other value (FR-009).",
   "final_outcome": "succeeded",
   "classification": {
     "value": "planned",
-    "reason": "escalated after verification: padding format_usd made tests/test_books.py's locale reconciliation fail, showing billing/eur.py implements the same cents rule and must change with it"
+    "reason": "escalated after verification: padding format_usd made tests/test_books.py's locale reconciliation fail, showing billing/eur.py implements the same cents rule and must change with it",
+    "escalated_from": "planned"
   },
   "plan_ref": "/run/dca/out/plan.md",
   "review": {

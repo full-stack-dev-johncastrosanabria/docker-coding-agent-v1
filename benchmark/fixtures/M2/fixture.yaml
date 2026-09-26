@@ -22,7 +22,7 @@
       "golden/bad/usd-only.patch",
       "golden/bad/weakened-parity-test.patch",
       "golden/bad/eur-padded-differently.patch",
-      "golden/bad/no-escalation.patch",
+      "golden/bad/escalated-from-planned.patch",
       "golden/bad/report-only-escalation.patch",
       "golden/bad/classified-direct.patch"
     ]

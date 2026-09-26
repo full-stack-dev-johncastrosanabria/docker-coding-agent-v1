@@ -1361,9 +1361,122 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
             with self.subTest(fixture=fid):
                 self.assertIn("planned_report.py", oracle)
         m2 = (ROOT / "benchmark" / "fixtures" / "M2" / "oracle.sh").read_text()
-        self.assertIn("--escalated-from-direct", m2, "M2 must require FR-009's escalation record")
+        self.assertIn("--escalation-consistent", m2,
+                      "M2 must hold a recorded FR-009 escalation to the contract")
+        self.assertNotIn("--escalated-from-direct", m2,
+                         "FR-009 is conditional: M2 must not demand an escalation that a correctly "
+                         "classified planned run never makes")
         m4 = (ROOT / "benchmark" / "fixtures" / "M4" / "oracle.sh").read_text()
         self.assertIn("--repo-wide-exploration", m4, "M4 must require FR-001b's justification")
+
+
+class TestPlannedWorkRecord(unittest.TestCase):
+    """FR-009 as the canonical contract states it: CONDITIONAL (benchmark/tools/planned_report.py).
+
+    spec.md escalates "when discovered work exceeds the original classification"; plan.md allows it
+    "at most once"; data-model.md records `escalated_from` "only after the single direct->planned
+    escalation"; runtime/skills/change-receipt says to omit it "unless the single direct->planned
+    escalation actually happened". So the artifact is evidence of a transition, never a requirement.
+
+    What this suite does NOT claim: that a genuine escalation is host-verifiable. Both artifacts read
+    here are authored by the agent, and the host adopts the classification from the agent's own
+    report (launcher._classification_of), so these are consistency checks only.
+    """
+
+    DIGEST = "a" * 64
+
+    def setUp(self):
+        self.dir = WORK / "planned-record"
+        shutil.rmtree(self.dir, ignore_errors=True)
+        self.dir.mkdir(parents=True)
+        spec = importlib.util.spec_from_file_location(
+            "dca_planned_report", ROOT / "benchmark" / "tools" / "planned_report.py")
+        self.helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.helper)
+
+    def run_out(self, classification, record=None, scope="component", name="r"):
+        out = self.dir / name
+        shutil.rmtree(out, ignore_errors=True)
+        out.mkdir()
+        (out / "report.json").write_text(json.dumps({
+            "final_outcome": "succeeded", "classification": classification,
+            "plan_ref": "/run/dca/out/plan.md",
+            "review": {"performed": True, "identical": True,
+                       "fingerprint_before": self.DIGEST, "fingerprint_after": self.DIGEST}}))
+        if record is not None:
+            (out / "context.json").write_text(json.dumps({
+                "classification": record, "repository_map": {"scope": scope}}))
+        return str(out)
+
+    def check(self, classification, record=None, scope="component", name="r"):
+        return self.helper.check(self.run_out(classification, record, scope, name),
+                                 escalation_consistent=True)
+
+    PLANNED = {"value": "planned", "reason": "two locales enforce one rule"}
+    ESCALATED = {"value": "planned", "reason": "found a second surface", "escalated_from": "direct"}
+
+    def test_180_planned_up_front_omits_escalated_from_and_is_accepted(self):
+        """The shape a correctly classified task produces. Requiring the field would demand a lie."""
+        self.assertEqual(self.check(self.PLANNED, self.PLANNED), [])
+
+    def test_181_a_genuine_escalation_is_accepted_and_still_validated(self):
+        self.assertEqual(self.check(self.ESCALATED, self.ESCALATED), [])
+
+    def test_182_direct_to_planned_is_the_only_escalation_allowed(self):
+        for value in ("planned", "blocked", "direct-ish", ""):
+            with self.subTest(escalated_from=value):
+                claim = dict(self.PLANNED, escalated_from=value)
+                problems = self.check(claim, claim)
+                self.assertTrue(any("only escalation the contract allows" in p for p in problems),
+                                problems)
+
+    def test_183_de_escalation_and_a_non_planned_outcome_are_refused(self):
+        """No de-escalation, caught on two independent legs.
+
+        A run that ends `direct` is refused by the base contract rule that the final classification
+        must be planned - not by the escalation logic, which never sees it. The escalation-side leg is
+        a record that reports an escalation while still reading `direct`; that one is
+        `_escalation_problems`' own.
+        """
+        ends_direct = self.check({"value": "direct", "reason": "one function"}, self.PLANNED)
+        self.assertTrue(any("not 'planned'" in p for p in ends_direct), ends_direct)
+        record_says_direct = self.check(self.ESCALATED,
+                                       dict(self.ESCALATED, value="direct"), name="d2")
+        self.assertTrue(any("contradicts it" in p for p in record_says_direct), record_says_direct)
+
+    def test_184_an_escalation_must_agree_across_both_artifacts(self):
+        report_only = self.check(self.ESCALATED, self.PLANNED)
+        self.assertTrue(any("only in the completion report" in p for p in report_only), report_only)
+        record_only = self.check(self.PLANNED, self.ESCALATED, name="r2")
+        self.assertTrue(any("contradict" in p for p in record_only), record_only)
+
+    def test_185_a_record_that_escalated_must_read_planned_at_component_scope(self):
+        contradictory = dict(self.ESCALATED, value="direct")
+        problems = self.check(self.ESCALATED, contradictory, name="r3")
+        self.assertTrue(any("contradicts it" in p for p in problems), problems)
+        narrow = self.check(self.ESCALATED, self.ESCALATED, scope="minimal", name="r4")
+        self.assertTrue(any("component scope" in p for p in narrow), narrow)
+
+    def test_186_a_claimed_escalation_with_no_retrieved_record_is_uncorroborated(self):
+        problems = self.helper.check(self.run_out(self.ESCALATED, None, name="r5"),
+                                     escalation_consistent=True)
+        self.assertTrue(any("cannot be corroborated" in p for p in problems), problems)
+
+    def test_187_review_identical_must_be_evidenced_by_equal_digests(self):
+        out = self.run_out(self.PLANNED, self.PLANNED, name="r6")
+        report = json.loads((Path(out) / "report.json").read_text())
+        for review, expected in (
+                ({"performed": True, "identical": True}, "missing"),
+                ({"performed": True, "identical": True,
+                  "fingerprint_before": "taken after the review", "fingerprint_after": self.DIGEST},
+                 "not digests"),
+                ({"performed": True, "identical": True,
+                  "fingerprint_before": self.DIGEST, "fingerprint_after": "b" * 64}, "differ")):
+            with self.subTest(case=expected):
+                report["review"] = review
+                (Path(out) / "report.json").write_text(json.dumps(report))
+                problems = self.helper.check(out, escalation_consistent=True)
+                self.assertTrue(any(expected in p for p in problems), problems)
 
 
 if __name__ == "__main__":
