@@ -47,11 +47,17 @@ import re
 import sys
 
 
-def _looks_like_a_digest(value):
-    """A fingerprint is a hash, not a sentence. `sha256:` prefixes are accepted."""
-    text = str(value or "").strip()
-    text = text[len("sha256:"):] if text.startswith("sha256:") else text
-    return len(text) >= 32 and all(c in "0123456789abcdefABCDEF" for c in text)
+#: A recorded fingerprint may name the method it used. Live runs have written bare hex,
+#: `sha256:<hex>` and `sha256(git diff)=<hex>`, all of which carry the same evidence, so the digest is
+#: EXTRACTED rather than required to stand alone. Prose with no digest in it yields nothing and is
+#: still refused - that is the case FR-022 exists to catch.
+DIGEST = re.compile(r"[0-9a-fA-F]{32,}")
+
+
+def _digest_of(value):
+    """The one hash recorded in `value`, or None when it records no hash at all."""
+    found = DIGEST.findall(str(value or ""))
+    return found[0].lower() if len(found) == 1 else None
 
 
 def _load(directory, name):
@@ -89,10 +95,10 @@ def check(run_out, escalation_consistent=False, repo_wide=False):
             if missing:
                 problems.append(f"review.{' and review.'.join(missing)} missing, so "
                                 "review.identical is asserted and not evidenced (FR-022)")
-            elif not all(_looks_like_a_digest(value) for value in (before, after)):
-                problems.append("review fingerprints are not digests, so review.identical rests on "
-                                "prose rather than evidence (FR-022)")
-            elif before != after:
+            elif not all(_digest_of(value) for value in (before, after)):
+                problems.append("a review fingerprint records no digest, so review.identical rests "
+                                "on prose rather than evidence (FR-022)")
+            elif _digest_of(before) != _digest_of(after):
                 problems.append("review fingerprints differ, so the reviewer changed the candidate "
                                 "(FR-022)")
     if escalation_consistent:

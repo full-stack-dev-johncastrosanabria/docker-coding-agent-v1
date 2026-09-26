@@ -1469,7 +1469,7 @@ class TestPlannedWorkRecord(unittest.TestCase):
                 ({"performed": True, "identical": True}, "missing"),
                 ({"performed": True, "identical": True,
                   "fingerprint_before": "taken after the review", "fingerprint_after": self.DIGEST},
-                 "not digests"),
+                 "records no digest"),
                 ({"performed": True, "identical": True,
                   "fingerprint_before": self.DIGEST, "fingerprint_after": "b" * 64}, "differ")):
             with self.subTest(case=expected):
@@ -1477,6 +1477,30 @@ class TestPlannedWorkRecord(unittest.TestCase):
                 (Path(out) / "report.json").write_text(json.dumps(report))
                 problems = self.helper.check(out, escalation_consistent=True)
                 self.assertTrue(any(expected in p for p in problems), problems)
+
+    def test_188_a_fingerprint_may_name_the_method_that_produced_it(self):
+        """Live runs label their digests, and a label carries the same evidence as bare hex.
+
+        T083 evidence: one Claude run recorded `sha256(git diff)=<hex>` for both fingerprints - two
+        real, equal digests - and an earlier shape test that demanded bare hex rejected that correct
+        answer. Only the digest inside the string decides; prose with no digest still fails.
+        """
+        out = self.run_out(self.PLANNED, self.PLANNED, name="r7")
+        report = json.loads((Path(out) / "report.json").read_text())
+        for label in ("{d}", "sha256:{d}", "sha256(git diff)={d}", "sha256(git diff) {d}"):
+            with self.subTest(label=label):
+                digest = label.format(d=self.DIGEST)
+                report["review"] = {"performed": True, "identical": True,
+                                    "fingerprint_before": digest, "fingerprint_after": digest}
+                (Path(out) / "report.json").write_text(json.dumps(report))
+                self.assertEqual(self.helper.check(out, escalation_consistent=True), [])
+        # A label cannot paper over a real difference.
+        report["review"] = {"performed": True, "identical": True,
+                            "fingerprint_before": f"sha256(git diff)={self.DIGEST}",
+                            "fingerprint_after": f"sha256(git diff)={'b' * 64}"}
+        (Path(out) / "report.json").write_text(json.dumps(report))
+        problems = self.helper.check(out, escalation_consistent=True)
+        self.assertTrue(any("differ" in p for p in problems), problems)
 
 
 if __name__ == "__main__":
