@@ -442,11 +442,14 @@
         },
         "identical": {
           "type": "boolean",
-          "description": "workspace fingerprints before and after the review are equal (FR-022); false is a safety-invariant violation"
+          "description": "workspace fingerprints before and after the review are equal (FR-022). Host-derived from the managed hook record when one was collected; false is a safety-invariant violation, and ABSENT means identity could not be proven - which is not the same as the candidate having changed"
         },
         "evidence_origin": {
-          "const": "vm",
-          "description": "fingerprints are computed inside the VM (cooperative evidence)"
+          "enum": [
+            "vm",
+            "managed-hook"
+          ],
+          "description": "where the fingerprints came from: `managed-hook` is the host's reading of the trusted in-VM hook record and is authoritative for FR-022; `vm` is the agent's own cooperative claim, kept only for callers that supplied no managed record"
         },
         "findings": {
           "type": "array",
@@ -475,6 +478,14 @@
               }
             }
           }
+        },
+        "agent_identical": {
+          "type": "boolean",
+          "description": "what the agent itself claimed about identity, kept so a disagreement with the host's managed evidence is visible rather than silently replaced"
+        },
+        "identity_reason": {
+          "type": "string",
+          "description": "why the host considers review identity proven or unproven"
         }
       }
     },

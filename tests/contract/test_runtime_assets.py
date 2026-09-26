@@ -377,26 +377,32 @@ class TestPlannedWorkDiscipline(unittest.TestCase):
         self.assertIn("neither record may ever describe an escalation that did not happen",
                       self.root)
 
-    def test_77_the_report_names_where_the_machine_computed_fingerprint_is_recorded(self):
-        self.assertIn("/run/dca/state/fingerprints.jsonl", self.receipt)
-        self.assertIn("you may read that file; you may not write it", self.receipt)
+    def test_77_the_agent_is_never_asked_to_read_internal_runtime_state(self):
+        """The class-A regression this replaces: the instruction told the agent to read
+        `/run/dca/state/fingerprints.jsonl`. One backend's root session could, another's could only
+        sometimes, so the same correct work passed on one and was blocked on the other. No shipped
+        instruction may make the agent reach into the runtime's own state to prove a host invariant.
+        """
+        for path in sorted(list(INSTRUCTIONS.glob("*.md"))
+                           + [SKILLS / name / "SKILL.md" for name in RUNTIME_SKILLS]):
+            with self.subTest(path=str(path.relative_to(ROOT))):
+                body = text(path)
+                self.assertNotIn("fingerprints.jsonl", body)
+                self.assertNotIn("/run/dca/state", body)
 
-    def test_78_review_identical_requires_two_equal_real_digests(self):
-        self.assertIn("`review.identical: true` is allowed only when** both fields hold a real "
-                      "digest and the two digests are equal", self.receipt)
+    def test_78_review_identity_is_stated_to_be_host_verified(self):
+        self.assertIn("you do not compute, read or copy the review fingerprints", self.receipt)
+        self.assertIn("the **host** reads that record and decides whether the candidate stayed "
+                      "identical", self.receipt)
 
-    def test_79_prose_and_placeholders_are_not_fingerprint_evidence(self):
-        self.assertIn("each field must hold an actual digest", self.receipt)
-        for rejected in ("prose", "a placeholder", "`not recorded`",
-                         "a description of what you would have hashed"):
-            with self.subTest(rejected=rejected):
-                self.assertIn(rejected, self.receipt)
-        self.assertIn("is not a fingerprint; it reads as no evidence at all", self.receipt)
+    def test_79_the_agent_still_owns_what_only_it_knows(self):
+        self.assertIn("never claim a review you did not run", self.receipt)
+        self.assertIn("`review.performed`** is yours to state", self.receipt)
 
-    def test_80_missing_fingerprint_evidence_is_declared_not_asserted(self):
-        self.assertIn("if a side was not captured, do not claim it", self.receipt)
-        self.assertIn("a planned task is not `succeeded` on a review you cannot evidence",
-                      self.receipt)
+    def test_80_being_unable_to_read_runtime_state_can_never_fail_a_run(self):
+        self.assertIn("being unable to read that state can never fail your run", self.receipt)
+        self.assertIn("cannot be reported `succeeded` without a plan and a review performed on an "
+                      "unchanged candidate", self.receipt)
 
 
 class TestRuntimeTextIsProviderNeutral(unittest.TestCase):

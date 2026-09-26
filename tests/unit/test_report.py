@@ -372,6 +372,154 @@ class TestNativeCeiling(ReportCase):
         self.assertIsNone(built["limits"]["native_ceiling"])
 
 
+# --- FR-022: the host owns review identity (T083) ---------------------------------------------------
+
+
+class TestManagedReviewIdentity(ReportCase):
+    """FR-022 is decided from the MANAGED hook record, not from what the agent copied into its report.
+
+    The regression this pins: the runtime once told the agent to read
+    `/run/dca/state/fingerprints.jsonl` and refuse success if it could not. One backend's root
+    session could read it, another's only sometimes, so three runs that had done the work correctly -
+    reviewer invoked, no findings, every check passing - reported `blocked` because they could not
+    reach a file the HOST can read for them. The agent now states what it did; the host states what
+    it measured; the host wins. That is a change of authority, not of the bar: unproven identity
+    still cannot be reported as a planned success.
+
+    Event names differ per harness, so every case here is run for both spellings.
+    """
+
+    SAME = "sha256:" + "a" * 64
+    OTHER = "sha256:" + "b" * 64
+    #: (start event, stop event) as each shipped harness actually spells them.
+    SPELLINGS = (("SubagentStart", "SubagentStop"), ("on_agent_switch", "subagent_stop"))
+
+    def records(self, before, after, agent="reviewer", spelling=0, error=None):
+        start, stop = self.SPELLINGS[spelling]
+        return [
+            {"ts": "2026-09-26T00:00:00Z", "event": start, "agent": agent,
+             "fingerprint": before, "error": error},
+            {"ts": "2026-09-26T00:00:01Z", "event": stop, "agent": agent,
+             "fingerprint": after, "error": error},
+        ]
+
+    def planned(self, review, **overrides):
+        body = agent_report(value="planned", plan_ref="/run/dca/out/plan.md", review=review)
+        body.update(overrides)
+        return body
+
+    def built(self, review, records, spelling=0):
+        return self.build(agent=self.planned(review), review_fingerprints=records)
+
+    # --- case 1: agent true, host equal -> allowed ------------------------------------------------
+
+    def test_90_agent_true_and_equal_managed_fingerprints_succeeds(self):
+        for spelling in (0, 1):
+            with self.subTest(spelling=self.SPELLINGS[spelling]):
+                built = self.built({"performed": True, "identical": True},
+                                   self.records(self.SAME, self.SAME, spelling=spelling))
+                self.assertEqual(built["final_outcome"], "succeeded")
+                self.assertTrue(built["review"]["identical"])
+                self.assertEqual(built["review"]["evidence_origin"], "managed-hook")
+                self.assertEqual(built["review"]["fingerprint_before"], self.SAME)
+                self.assertEqual(built["review"]["fingerprint_after"], self.SAME)
+
+    # --- case 2: agent true, host differ -> fail + safety event ----------------------------------
+
+    def test_91_agent_true_but_managed_fingerprints_differ_is_a_safety_violation(self):
+        for spelling in (0, 1):
+            with self.subTest(spelling=self.SPELLINGS[spelling]):
+                built = self.built({"performed": True, "identical": True},
+                                   self.records(self.SAME, self.OTHER, spelling=spelling))
+                self.assertNotEqual(built["final_outcome"], "succeeded")
+                self.assertFalse(built["review"]["identical"])
+                self.assertTrue(built["review"]["agent_identical"], "the claim is kept, visibly")
+                self.assertIn(report.REVIEWER_MISMATCH, built["safety_events"])
+
+    # --- cases 3 and 6: no usable managed evidence -> identity not proven ------------------------
+
+    def test_92_managed_evidence_that_is_missing_or_unusable_is_never_identical(self):
+        cases = {
+            "no record at all": [],
+            "hook failed on both sides": self.records(None, None, error="OSError: boom"),
+            "only one side": [self.records(self.SAME, self.SAME)[0]],
+            "not attributed to the reviewer": self.records(self.SAME, self.SAME, agent="researcher"),
+            "unlabelled agent": self.records(self.SAME, self.SAME, agent="unknown"),
+            "not a digest": self.records("not recorded", "not recorded"),
+        }
+        for label, records in cases.items():
+            with self.subTest(case=label):
+                built = self.built({"performed": True, "identical": True}, records)
+                self.assertNotEqual(built["final_outcome"], "succeeded")
+                # ABSENT, not False: "we cannot tell" must not masquerade as "it changed".
+                self.assertNotIn("identical", built["review"])
+                self.assertNotIn(report.REVIEWER_MISMATCH, built.get("safety_events") or [])
+                self.assertTrue(built["review"]["identity_reason"])
+
+    # --- case 4: agent prose, host equal -> host wins, no false failure --------------------------
+
+    def test_93_agent_prose_cannot_fail_a_run_the_managed_record_proves(self):
+        prose = {"performed": True, "identical": True,
+                 "fingerprint_before": "not recorded before review; no edits were made",
+                 "fingerprint_after": "same as before"}
+        built = self.built(prose, self.records(self.SAME, self.SAME))
+        self.assertEqual(built["final_outcome"], "succeeded")
+        self.assertEqual(built["review"]["fingerprint_before"], self.SAME,
+                         "the host's measurement replaces the agent's prose")
+        self.assertEqual(built["review"]["fingerprint_after"], self.SAME)
+
+    # --- case 5: the agent could not read the state at all --------------------------------------
+
+    def test_94_an_agent_that_could_not_read_the_state_is_not_penalised(self):
+        """The exact shape of the live regression: empty strings and `identical: false`."""
+        for claimed in ({"performed": True, "identical": False,
+                         "fingerprint_before": "", "fingerprint_after": ""},
+                        {"performed": True}):
+            with self.subTest(claimed=sorted(claimed)):
+                built = self.built(claimed, self.records(self.SAME, self.SAME))
+                self.assertEqual(built["final_outcome"], "succeeded")
+                self.assertTrue(built["review"]["identical"])
+                self.assertNotIn(report.REVIEWER_MISMATCH, built.get("safety_events") or [])
+
+    # --- case 7: the reviewer really changed the candidate --------------------------------------
+
+    def test_95_a_reviewer_that_changed_the_candidate_is_caught_whatever_the_agent_says(self):
+        for claimed in ({"performed": True, "identical": True},
+                        {"performed": True, "identical": False},
+                        {"performed": True}):
+            with self.subTest(claimed=sorted(claimed)):
+                built = self.built(claimed, self.records(self.SAME, self.OTHER))
+                self.assertNotEqual(built["final_outcome"], "succeeded")
+                self.assertFalse(built["review"]["identical"])
+                self.assertIn(report.REVIEWER_MISMATCH, built["safety_events"])
+
+    # --- the bar did not move -------------------------------------------------------------------
+
+    def test_96_a_review_the_agent_never_ran_is_still_refused(self):
+        """FR-020 stays the agent's to state: managed fingerprints do not invent a review."""
+        built = self.built({"performed": False}, self.records(self.SAME, self.SAME))
+        self.assertNotEqual(built["final_outcome"], "succeeded")
+        self.assertIn("not independently reviewed", built["primary_reason"])
+        # The managed record still says what it measured; it just cannot supply a review.
+        self.assertTrue(built["review"]["identical"])
+
+    def test_97_the_agents_fingerprints_are_never_authority_when_a_record_exists(self):
+        """Even a perfectly-shaped pair of equal agent digests cannot stand in for the record."""
+        forged = {"performed": True, "identical": True,
+                  "fingerprint_before": self.SAME, "fingerprint_after": self.SAME}
+        built = self.built(forged, [])
+        self.assertNotEqual(built["final_outcome"], "succeeded")
+        self.assertNotIn("identical", built["review"])
+
+    def test_98_no_managed_record_at_all_keeps_the_pre_existing_agent_reading(self):
+        """`review_fingerprints=None` means the caller gathered nothing, not that nothing was true."""
+        built = self.build(agent=self.planned(
+            {"performed": True, "identical": True,
+             "fingerprint_before": self.SAME, "fingerprint_after": self.SAME}))
+        self.assertEqual(built["final_outcome"], "succeeded")
+        self.assertEqual(built["review"]["evidence_origin"], "vm")
+
+
 # --- planned tasks (CR3) ------------------------------------------------------------------------------
 
 

@@ -72,26 +72,28 @@ single direct→planned escalation actually happened.
 - **`review.identical`** is `false` if the candidate's fingerprint changed while the reviewer read
   it. Say so; it is recorded as a safety event either way.
 
-## Review fingerprints are evidence, not assertions
+## Review identity is verified for you
 
-You do not compute the fingerprint: the managed hooks compute it for you. Every time a delegation
-starts and stops, the candidate's workspace fingerprint is appended to
-`/run/dca/state/fingerprints.jsonl` as `{"event": ..., "agent": ..., "fingerprint": "sha256:<hex>"}`.
-You may read that file; you may not write it. Read it after the reviewer returns and copy the value
-recorded when the review started into `fingerprint_before` and the value recorded when it stopped
-into `fingerprint_after`. If you take a digest yourself instead, take it over the same thing on both
-sides, with a command whose output you can see.
+You do not compute, read or copy the review fingerprints. The managed hooks take the candidate's
+workspace fingerprint on both sides of every delegation, and the **host** reads that record and
+decides whether the candidate stayed identical while the reviewer was in it. That verdict, not
+anything you write, is what FR-022 is judged on, and the host writes it into the report.
 
-- **Each field must hold an actual digest** - a hex hash some command produced, bare or labelled
-  (`sha256:<hex>`). Prose, a placeholder, `not recorded`, `unchanged`, or a description of what you
-  would have hashed is not a fingerprint; it reads as no evidence at all.
-- **`review.identical: true` is allowed only when** both fields hold a real digest and the two
-  digests are equal. That is the whole test: a real digest before, a real digest after, and the two
-  the same.
-- **If a side was not captured, do not claim it.** Record `identical: false`, or the review as not
-  performed, and say in `risks` that the fingerprint evidence is missing. A planned task is not
-  `succeeded` on a review you cannot evidence, and `identical: true` without two equal digests is an
-  over-claim the host publishes as one.
+So report the review honestly and leave the evidence to the host:
+
+- **`review.performed`** is yours to state, because only you know whether you actually invoked the
+  reviewer and what it returned. Never claim a review you did not run.
+- **`review.findings`** is yours: what the reviewer reported, and whether you resolved it.
+- **`review.identical`** you may state as your own observation, and it is recorded as your claim.
+  It is not the proof. If the managed record shows the candidate changed, or shows nothing usable,
+  the host says so whatever you wrote - and an honest claim that disagrees with it costs you
+  nothing, while a false one is simply published as an over-claim.
+- **`review.fingerprint_before` / `review.fingerprint_after`** you may omit entirely. If the managed
+  record exists, the host overwrites them with what it actually measured.
+
+A planned task still cannot be reported `succeeded` without a plan and a review performed on an
+unchanged candidate. What changed is only who supplies the proof: you are not asked to reach into
+the runtime's own state to obtain it, and being unable to read that state can never fail your run.
 
 ## Risks and blockers
 
