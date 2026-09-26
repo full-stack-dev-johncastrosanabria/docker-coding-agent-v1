@@ -119,7 +119,19 @@ def main(argv):
         name = args[args.index("--name") + 1] if "--name" in args else "unnamed"
         state.setdefault("sandboxes", []).append({"name": name})
         save_state(state)
-        print(state.get("create_output", "created from docker/sandbox-templates:unspecified"))
+        # The real `sbx create` reports the image it resolved, on an `image <reference>` line, and
+        # with `--template` that is exactly the reference it was handed. Echoing it here is what
+        # makes the launcher's "this sandbox booted the pinned digest" check meaningful in tests
+        # instead of something each harness has to hand-write. A test that needs a DIFFERENT record
+        # - a wrong digest, a bare tag, no image line - sets `create_output` and that wins.
+        if "create_output" in state:
+            print(state["create_output"])
+        else:
+            requested = args[args.index("--template") + 1] if "--template" in args else "(none)"
+            print("\u2500\u2500 RESOLVE SETUP")
+            print(f"     image      {requested}")
+            print("   \u2713 configuration resolved")
+            print(f"   \u2713 Created sandbox {name}")
         return 0
 
     if command == "cp":

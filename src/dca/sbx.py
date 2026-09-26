@@ -118,9 +118,21 @@ class Sbx:
 
     # --- per-sandbox lifecycle -------------------------------------------------------------------
 
-    def create(self, template, name, kit):
-        """A mountless sandbox with shared skills OFF and the V1 kit. No host path is mounted."""
-        _, out, _ = self.run("create", template, "--name", name, "--skills", "off", "--kit", kit)
+    def create(self, template, name, kit, base):
+        """A mountless sandbox with shared skills OFF, the V1 kit and the EXACT pinned base.
+
+        `base` is the immutable, digest-qualified reference - `<repository>:<tag>@sha256:<hex>` -
+        and it is REQUIRED. Passing it with `--template` makes the image a creation-time input
+        rather than something resolved from the agent's default tag and audited afterwards, so an
+        upstream tag that moves can no longer decide which image boots. It is not defaulted: a
+        caller that has no pin must refuse to create, because falling back to the agent default
+        would silently select whatever the mutable tag points at today.
+        """
+        if not base:
+            raise ValueError("a pinned, digest-qualified base reference is required to create a "
+                             "sandbox; the agent default would follow a mutable tag")
+        _, out, _ = self.run("create", template, "--template", base,
+                             "--name", name, "--skills", "off", "--kit", kit)
         return out
 
     def allow_network(self, name, hosts):

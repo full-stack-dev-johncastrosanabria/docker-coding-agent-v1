@@ -170,10 +170,6 @@ class ExecutionCase(unittest.TestCase):
                                  kit_builder=self.stub_kit)
 
     def provisioned(self, **overrides):
-        backend = overrides.get("backend", "claude")
-        self.state["create_output"] = (
-            f"created from {self.versions['sandbox_bases'][backend]['base']}")
-        self.write_state()
         instance = self.make(**overrides)
         instance.preconditions()
         instance.provision()
@@ -444,9 +440,6 @@ class TestEndings(ExecutionCase):
 
 class TestProgress(ExecutionCase):
     def test_40_provisioning_reports_the_bundle_and_the_ready_sandbox(self):
-        base = self.versions["sandbox_bases"]["claude"]["base"]
-        self.state["create_output"] = f"created from {base}"
-        self.write_state()
         instance = self.make()
         seen = []
         instance.progress = lambda *event: seen.append(event)
