@@ -210,6 +210,10 @@ class Launcher:
 
         self.evidence = None
         self.versions = None
+        # The managed hook record, once collected. `None` means no managed evidence was gathered at
+        # all (the run never got that far); an empty list means it was gathered and was empty, which
+        # is unproven identity rather than no opinion.
+        self.review_fingerprints = None
         self.source_ref = None
         self.source_commit = None
         self.dirty_paths = []
@@ -541,7 +545,7 @@ class Launcher:
         except Exception as exc:
             raise InfraAbort(f"the sandbox kit could not be built: {exc}") from exc
 
-        self.sandbox = f"dca-{request.run_id}"
+        name = f"dca-{request.run_id}"
         template = BACKEND_TEMPLATE[request.backend]
         # The base is chosen by its immutable digest BEFORE the sandbox exists. Refusing here,
         # before `sbx create` runs, is what keeps the agent default - a mutable tag - from ever
@@ -553,6 +557,14 @@ class Launcher:
                 "(both `base` and `version` are required), so no sandbox can be created: the "
                 "launcher never resolves or substitutes a base at runtime.")
         try:
+            # `self.sandbox` is what `cleanup` removes, so it is set only once creation has actually
+            # been ATTEMPTED - never before a purely local check like the pin guard above. Set any
+            # earlier, a config error that never reached sbx would still make cleanup run
+            # `sbx rm --force` on a name sbx never knew, and a non-zero exit from that would be
+            # recorded as a cleanup FAILURE for a sandbox that was never created. It is set before
+            # the call rather than after it because a create that fails partway can still leave a
+            # sandbox behind, and that one must be removed.
+            self.sandbox = name
             # Step 2: a MOUNTLESS sandbox with shared skills off, from the pinned base DIGEST.
             created = self.sbx.create(template, self.sandbox, self.kit_dir, pinned_base)
             self._check_resolved_base(created)
@@ -822,11 +834,19 @@ class Launcher:
             except (SbxError, OSError):
                 continue
             collected[name] = destination
-        try:
-            self.sbx.copy_out(self.sandbox, f"{STATE_DIR}/gate.log.jsonl",
-                              os.path.join(self.request.out, "gate.log.jsonl"))
-        except (SbxError, OSError):
-            pass
+        for name in ("gate.log.jsonl", "fingerprints.jsonl"):
+            try:
+                self.sbx.copy_out(self.sandbox, f"{STATE_DIR}/{name}",
+                                  os.path.join(self.request.out, name))
+            except (SbxError, OSError):
+                # Best effort, and deliberately so. A record that could not be copied is evidence
+                # that is ABSENT, and absent review evidence already blocks a planned success; an
+                # abort here would add a way for a finished run to die without protecting anything.
+                continue
+        # FR-022 is decided from the managed hook record, never from the agent's copy of it. Read
+        # here, while the file is still fresh out of the VM and before cleanup removes the sandbox.
+        self.review_fingerprints = fingerprint_module.read_review_records(
+            os.path.join(self.request.out, "fingerprints.jsonl"))
         agent_report = None
         if "report.agent.json" in collected:
             try:
@@ -938,6 +958,7 @@ class Launcher:
             agent_report=agent_report, change_set=change_set,
             limits_configured=self.host_limits(), versions=self.version_block(),
             launcher_checks=launcher_checks,
+            review_fingerprints=self.review_fingerprints,
             limit_evidence_predates=_evidence_predates_limit(analysis, host_stop,
                                                              launcher_checks))
         self.write_outputs(final)

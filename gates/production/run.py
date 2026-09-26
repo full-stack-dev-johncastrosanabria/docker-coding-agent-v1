@@ -90,6 +90,12 @@ def run_cell(backend, profile, sbx, versions, network):
         # Both rows are read off the RESOLVED-IMAGE lines, never the whole output: the reference
         # also appears in the line that pulls it, so a substring search over stdout would accept a
         # create that resolved something else.
+        #
+        # TECHNICAL DEBT (T083, deliberately not fixed here): this duplicates
+        # `dca.launcher._resolved_image_lines`, which uses the same regex on the same output. The
+        # two can drift. It was left alone on purpose - this gate harness produced the accepted
+        # foundation evidence, and changing it would invalidate that evidence for a readability
+        # gain. Unify it, behind a public helper, the next time the harness is re-run anyway.
         observed = [found.strip() for found in re.findall(r"^\s*image\s+(.+)$", output, re.M)]
         checked(rows, "base.reference",
                 any(line.split("@", 1)[0] == pinned["base"] for line in observed),

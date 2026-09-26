@@ -113,9 +113,6 @@ class Sbx:
             mapping[entry["key"]] = entry.get("value")
         return mapping
 
-    def templates(self):
-        return self._json("template", "ls", "--json")
-
     # --- per-sandbox lifecycle -------------------------------------------------------------------
 
     def create(self, template, name, kit, base):

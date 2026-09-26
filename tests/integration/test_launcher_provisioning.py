@@ -367,6 +367,108 @@ class TestCodexCredential(ProvisioningCase):
         self.assertFalse(os.path.exists(workdir))
 
 
+class TestCleanupAccounting(ProvisioningCase):
+    """`cleanup` must only try to remove a sandbox whose creation was actually attempted.
+
+    The bug: `self.sandbox` was assigned before the pinned-base guard, a purely local check on
+    runtime/versions.yaml that never talks to sbx. A config-only failure therefore reached
+    `cleanup()`, which runs `sbx rm --force <name>` for any non-None `self.sandbox` and records
+    `removal_failed` on a non-zero exit - so a sandbox that was never created could be reported as a
+    CLEANUP FAILURE. Cleanup failures are a headline acceptance number, so a false one is not
+    cosmetic: it makes the run's own report untrue.
+    """
+
+    def test_30_a_failure_before_creation_attempts_no_removal(self):
+        instance = self.make(backend="claude")
+        instance.preconditions()
+        del instance.versions["sandbox_bases"]["claude"]["version"]
+        with self.assertRaises(errors.InfraAbort):
+            instance.provision()
+        instance.cleanup()
+        self.assertIsNone(self.first("rm"), "nothing was created, so nothing may be removed")
+        self.assertIsNone(instance.removal_failed, "a cleanup that never ran cannot have failed")
+        state = json.loads((self.state_dir / "state.json").read_text(encoding="utf-8"))
+        self.assertFalse(state.get("removed"), "sbx was never asked to remove anything")
+
+    def test_31_a_created_sandbox_is_still_removed(self):
+        instance = self.provisioned()
+        instance.cleanup()
+        self.assertIsNotNone(self.first("rm"))
+        self.assertIsNone(instance.removal_failed)
+        state = json.loads((self.state_dir / "state.json").read_text(encoding="utf-8"))
+        self.assertTrue(state.get("removed"))
+
+    def test_32_a_sandbox_left_by_a_failed_creation_is_still_removed(self):
+        """A create that fails partway can leave a sandbox, so the name is claimed before the call."""
+        self.state["create_output"] = "Created sandbox but resolved nothing\n"
+        self.write_state()
+        instance = self.make(backend="claude")
+        instance.preconditions()
+        with self.assertRaises(errors.InfraAbort):
+            instance.provision()
+        instance.cleanup()
+        self.assertIsNotNone(self.first("rm"), "an unprovable base still leaves a sandbox to remove")
+
+    def test_33_a_real_removal_failure_is_still_recorded(self):
+        instance = self.provisioned()
+        self.state["fail"] = {"rm": 1}
+        self.write_state()
+        instance.cleanup()
+        self.assertEqual(instance.removal_failed, f"dca-{instance.request.run_id}")
+
+
+class TestManagedFingerprintCollection(ProvisioningCase):
+    """The launcher collects the managed hook record itself, and always hands it to the report.
+
+    FR-022's evidence must reach the host without the agent's help. Two things are pinned here: the
+    record is copied out of the VM while the sandbox still exists, and `review_fingerprints` is
+    never left as `None` once there is an agent report to judge - because `None` means "the caller
+    supplied no managed evidence", which falls back to reading the agent's own claim. In production
+    that fallback must be unreachable.
+    """
+
+    RECORD = ('{"ts": "2026-09-26T00:00:00Z", "event": "SubagentStart", "agent": "reviewer", '
+              '"fingerprint": "sha256:%s", "error": null}\n'
+              '{"ts": "2026-09-26T00:00:01Z", "event": "SubagentStop", "agent": "reviewer", '
+              '"fingerprint": "sha256:%s", "error": null}\n') % ("a" * 64, "a" * 64)
+
+    def collected(self, record=None, agent_report='{"outcome": "succeeded"}'):
+        instance = self.provisioned()
+        payload = {f"{launcher.SCRATCH_DIR}/report.agent.json": agent_report}
+        if record is not None:
+            payload[f"{launcher.STATE_DIR}/fingerprints.jsonl"] = record
+        self.state["copy_out"] = payload
+        self.write_state()
+        return instance, instance.collect_agent_evidence()
+
+    def test_35_the_managed_record_is_copied_out_of_the_running_sandbox(self):
+        instance, _ = self.collected(self.RECORD)
+        copied = os.path.join(instance.request.out, "fingerprints.jsonl")
+        self.assertTrue(os.path.isfile(copied), "the record reaches the host as a file")
+        # ...and while the sandbox still exists: the copy precedes any removal.
+        commands = [argv[0] for argv in self.calls()]
+        self.assertIn("cp", commands)
+        self.assertNotIn("rm", commands[:commands.index("cp")])
+
+    def test_36_the_collected_record_is_parsed_into_the_review_evidence(self):
+        instance, _ = self.collected(self.RECORD)
+        self.assertEqual(len(instance.review_fingerprints), 2)
+        identity = launcher.fingerprint_module.review_identity(instance.review_fingerprints)
+        self.assertTrue(identity["proven"])
+
+    def test_37_a_missing_record_is_an_empty_list_never_None(self):
+        """Absent evidence must read as "gathered nothing", which is unproven - not as no opinion."""
+        instance, report = self.collected(None)
+        self.assertIsNotNone(report, "the agent report was still collected")
+        self.assertEqual(instance.review_fingerprints, [])
+        self.assertFalse(
+            launcher.fingerprint_module.review_identity(instance.review_fingerprints)["proven"])
+
+    def test_38_an_unparsable_record_never_aborts_the_run(self):
+        instance, _ = self.collected("not json\n{\n")
+        self.assertEqual(instance.review_fingerprints, [])
+
+
 class TestImmutableBase(ProvisioningCase):
     """The sandbox is created FROM the pinned digest, and that is what is then proven.
 
