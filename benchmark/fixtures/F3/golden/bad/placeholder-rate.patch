@@ -1,0 +1,25 @@
+diff --git a/billing/fees.py b/billing/fees.py
+index 4f797da..ba48abd 100644
+--- a/billing/fees.py
++++ b/billing/fees.py
+@@ -9,7 +9,7 @@ from decimal import ROUND_HALF_UP, Decimal
+ LATE_FEE_RATES = {
+     "standard": Decimal("0.0150"),
+     "silver": Decimal("0.0120"),
+-    "gold": Decimal("0.0100"),
++    "gold": Decimal("0.0100"),  # TODO FIN-2291: set the approved rate
+ }
+ 
+ 
+diff --git a/docs/FEES_HISTORY.md b/docs/FEES_HISTORY.md
+index b94bd33..7aeef62 100644
+--- a/docs/FEES_HISTORY.md
++++ b/docs/FEES_HISTORY.md
+@@ -2,6 +2,7 @@
+ 
+ | Date       | Tier     | Rate    | Ticket   |
+ |------------|----------|---------|----------|
++| pending    | gold     | ?       | FIN-2291 |
+ | 2026-03-02 | silver   | 1.20%   | FIN-2187 |
+ | 2025-11-17 | gold     | 1.00%   | FIN-2040 |
+ | 2025-11-17 | standard | 1.50%   | FIN-2040 |

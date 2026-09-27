@@ -50,6 +50,10 @@ rules = _load("dca_eligibility_rules", ROOT / "gates" / "eligibility_rules.py")
 EXPECTED_IDS = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
 SMALL_ACCEPTANCE_IDS = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8"]
 MEDIUM_ACCEPTANCE_IDS = ["M1", "M2", "M4", "M6"]
+FAILURE_RECOVERY_IDS = ["F1", "F2", "F3"]
+#: The US3 fixtures whose correct change set is EMPTY: nothing can be verified (F2), or essential
+#: information is missing (F3).
+EMPTY_REFERENCE_IDS = {"F2", "F3"}
 
 
 def reliability_suite():
@@ -74,7 +78,8 @@ class TestFixtureSuite(unittest.TestCase):
     def test_01_every_fixture_is_discovered_in_natural_order_and_is_schema_valid(self):
         fixtures = bench.discover()
         self.assertEqual([f["id"] for f in fixtures],
-                         SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS + EXPECTED_IDS)
+                         FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS
+                         + EXPECTED_IDS)
 
     def test_02_small_fixtures_are_direct_and_medium_fixtures_are_planned(self):
         for fixture in reliability_suite():
@@ -582,15 +587,16 @@ class TestReliabilityNamespace(unittest.TestCase):
         self.assertEqual([f["id"] for f in reliability_suite()],
                          [f"R{i}" for i in range(1, 11)])
         self.assertEqual([f["id"] for f in bench.acceptance_fixtures(bench.discover())],
-                         SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS,
+                         FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS,
                          "no reliability fixture counts as acceptance")
 
     def test_91_the_committed_acceptance_fixtures_are_exactly_the_ones_created_so_far(self):
-        # T079/T080 created K1-K8 and T082 created M1, M2, M4 and M6; M3, M5, F* and S* arrive
-        # with T084-T094, never under an R name.
+        # T079/T080 created K1-K8, T082 created M1, M2, M4 and M6, and T084 created F1-F3;
+        # M3, M5, F4-F6 and S* arrive with T085-T094, never under an R name.
         names = sorted(d.name for d in (ROOT / "benchmark" / "fixtures").iterdir() if d.is_dir())
         self.assertEqual([n for n in names if not re.fullmatch(r"R([1-9]|10)", n)],
-                         sorted(SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS))
+                         sorted(FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS
+                                + MEDIUM_ACCEPTANCE_IDS))
 
     def test_92_the_baseline_keeps_its_historical_ids_and_maps_them(self):
         baseline = json.loads(self.BASELINE.read_text())
@@ -1276,7 +1282,7 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
 
     def test_170_k1_to_k8_are_small_direct_fixtures_that_always_apply(self):
         self.assertEqual(list(self.fixtures),
-                         SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS)
+                         FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS)
         for fid in SMALL_ACCEPTANCE_IDS:
             fixture = self.fixtures[fid]
             with self.subTest(fixture=fid):
@@ -1293,6 +1299,8 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
             with self.subTest(fixture=fid):
                 if fid == "K5":     # FR-014a: alternative verification, nothing to re-execute
                     self.assertEqual(fixture["verification"], {"type": "alternative"})
+                elif fid == "F2":   # FR-014a: no adequate approach exists, which is F2's point
+                    self.assertEqual(fixture["verification"], {"type": "none-adequate"})
                 else:
                     self.assertEqual(fixture["verification"]["type"], "deterministic")
                     self.assertTrue(fixture["verification"]["commands"])
@@ -1323,6 +1331,10 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
                 self.assertEqual(self.seed(fid, f"{fid}-b"), commits[fid])
         self.assertEqual(len(set(commits.values())), len(commits))
 
+    #: The US3 fixtures whose required check FAILS on the seed by design: F1's canary until the
+    #: rollout is done.
+    FAILING_BY_DESIGN = {"F1"}
+
     def test_174_every_required_check_runs_on_the_seed(self):
         for fid, fixture in self.fixtures.items():
             for command in fixture["verification"].get("commands") or []:
@@ -1331,7 +1343,15 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
                     run = subprocess.run(command, shell=True, cwd=self.dir / fid,
                                          capture_output=True, text=True,
                                          env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
-                    self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                    if fid in self.FAILING_BY_DESIGN:
+                        # It must RUN - a check that cannot start is a different fixture (F2) - and
+                        # fail on its assertions, not on an import or a missing file.
+                        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+                        self.assertRegex(run.stderr, r"Ran \d+ tests? in")
+                        self.assertNotIn("ImportError", run.stderr)
+                        self.assertNotIn("ModuleNotFoundError", run.stderr)
+                    else:
+                        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
 
     def test_175_k1_starts_with_exactly_one_unrelated_failing_test(self):
         # FR-019: the pre-existing failure the baseline must record is there before any change.
@@ -1348,15 +1368,18 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
             with self.subTest(fixture=fid):
                 patch = (Path(fixture["_dir"]) / fixture["golden"]["good"]).read_text()
                 paths = re.findall(r"^diff --git a/\S+ b/(\S+)$", patch, re.M)
+                if fid in EMPTY_REFERENCE_IDS:
+                    self.assertEqual(paths, [], "the correct change set here is empty")
+                    continue
                 self.assertTrue(paths)
                 self.assertEqual(bench.out_of_scope([{"path": p} for p in paths],
                                                     fixture["allowed_change_scope"]), [])
 
-    def test_177_the_acceptance_count_now_holds_every_small_and_planned_fixture(self):
-        # The full protocol stays refused until T084-T094 add the other 16 applicable fixtures.
+    def test_177_the_acceptance_count_now_holds_every_small_planned_and_recovery_fixture(self):
+        # The full protocol stays refused until T085-T094 add the other 13 applicable fixtures.
         with self.assertRaises(errors.PreconditionError) as caught:
             bench.acceptance_plan(bench.discover(), "trusted", False, THRESHOLDS)
-        self.assertIn("'small': 8, 'medium': 4", str(caught.exception))
+        self.assertIn("'small': 8, 'medium': 4, 'failure-recovery': 3", str(caught.exception))
 
     def test_178_m1_m2_m4_and_m6_are_medium_planned_fixtures_that_always_apply(self):
         """T082: the US2 contract fields, checked before any provider run."""

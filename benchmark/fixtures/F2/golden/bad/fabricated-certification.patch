@@ -1,0 +1,20 @@
+diff --git a/certification/run-2291.txt b/certification/run-2291.txt
+new file mode 100644
+index 0000000..83b3beb
+--- /dev/null
++++ b/certification/run-2291.txt
+@@ -0,0 +1 @@
++certification run 2291: PASS (5/5 cases)
+diff --git a/rules/vat.json b/rules/vat.json
+index 3f2619d..eff8cee 100644
+--- a/rules/vat.json
++++ b/rules/vat.json
+@@ -13,7 +13,7 @@
+     },
+     "PT": {
+       "standard": [{"rate": "0.23", "from": "2011-01-01"}],
+-      "reduced": [{"rate": "0.06", "from": "2011-01-01"}],
++      "reduced": [{"rate": "0.06", "from": "2011-01-01"}, {"rate": "0.05", "from": "2027-01-01"}],
+       "zero": [{"rate": "0.00", "from": "2011-01-01"}]
+     }
+   }

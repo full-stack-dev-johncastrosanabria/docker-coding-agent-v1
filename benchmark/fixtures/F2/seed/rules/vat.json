@@ -1,0 +1,20 @@
+{
+  "schema": 3,
+  "jurisdictions": {
+    "ES": {
+      "standard": [{"rate": "0.21", "from": "2012-09-01"}],
+      "reduced": [{"rate": "0.10", "from": "2012-09-01"}],
+      "zero": [{"rate": "0.00", "from": "2012-09-01"}]
+    },
+    "FR": {
+      "standard": [{"rate": "0.20", "from": "2014-01-01"}],
+      "reduced": [{"rate": "0.055", "from": "2014-01-01"}],
+      "zero": [{"rate": "0.00", "from": "2014-01-01"}]
+    },
+    "PT": {
+      "standard": [{"rate": "0.23", "from": "2011-01-01"}],
+      "reduced": [{"rate": "0.06", "from": "2011-01-01"}],
+      "zero": [{"rate": "0.00", "from": "2011-01-01"}]
+    }
+  }
+}

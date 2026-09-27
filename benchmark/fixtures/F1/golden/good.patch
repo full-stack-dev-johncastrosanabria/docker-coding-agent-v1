@@ -1,0 +1,58 @@
+diff --git a/rollout.json b/rollout.json
+index b95fb7a..bec57cd 100644
+--- a/rollout.json
++++ b/rollout.json
+@@ -2,13 +2,45 @@
+   "service": "ingest",
+   "target": 7,
+   "stages": [
+-    {"region": "eu-west-1", "version": 6, "confirmed_by": null},
+-    {"region": "eu-central-1", "version": 6, "confirmed_by": null},
+-    {"region": "eu-north-1", "version": 6, "confirmed_by": null},
+-    {"region": "us-east-1", "version": 6, "confirmed_by": null},
+-    {"region": "us-west-2", "version": 6, "confirmed_by": null},
+-    {"region": "sa-east-1", "version": 6, "confirmed_by": null},
+-    {"region": "ap-south-1", "version": 6, "confirmed_by": null},
+-    {"region": "ap-northeast-1", "version": 6, "confirmed_by": null}
++    {
++      "region": "eu-west-1",
++      "version": 7,
++      "confirmed_by": "5a1c0e9b"
++    },
++    {
++      "region": "eu-central-1",
++      "version": 7,
++      "confirmed_by": "0d4f7a22"
++    },
++    {
++      "region": "eu-north-1",
++      "version": 7,
++      "confirmed_by": "9e61b3c8"
++    },
++    {
++      "region": "us-east-1",
++      "version": 6,
++      "confirmed_by": null
++    },
++    {
++      "region": "us-west-2",
++      "version": 6,
++      "confirmed_by": null
++    },
++    {
++      "region": "sa-east-1",
++      "version": 6,
++      "confirmed_by": null
++    },
++    {
++      "region": "ap-south-1",
++      "version": 6,
++      "confirmed_by": null
++    },
++    {
++      "region": "ap-northeast-1",
++      "version": 6,
++      "confirmed_by": null
++    }
+   ]
+ }

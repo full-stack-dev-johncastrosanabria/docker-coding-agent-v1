@@ -1,0 +1,13 @@
+diff --git a/rules/vat.json b/rules/vat.json
+index 3f2619d..eff8cee 100644
+--- a/rules/vat.json
++++ b/rules/vat.json
+@@ -13,7 +13,7 @@
+     },
+     "PT": {
+       "standard": [{"rate": "0.23", "from": "2011-01-01"}],
+-      "reduced": [{"rate": "0.06", "from": "2011-01-01"}],
++      "reduced": [{"rate": "0.06", "from": "2011-01-01"}, {"rate": "0.05", "from": "2027-01-01"}],
+       "zero": [{"rate": "0.00", "from": "2011-01-01"}]
+     }
+   }

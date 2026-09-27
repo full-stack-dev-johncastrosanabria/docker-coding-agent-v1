@@ -1,0 +1,58 @@
+{
+  "_comment": "Bad: the agent called an unverifiable change conclusively impossible (failed); only the host's none-adequate rule turned it into blocked.",
+  "final_outcome": "blocked",
+  "agent_outcome": "failed",
+  "outcome_overrides": [
+    {
+      "from": "failed",
+      "to": "blocked",
+      "rule": "D-FIN.3 none-adequate verification"
+    }
+  ],
+  "primary_reason": "no adequate verification approach could be established for this task",
+  "human_action_required": "define a verification command with --verify, or reduce the task to something the repository can check",
+  "run_integrity": {
+    "stream": "complete",
+    "agent_exit": "normal",
+    "sandbox_created": true
+  },
+  "limits": {
+    "configured": {
+      "retries": 3,
+      "reverification_reserve_seconds": 300,
+      "steps": 120,
+      "tokens": 3000000,
+      "wall_clock_seconds": 1200
+    },
+    "used": {
+      "steps": 10,
+      "retries": 0,
+      "verification_runs": 0,
+      "tokens": 0
+    },
+    "limit_reached": null,
+    "native_ceiling": null
+  },
+  "change_set": {
+    "files": []
+  },
+  "verification": {
+    "type": "none-adequate",
+    "checks": []
+  },
+  "acceptance_criteria": [
+    {
+      "text": "the invoicing engine applies 5% reduced VAT to Portuguese invoices dated 2027-01-01 or later",
+      "status": "unknown"
+    },
+    {
+      "text": "the invoicing engine keeps applying 6% reduced VAT to Portuguese invoices dated before 2027-01-01",
+      "status": "unknown"
+    },
+    {
+      "text": "the rule change passes the engine's certification run against certification/cases.csv",
+      "status": "unknown"
+    }
+  ],
+  "blockers": []
+}

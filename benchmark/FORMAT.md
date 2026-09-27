@@ -5,7 +5,8 @@ Each fixture is a directory `benchmark/fixtures/<id>/`, and its `fixture.yaml` m
 JSON-compatible YAML, read with the stdlib `json` module only. IDs follow the schema. The committed
 reliability suite is `R1`–`R10`: `R1`–`R8` are small/direct tasks and `R9`, `R10` are medium/planned
 tasks. `K*`, `M*`, `F*` and `S*` are the acceptance fixtures that T079–T089, T092 and T094 create;
-`K1`–`K8` (small, T079/T080) and `M1`, `M2`, `M4`, `M6` (medium/planned, T082) exist so far. Before 007 the reliability suite was `K1`–`K8`, `M1`,
+`K1`–`K8` (small, T079/T080), `M1`, `M2`, `M4`, `M6` (medium/planned, T082) and `F1`–`F3`
+(failure-recovery, T084) exist so far. Before 007 the reliability suite was `K1`–`K8`, `M1`,
 `M2`; the mapping is in the [baseline](baselines/reliability-2026-09-22.md#fixture-ids).
 
 | Path | Purpose |
@@ -15,8 +16,8 @@ tasks. `K*`, `M*`, `F*` and `S*` are the acceptance fixtures that T079–T089, T
 | `oracle.sh` | Decides whether a delivered candidate is correct, and exits 0 on pass. |
 | `hidden/` | Tests the oracle adds and the agent never sees. |
 | `mutants/` | R3 and K4: wrong implementations that the agent's new tests must detect. |
-| `golden/good.patch`, `golden/bad/*.patch` | A reference solution and plausible wrong answers, used to validate the oracle. |
-| `golden/**/<name>.run-out/` | Optional run outputs for the patch `<name>.patch` (for example the `report.json` fields the oracle reads), passed as `RUN_OUT` when the goldens are validated. |
+| `golden/good.patch`, `golden/bad/*.patch` | A reference solution and plausible wrong answers, used to validate the oracle. An EMPTY `good.patch` is a real answer: for a blocked or failed fixture whose correct run changes nothing (F2–F5), the reference change set is empty and its evidence is in `good.run-out/`. |
+| `golden/**/<name>.run-out/` | Optional run outputs for the patch `<name>.patch` (for example the `report.json` fields the oracle reads, and `termination.json` for a host stop), passed as `RUN_OUT` when the goldens are validated. |
 
 ## Seed determinism
 
@@ -53,6 +54,14 @@ cleanup. For an acceptance fixture, in either mode, it adds:
 - the SC-005, SC-008, SC-009 and FR-022 invariants.
 
 `contracts/launcher-cli.md` gives the full list.
+
+A failure-recovery oracle (F1–F6) is judged on the run's outputs, so without `RUN_OUT` it fails. It
+reads them through `benchmark/tools/recovery_report.py`, which checks the host facts (final outcome,
+run integrity, the limit and its counter, and `termination.json`'s record of the host stop and of the
+in-VM workload being stopped) separately from the agent's claims (its outcome, criteria and checks),
+and never takes a host fact on the agent's word. Its oracles run each expectation with `check` and end
+with `verdict`, so a wrong answer shows every way it is wrong rather than only the first; `same_as_seed`
+is the repository side of an empty change set.
 
 Oracles use only POSIX `sh`, `python3` and `node`. For agent-produced candidates, `dca bench` runs
 them in the pinned `sandbox_bases.claude` image, by digest, with `--network none` and the

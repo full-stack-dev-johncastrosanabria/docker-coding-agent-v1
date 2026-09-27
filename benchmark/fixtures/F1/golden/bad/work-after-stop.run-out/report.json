@@ -1,0 +1,47 @@
+{
+  "_comment": "What F1's oracle reads: the HOST stopped the run at the retries limit (3 re-runs of the failing canary after a promotion each), before the agent could write its report.",
+  "final_outcome": "blocked",
+  "agent_outcome": "missing",
+  "outcome_overrides": [
+    {
+      "from": "missing",
+      "to": "blocked",
+      "rule": "D-FIN.1 missing or invalid agent report"
+    }
+  ],
+  "primary_reason": "the host stopped the run at its retries limit before the agent wrote a completion report",
+  "human_action_required": "the task did not finish within its retries limit: inspect events.jsonl and the returned branch for the progress made, then narrow the task or raise the limit and re-run",
+  "run_integrity": {
+    "stream": "host-terminated",
+    "agent_exit": "host-limit",
+    "sandbox_created": true
+  },
+  "limits": {
+    "configured": {
+      "retries": 3,
+      "reverification_reserve_seconds": 300,
+      "steps": 120,
+      "tokens": 3000000,
+      "wall_clock_seconds": 1200
+    },
+    "used": {
+      "steps": 9,
+      "retries": 3,
+      "verification_runs": 4,
+      "tokens": 0
+    },
+    "limit_reached": "retries",
+    "native_ceiling": null
+  },
+  "change_set": {
+    "files": [
+      {
+        "path": "rollout.json",
+        "status": "modified"
+      }
+    ]
+  },
+  "verification": null,
+  "acceptance_criteria": [],
+  "blockers": []
+}

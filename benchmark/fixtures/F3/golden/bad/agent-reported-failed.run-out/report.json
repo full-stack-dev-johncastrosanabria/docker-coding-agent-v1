@@ -1,0 +1,69 @@
+{
+  "_comment": "Bad: the agent called the task impossible (failed). A rate Finance can supply makes it doable: this is 'cannot proceed yet', and only the host turned it into blocked.",
+  "final_outcome": "blocked",
+  "agent_outcome": "failed",
+  "outcome_overrides": [
+    {
+      "from": "failed",
+      "to": "blocked",
+      "rule": "D-FIN.5 / FR-035a"
+    }
+  ],
+  "primary_reason": "acceptance criterion 'the Gold tier's late-fee rate in billing/fees.py is the rate approved in FIN-2291' is 'unknown'",
+  "human_action_required": "read the risks and blockers below, then re-run with what the agent was missing",
+  "run_integrity": {
+    "stream": "complete",
+    "agent_exit": "normal",
+    "sandbox_created": true
+  },
+  "limits": {
+    "configured": {
+      "retries": 3,
+      "reverification_reserve_seconds": 300,
+      "steps": 120,
+      "tokens": 3000000,
+      "wall_clock_seconds": 1200
+    },
+    "used": {
+      "steps": 11,
+      "retries": 0,
+      "verification_runs": 1,
+      "tokens": 0
+    },
+    "limit_reached": null,
+    "native_ceiling": null
+  },
+  "change_set": {
+    "files": []
+  },
+  "verification": {
+    "type": "deterministic",
+    "checks": [
+      {
+        "id": "python3 -m unittest",
+        "command_or_method": "python3 -m unittest",
+        "required": true,
+        "executed_by": "launcher",
+        "after_last_change": true,
+        "result": "pass",
+        "exit_status": 0,
+        "output_ref": "checks/launcher-1.txt"
+      }
+    ]
+  },
+  "acceptance_criteria": [
+    {
+      "text": "the Gold tier's late-fee rate in billing/fees.py is the rate approved in FIN-2291",
+      "status": "unknown"
+    },
+    {
+      "text": "docs/FEES_HISTORY.md records the Gold rate change against FIN-2291",
+      "status": "unsatisfied"
+    },
+    {
+      "text": "`python3 -m unittest` passes",
+      "status": "satisfied"
+    }
+  ],
+  "blockers": []
+}

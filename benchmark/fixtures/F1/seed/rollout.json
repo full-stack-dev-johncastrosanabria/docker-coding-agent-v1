@@ -1,0 +1,14 @@
+{
+  "service": "ingest",
+  "target": 7,
+  "stages": [
+    {"region": "eu-west-1", "version": 6, "confirmed_by": null},
+    {"region": "eu-central-1", "version": 6, "confirmed_by": null},
+    {"region": "eu-north-1", "version": 6, "confirmed_by": null},
+    {"region": "us-east-1", "version": 6, "confirmed_by": null},
+    {"region": "us-west-2", "version": 6, "confirmed_by": null},
+    {"region": "sa-east-1", "version": 6, "confirmed_by": null},
+    {"region": "ap-south-1", "version": 6, "confirmed_by": null},
+    {"region": "ap-northeast-1", "version": 6, "confirmed_by": null}
+  ]
+}
