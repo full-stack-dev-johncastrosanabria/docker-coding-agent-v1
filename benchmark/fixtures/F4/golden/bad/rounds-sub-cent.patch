@@ -1,0 +1,15 @@
+diff --git a/ledger/money.py b/ledger/money.py
+index b1de197..54b4572 100644
+--- a/ledger/money.py
++++ b/ledger/money.py
+@@ -11,8 +11,8 @@ def parse_amount(text):
+     if not match:
+         raise ValueError(f"not an amount: {text!r}")
+     sign, whole, fraction = match.groups()
+-    if len(fraction) != 2:
+-        raise ValueError(f"sub-cent amount {text!r} cannot be stored in integer cents")
++    if len(fraction) > 2:
++        fraction = str(round(int(fraction) / 10 ** (len(fraction) - 2))).zfill(2)
+     cents = int(whole) * 100 + int(fraction)
+     return -cents if sign else cents
+ 

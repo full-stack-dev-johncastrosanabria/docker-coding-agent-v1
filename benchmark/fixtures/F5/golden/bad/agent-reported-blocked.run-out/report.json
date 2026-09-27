@@ -1,0 +1,69 @@
+{
+  "_comment": "Bad: the agent reported a contradictory request as blocked; only the host's failing check turned it into failed.",
+  "final_outcome": "failed",
+  "agent_outcome": "blocked",
+  "outcome_overrides": [
+    {
+      "from": "blocked",
+      "to": "failed",
+      "rule": "FR-035a"
+    }
+  ],
+  "primary_reason": "required check 'python3 -m unittest' failed before any limit",
+  "human_action_required": null,
+  "run_integrity": {
+    "stream": "complete",
+    "agent_exit": "normal",
+    "sandbox_created": true
+  },
+  "limits": {
+    "configured": {
+      "retries": 3,
+      "reverification_reserve_seconds": 300,
+      "steps": 120,
+      "tokens": 3000000,
+      "wall_clock_seconds": 1200
+    },
+    "used": {
+      "steps": 9,
+      "retries": 0,
+      "verification_runs": 1,
+      "tokens": 0
+    },
+    "limit_reached": null,
+    "native_ceiling": null
+  },
+  "change_set": {
+    "files": []
+  },
+  "verification": {
+    "type": "deterministic",
+    "checks": [
+      {
+        "id": "python3 -m unittest",
+        "command_or_method": "python3 -m unittest",
+        "required": true,
+        "executed_by": "launcher",
+        "after_last_change": true,
+        "result": "fail",
+        "exit_status": 1,
+        "output_ref": "checks/launcher-1.txt"
+      }
+    ]
+  },
+  "acceptance_criteria": [
+    {
+      "text": "every amount the ledger accepts is printed with comma-grouped thousands and exactly two decimals (tests/test_grouping.py passes)",
+      "status": "unsatisfied"
+    },
+    {
+      "text": "every printed amount the ledger accepts still fits the 12-character receipt column (tests/test_display.py passes)",
+      "status": "satisfied"
+    },
+    {
+      "text": "ledger/limits.py and the existing tests are not modified",
+      "status": "satisfied"
+    }
+  ],
+  "blockers": []
+}

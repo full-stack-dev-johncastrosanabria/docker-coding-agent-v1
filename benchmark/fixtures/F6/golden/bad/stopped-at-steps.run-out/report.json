@@ -1,0 +1,47 @@
+{
+  "_comment": "Bad: a host limit fired, but the step limit, not the wall clock F6 is built to reach.",
+  "final_outcome": "blocked",
+  "agent_outcome": "missing",
+  "outcome_overrides": [
+    {
+      "from": "missing",
+      "to": "blocked",
+      "rule": "D-FIN.1 missing or invalid agent report"
+    }
+  ],
+  "primary_reason": "the host stopped the run at its steps limit before the agent wrote a completion report",
+  "human_action_required": "the task did not finish within its steps limit: inspect events.jsonl and the returned branch for the progress made, then narrow the task or raise the limit and re-run",
+  "run_integrity": {
+    "stream": "host-terminated",
+    "agent_exit": "host-limit",
+    "sandbox_created": true
+  },
+  "limits": {
+    "configured": {
+      "retries": 3,
+      "reverification_reserve_seconds": 300,
+      "steps": 120,
+      "tokens": 3000000,
+      "wall_clock_seconds": 1200
+    },
+    "used": {
+      "steps": 120,
+      "retries": 0,
+      "verification_runs": 1,
+      "tokens": 0
+    },
+    "limit_reached": "steps",
+    "native_ceiling": null
+  },
+  "change_set": {
+    "files": [
+      {
+        "path": "backfill/state.json",
+        "status": "modified"
+      }
+    ]
+  },
+  "verification": null,
+  "acceptance_criteria": [],
+  "blockers": []
+}

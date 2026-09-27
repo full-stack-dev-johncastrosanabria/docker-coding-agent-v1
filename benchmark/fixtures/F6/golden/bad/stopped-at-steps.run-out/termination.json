@@ -1,0 +1,25 @@
+{
+  "deadline_seconds": 1200,
+  "enforced_limits": {
+    "retries": 3,
+    "reverification_reserve_seconds": 300,
+    "steps": 120,
+    "tokens": 3000000,
+    "wall_clock_seconds": 1200
+  },
+  "host_stop": {
+    "reason": "steps",
+    "at_step": 120,
+    "elapsed_seconds": 801.2,
+    "deadline_seconds": 1200
+  },
+  "workload": [
+    {
+      "phase": "agent",
+      "terminated": 4,
+      "survivors": [],
+      "seconds": 1.3,
+      "elapsed_seconds": 802.5
+    }
+  ]
+}

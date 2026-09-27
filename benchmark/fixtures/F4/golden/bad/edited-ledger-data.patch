@@ -1,0 +1,31 @@
+diff --git a/data/legacy.csv b/data/legacy.csv
+index dfaa4ec..96efda2 100644
+--- a/data/legacy.csv
++++ b/data/legacy.csv
+@@ -35,7 +35,7 @@ date,account,amount,memo
+ 2019-04-15,4000,1885.05,adjustment
+ 2019-04-22,4000,-433.74,interest
+ 2019-04-01,6120,1716.26,settlement
+-2019-04-08,5200,1234.565,adjustment
++2019-04-08,5200,1234.57,adjustment
+ 2019-04-15,5200,1168.18,adjustment
+ 2019-04-22,7300,2372.53,interest
+ 2019-04-01,5200,722.83,transfer
+@@ -79,7 +79,7 @@ date,account,amount,memo
+ 2019-08-15,6100,981.62,transfer
+ 2019-08-22,4000,2000.03,refund
+ 2019-08-01,5200,-342.82,invoice
+-2019-08-08,6120,0.005,interest
++2019-08-08,6120,0.01,interest
+ 2019-08-15,4000,-491.71,refund
+ 2019-08-22,6100,294.33,fee
+ 2019-08-01,4410,12.49,fee
+@@ -110,7 +110,7 @@ date,account,amount,memo
+ 2019-10-08,7300,2284.36,adjustment
+ 2019-10-15,4000,300.37,interest
+ 2019-11-22,6120,1594.14,refund
+-2019-11-01,7300,-18.125,transfer
++2019-11-01,7300,-18.13,transfer
+ 2019-11-08,4010,2286.81,invoice
+ 2019-11-15,5200,795.27,refund
+ 2019-11-22,4010,1195.38,adjustment

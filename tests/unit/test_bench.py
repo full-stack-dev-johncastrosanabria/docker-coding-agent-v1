@@ -50,10 +50,10 @@ rules = _load("dca_eligibility_rules", ROOT / "gates" / "eligibility_rules.py")
 EXPECTED_IDS = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
 SMALL_ACCEPTANCE_IDS = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8"]
 MEDIUM_ACCEPTANCE_IDS = ["M1", "M2", "M4", "M6"]
-FAILURE_RECOVERY_IDS = ["F1", "F2", "F3"]
-#: The US3 fixtures whose correct change set is EMPTY: nothing can be verified (F2), or essential
-#: information is missing (F3).
-EMPTY_REFERENCE_IDS = {"F2", "F3"}
+FAILURE_RECOVERY_IDS = ["F1", "F2", "F3", "F4", "F5", "F6"]
+#: The US3 fixtures whose correct change set is EMPTY: nothing can be verified (F2), essential
+#: information is missing (F3), or the request cannot be satisfied (F4, F5).
+EMPTY_REFERENCE_IDS = {"F2", "F3", "F4", "F5"}
 
 
 def reliability_suite():
@@ -591,8 +591,8 @@ class TestReliabilityNamespace(unittest.TestCase):
                          "no reliability fixture counts as acceptance")
 
     def test_91_the_committed_acceptance_fixtures_are_exactly_the_ones_created_so_far(self):
-        # T079/T080 created K1-K8, T082 created M1, M2, M4 and M6, and T084 created F1-F3;
-        # M3, M5, F4-F6 and S* arrive with T085-T094, never under an R name.
+        # T079/T080 created K1-K8, T082 created M1, M2, M4 and M6, and T084/T085 created F1-F6;
+        # M3, M5 and S* arrive with T087-T094, never under an R name.
         names = sorted(d.name for d in (ROOT / "benchmark" / "fixtures").iterdir() if d.is_dir())
         self.assertEqual([n for n in names if not re.fullmatch(r"R([1-9]|10)", n)],
                          sorted(FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS
@@ -1332,8 +1332,8 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
         self.assertEqual(len(set(commits.values())), len(commits))
 
     #: The US3 fixtures whose required check FAILS on the seed by design: F1's canary until the
-    #: rollout is done.
-    FAILING_BY_DESIGN = {"F1"}
+    #: rollout is done, F4's impossible round trip, F5's contradiction, F6's unfinished backfill.
+    FAILING_BY_DESIGN = {"F1", "F4", "F5", "F6"}
 
     def test_174_every_required_check_runs_on_the_seed(self):
         for fid, fixture in self.fixtures.items():
@@ -1376,10 +1376,10 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
                                                     fixture["allowed_change_scope"]), [])
 
     def test_177_the_acceptance_count_now_holds_every_small_planned_and_recovery_fixture(self):
-        # The full protocol stays refused until T085-T094 add the other 13 applicable fixtures.
+        # The full protocol stays refused until T087-T094 add the other 10 applicable fixtures.
         with self.assertRaises(errors.PreconditionError) as caught:
             bench.acceptance_plan(bench.discover(), "trusted", False, THRESHOLDS)
-        self.assertIn("'small': 8, 'medium': 4, 'failure-recovery': 3", str(caught.exception))
+        self.assertIn("'small': 8, 'medium': 4, 'failure-recovery': 6", str(caught.exception))
 
     def test_178_m1_m2_m4_and_m6_are_medium_planned_fixtures_that_always_apply(self):
         """T082: the US2 contract fields, checked before any provider run."""

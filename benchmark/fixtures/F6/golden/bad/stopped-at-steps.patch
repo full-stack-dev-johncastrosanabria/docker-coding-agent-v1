@@ -1,0 +1,11 @@
+diff --git a/backfill/state.json b/backfill/state.json
+index 1b7fa54..e458685 100644
+--- a/backfill/state.json
++++ b/backfill/state.json
+@@ -1,4 +1,4 @@
+ {
+-  "batch": 0,
+-  "digest": "ac4c9572ffa3e4695a73b942163c9b0a5c3af5bfbef1c186b6883ef4571eec61"
++  "batch": 30,
++  "digest": "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e"
+ }

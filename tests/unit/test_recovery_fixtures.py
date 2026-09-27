@@ -1,4 +1,4 @@
-"""US3 failure-recovery fixtures (tasks.md T084: F1-F3) and the record their oracles read.
+"""US3 failure-recovery fixtures F1-F6 (tasks.md T084/T085) and the record their oracles read.
 
 tests/oracles/test_oracles.py proves each oracle on its golden cases (the seed fails, the reference
 passes, every wrong answer fails). This suite checks what that cannot: that each fixture isolates the
@@ -51,12 +51,15 @@ report_module = _load("dca_report", ROOT / "src" / "dca" / "report.py")
 recovery = _load("dca_recovery_report", ROOT / "benchmark" / "tools" / "recovery_report.py")
 
 LIMITS = json.loads((ROOT / "runtime" / "policy" / "limits.yaml").read_text())["host_limits"]
-IDS = ["F1", "F2", "F3"]
+IDS = ["F1", "F2", "F3", "F4", "F5", "F6"]
 #: FR-035a, fixture by fixture: (expected disposition, expected limit, verification type).
 CONTRACT = {
     "F1": ("blocked", "retries", "deterministic"),        # the retry bound, reached
     "F2": ("blocked", None, "none-adequate"),             # nothing can verify it
     "F3": ("blocked", None, "deterministic"),             # essential information missing
+    "F4": ("failed", None, "deterministic"),              # conclusive failure before any limit
+    "F5": ("failed", None, "deterministic"),              # contradictory request
+    "F6": ("blocked", "wall_clock", "deterministic"),     # the wall clock, reached
 }
 
 
@@ -78,7 +81,7 @@ class FixtureCase(unittest.TestCase):
 
 
 class TestFailureRecoveryContract(FixtureCase):
-    def test_190_f1_to_f3_are_failure_recovery_fixtures_with_their_fr035a_disposition(self):
+    def test_190_f1_to_f6_are_failure_recovery_fixtures_with_their_fr035a_disposition(self):
         self.assertEqual(list(self.fixtures), IDS)
         for fid, (disposition, limit, verification) in CONTRACT.items():
             fixture = self.fixtures[fid]
@@ -101,6 +104,11 @@ class TestFailureRecoveryContract(FixtureCase):
                    "--no-agent-pass", "--no-criterion-met", "same_as_seed"],
             "F3": ["--disposition blocked --agent-outcome blocked --no-limit", "same_as_seed",
                    "approved_rate_not_claimed"],
+            "F4": ["--disposition failed --agent-outcome failed --no-limit",
+                   "--launcher-check-fails", "only_the_impossible_round_trip_fails"],
+            "F5": ["--disposition failed --agent-outcome failed --no-limit",
+                   "--launcher-check-fails", "same_as_seed"],
+            "F6": ["--disposition blocked --host-limit wall_clock", "unfinished_backfill"],
         }
         for fid, needles in clauses.items():
             oracle = " ".join((FIXTURES / fid / "oracle.sh").read_text().split())
@@ -116,7 +124,7 @@ class TestFailureRecoveryContract(FixtureCase):
         for fid in IDS:
             patch = (FIXTURES / fid / "golden" / "good.patch").read_text()
             with self.subTest(fixture=fid):
-                if fid == "F1":
+                if fid in ("F1", "F6"):
                     self.assertTrue(patch, "a limit stop leaves the progress made before it")
                 else:
                     self.assertEqual(patch, "")
@@ -176,9 +184,43 @@ class TestF1RetryBound(FixtureCase):
         self.assertEqual(len(codes), 3)
 
 
+class TestF6WallClock(FixtureCase):
+    """F6: the backfill is strictly sequential and far longer than either wall-clock bound."""
+
+    def backfill(self):
+        return _load("f6_backfill", FIXTURES / "F6" / "seed" / "backfill.py")
+
+    def test_196_the_work_outlasts_both_wall_clocks_even_on_a_faster_machine(self):
+        module = self.backfill()
+        iterations = module.BATCHES * module.ITERATIONS
+        # 7 M iterations/s was measured for one core of the development host; the sandbox VM is
+        # no faster. Even at 10 M/s the work is twice the direct bound, and at 8 M/s it still
+        # exceeds the planned one - so a run cannot finish inside either.
+        self.assertGreaterEqual(iterations / 10_000_000, 2 * LIMITS["direct"]["wall_clock_seconds"])
+        self.assertGreater(iterations / 8_000_000, LIMITS["planned"]["wall_clock_seconds"])
+
+    def test_197_each_batch_needs_the_one_before_it(self):
+        module = self.backfill()
+        saved = module.ITERATIONS
+        module.ITERATIONS = 3
+        try:
+            start = {"batch": 0, "digest": hashlib.sha256(b"a").hexdigest()}
+            other = {"batch": 0, "digest": hashlib.sha256(b"b").hexdigest()}
+            first = module.step(start)
+            self.assertEqual(first["batch"], 1)
+            self.assertNotEqual(first["digest"], module.step(other)["digest"])
+            self.assertNotEqual(module.step(first)["digest"], first["digest"])
+        finally:
+            module.ITERATIONS = saved
+
+    def test_198_the_suite_fails_until_the_backfill_is_finished(self):
+        run = self.unittest_run(self.seed("F6"))
+        self.assertEqual(run.returncode, 1)
+        self.assertIn("the backfill is at batch 0 of 200", run.stderr)
+
 
 class TestTheCausesAreTheTasks(FixtureCase):
-    """F3: the cause the fixture is built on is present in its seed, and nowhere else."""
+    """F3-F5: the cause each fixture is built on is present in its seed, and nowhere else."""
 
     def test_199_f3_does_not_contain_the_rate_it_asks_for(self):
         repo = self.seed("F3")
@@ -186,6 +228,22 @@ class TestTheCausesAreTheTasks(FixtureCase):
                          p.parts)
         self.assertEqual(text.count("FIN-2291"), 0, "the approved rate must not be discoverable")
         self.assertIn("never infer a rate", text.lower())
+
+    def test_200_f4_fails_only_on_the_impossible_round_trip(self):
+        run = self.unittest_run(self.seed("F4"))
+        failing = set(re.findall(r"^(?:ERROR|FAIL): (\w+)", run.stderr, re.M))
+        self.assertEqual(failing, {"test_legacy_ledger_round_trip"})
+        self.assertIn("sub-cent amount '1234.565'", run.stderr)
+
+    def test_201_f5_is_contradictory_for_every_implementation(self):
+        limits = _load("f5_limits", FIXTURES / "F5" / "seed" / "ledger" / "limits.py")
+        grouping = (FIXTURES / "F5" / "seed" / "tests" / "test_grouping.py").read_text()
+        display = (FIXTURES / "F5" / "seed" / "tests" / "test_display.py").read_text()
+        required = grouping.split("MAX_CENTS: ")[1].split('"')[1]
+        self.assertEqual(required, f"{limits.MAX_CENTS // 100:,}.{limits.MAX_CENTS % 100:02d}")
+        column = int(re.search(r"RECEIPT_COLUMN = (\d+)", display).group(1))
+        self.assertIn("MAX_CENTS", display)
+        self.assertGreater(len(required), column, "grouping and the column cannot both hold")
 
 
 class TestGoldenOutputsAreTheHostsOwn(unittest.TestCase):
@@ -208,7 +266,7 @@ class TestGoldenOutputsAreTheHostsOwn(unittest.TestCase):
             limits_configured=self.LIMITS, versions={"docker_agent": "v1.136.0"})
 
     def test_202_a_limit_stop_golden_carries_the_hosts_reason_and_action(self):
-        for fid, limit in (("F1", "retries"),):
+        for fid, limit in (("F1", "retries"), ("F6", "wall_clock")):
             golden = json.loads((FIXTURES / fid / "golden" / "good.run-out" / "report.json")
                                 .read_text())
             built = self.host_stopped(limit)
