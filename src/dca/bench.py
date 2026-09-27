@@ -470,39 +470,103 @@ def _basis_problem(record, value):
     return None
 
 
-def classification_basis_failures(record):
-    """The host's SUBSTANCE checks on an accepted-structure basis (FR-001a), or [].
+#: How a direct record accounts for its test discovery. `found` means covering tests exist and are
+#: named; `none` means the search was made and came up empty - which is a real answer, not an excuse.
+TEST_DISCOVERY_RESULTS = ("found", "none")
 
-    The gate already refused anything structurally incomplete, so what is left is whether a `direct`
-    claim rests on evidence the agent could only have had by doing the reading the proportional map
-    already requires. Two things are asked of it, and only of `direct`, because `direct` is the claim
-    that closes off further scope:
 
-      * the map names the tests that cover the target. repository-navigation's minimal map is "the
-        files the change touches, the tests that cover them" - a direct classification with no related
-        tests named has not been built on that map, whatever its prose says;
-      * the `coordinated_changes` evidence points at something in the repository. Asserting that
-        nothing else has to move together is exactly the assertion that a covering test can refute,
-        so it has to cite what was read rather than describe it.
+def classification_basis_failures(record, analysis=None):
+    """The host's checks on a `direct` claim, or []. Structure is already the gate's job.
 
-    `planned` is not held to this: it is the conservative answer, and taxing it would push runs toward
-    the cheaper wrong one. A thin answer here is a scored FAILURE, never a refusal - the run has
-    finished by the time the host reads it, so there is nothing left to get stuck on.
+    `direct` is the claim that closes off further scope, so the host asks two things of it that it
+    does not ask of `planned` - `planned` is the conservative answer and taxing it would push runs
+    toward the cheaper wrong one.
+
+    FIRST, test discovery has to be ACCOUNTED FOR, which is not the same as tests having to exist. A
+    repository with no automated tests is a real repository, and a task may even forbid adding any; a
+    rule that demanded `related_tests` be non-empty would fail that work for being honest. So what is
+    required is that the record distinguish
+
+        "I looked for tests that cover this and there are none"   (result: none)
+
+    from
+
+        "I never looked"                                          (no accounting at all)
+
+    The first is valid with an empty `related_tests`. The second is not, because it is exactly the
+    gap that produced a wrong `direct`.
+
+    SECOND, when tests DO cover the target, the paths named must have been read by ROOT before the
+    Context Record was written - corroborated from the event stream, not taken on the agent's word.
+    A path the agent only grepped for is a filename, and a filename cannot tell you that two
+    implementations enforce one rule. Reads by the researcher or the reviewer do not count: the
+    obligation is root's, and delegation must not launder it.
+
+    What this PROVES is inspection and order. Whether the file's contents actually support the stated
+    conclusion remains AGENT-CLAIMED - the host compares paths and positions, never meaning. A run
+    that cites a real test it did open and misreads it still passes here, and that limit is real.
     """
     classification = record.get("classification") or {}
     if classification.get("value") != "direct":
         return []
     failures = []
-    related = (record.get("repository_map") or {}).get("related_tests")
-    if not isinstance(related, list) or not [t for t in related if str(t or "").strip()]:
-        failures.append("FR-001a: a direct classification names no related tests, so the minimal map "
-                        "the classification rests on was never built")
+    repository_map = record.get("repository_map") or {}
+    related = [str(t).strip() for t in (repository_map.get("related_tests") or [])
+               if str(t or "").strip()]
+
+    discovery = repository_map.get("test_discovery")
+    if not isinstance(discovery, dict):
+        failures.append("FR-001a: a direct classification does not account for test discovery, so "
+                        "there is no way to tell 'there are no covering tests' from 'I never looked'")
+        return failures
+    if discovery.get("performed") is not True:
+        failures.append("FR-001a: a direct classification records test_discovery.performed other "
+                        "than true, so its map was never built on the tests that cover the target")
+        return failures
+    result = discovery.get("result")
+    if result not in TEST_DISCOVERY_RESULTS:
+        failures.append(f"FR-001a: a direct classification records test_discovery.result "
+                        f"{result!r}, not one of {' or '.join(TEST_DISCOVERY_RESULTS)}")
+        return failures
+    evidence = discovery.get("evidence")
+    if not isinstance(evidence, list) or not any(
+            isinstance(item, str) and len(item.strip()) >= MIN_EVIDENCE_CHARS for item in evidence):
+        failures.append("FR-001a: a direct classification's test_discovery cites nothing "
+                        "substantive: say where you looked")
+
+    if result == "found" and not related:
+        failures.append("FR-001a: a direct classification reports test discovery found covering "
+                        "tests but names none in related_tests")
+    if result == "none" and related:
+        failures.append("FR-001a: a direct classification reports test discovery found none while "
+                        "related_tests names some; the two contradict each other")
+
+    # The coordinated-changes claim has to cite something in the repository either way: asserting
+    # that nothing else must move is exactly the claim a covering test - or its absence - answers.
     entry = ((record.get("classification_basis") or {}).get("coordinated_changes") or {})
-    evidence = entry.get("evidence") if isinstance(entry.get("evidence"), list) else []
-    if not any(isinstance(item, str) and _GROUNDED.search(item) for item in evidence):
+    cited = entry.get("evidence") if isinstance(entry.get("evidence"), list) else []
+    if not any(isinstance(item, str) and _GROUNDED.search(item) for item in cited):
         failures.append("FR-001a: the direct classification's coordinated_changes evidence names no "
                         "file, test or caller, so it describes the conclusion instead of citing what "
                         "was read")
+
+    # Corroboration. Only possible with a stream, and only meaningful once a record was written.
+    if analysis is None or analysis.context_record_at is None:
+        return failures
+    if result == "none" and not analysis.looked_for_files_before(analysis.context_record_at,
+                                                                agent="root"):
+        # The one claim no path can evidence is an absence, so the only thing left to check is that a
+        # search happened at all. Without this the `none` branch was the cheapest route through the
+        # whole gate - cheaper than looking - which would have reopened, for that branch alone, the
+        # exact failure this exists to catch.
+        failures.append("FR-001a: a direct classification reports that test discovery found none, but "
+                        "root made no search or read of any kind before writing the Context Record - "
+                        "an absence still has to be looked for")
+    for path in related:
+        if not analysis.inspected_before(path, analysis.context_record_at, agent="root"):
+            failures.append(f"FR-001a: the direct classification names {path} among the tests that "
+                            f"cover the target, but root never read it before writing the Context "
+                            f"Record - a path that was only searched for is a filename, not evidence")
     return failures
 
 
@@ -651,7 +715,7 @@ def ordering_failures(report, out_dir):
             if problem:
                 failures.append(f"FR-001: {problem}")
             else:
-                failures += classification_basis_failures(_read_json(record_path) or {})
+                failures += classification_basis_failures(_read_json(record_path) or {}, analysis)
     if (report.get("classification") or {}).get("value") == "planned":
         if first is not None and (analysis.plan_at is None or analysis.plan_at >= first):
             failures.append("FR-008: plan.md was not written before the first workspace mutation")

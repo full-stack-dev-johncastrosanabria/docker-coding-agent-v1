@@ -100,13 +100,19 @@ class TestRootInstruction(unittest.TestCase):
     def test_20_root_md_stays_short(self):
         """root.md is loaded into EVERY run's context, so its length is a real cost, not a style rule.
 
-        The cap was 150 and is now 170: the pre-classification gate (T083) added the rule that `direct`
-        must be earned, and the escalation paragraph had to say what escalation is not for. The
-        procedure and the JSON shape deliberately live in the repository-navigation skill, which is
-        loaded only when the map is being built, so only the RULE is paid for on every run. Raising
-        this is a deliberate trade recorded here, not a drifting threshold - it is still a hard cap.
+        THIS CAP HAS BEEN RAISED TWICE, and the history belongs here rather than in a commit nobody
+        will find: 150 -> 170 when the pre-classification gate arrived (`direct` must be earned, and
+        the escalation paragraph had to say what escalation is not for), then 170 -> 175 when that gate
+        gained test-discovery accounting and read-corroboration. Both raises were for contract rules,
+        and both were paid for first: the entire procedure and every worked example live in the
+        repository-navigation skill, which loads only while the map is being built, so a run pays for
+        the RULE alone. Two redundant sentences were also cut rather than carried.
+
+        A third raise should be resisted. If root.md needs more, move something out instead - the split
+        between rule and procedure is what has kept this affordable, and a cap that only ever goes up
+        is not a cap. 175 lines is roughly 2 KB on every single run.
         """
-        self.assertLess(len(self.raw.splitlines()), 170)
+        self.assertLess(len(self.raw.splitlines()), 175)
 
     def test_21_it_requires_classification_with_a_reason(self):
         self.assertIn("direct", self.body)
@@ -370,8 +376,8 @@ class TestPlannedWorkDiscipline(unittest.TestCase):
                 self.assertIn(phrase, self.root)
 
     def test_75_escalation_stops_mutating_and_plans_before_continuing(self):
-        for phrase in ("stop mutating the workspace at the point you discover the work exceeds "
-                       "direct bounds",
+        for phrase in ("stop mutating the workspace at the point you discover the work exceeds direct "
+                       "bounds",
                        "rewrite the context record as planned with `escalated_from: direct` and a "
                        "`component` scope, write `/run/dca/out/plan.md`, set `plan_ref`, and only "
                        "then continue"):

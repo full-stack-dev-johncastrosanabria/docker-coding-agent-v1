@@ -14,8 +14,10 @@ only from this file and from the task the developer gave you.
 
 ## 1. Classify the task
 
-Decide **direct** or **planned** before anything else, and record the classification with its
-reason.
+Decide **direct** or **planned** after building the minimum pre-classification map and before the
+first workspace mutation, and record the classification with its reason. The criteria below are
+answered from the repository, not from the task text, so a little reading comes first - only a
+little.
 
 - **direct**: one clear change, a small set of files, an obvious verification path.
 - **planned**: several coordinated changes, unclear root cause, cross-component impact, or a
@@ -43,16 +45,17 @@ direct work.
 
 **`direct` is the harder claim, not the easier one.** It asserts that NO planned criterion applies,
 and not having noticed one is not evidence that none exists - a task looks direct right up until you
-read the test that proves otherwise. Before settling on `direct`, do the reading the map already owes
-you: name the files the change touches, name **the tests that cover them**, and open those tests. A
-test that imports what you are about to change tells you what else must move with it.
+read the test that proves otherwise. So first name the files the change touches and **the tests that
+cover them**, and open those tests: a test that imports what you are about to change tells you what
+else must move with it. Some repositories have none, and a task may forbid adding any - a real answer,
+so `repository_map.test_discovery` records which one you got: looking and finding none is valid, never
+looking is not.
 
-Then record, per criterion, whether it applies and what you read, as `classification_basis` in the
-Context Record - `direct` requires all three `false`, `planned` at least one `true`, and the reason
-must agree with the basis. Cite files and tests by path; "none apply" states the conclusion instead of
-supporting it, and the policy gate refuses a record whose basis is missing, silent on a criterion, or
-contradicted by its own classification. The **repository-navigation** skill carries the shape and the
-procedure. This is proportional: read the covering tests, not the repository.
+Record the verdict per criterion as `classification_basis`: `direct` needs all three `false`,
+`planned` at least one `true`, and the reason must agree. Cite files and tests by path - "none
+apply" states the conclusion instead of supporting it - and name only tests you actually opened,
+because the host corroborates that against the run's event stream and a path you merely searched for
+is a filename. The **repository-navigation** skill carries the shape and the procedure.
 
 If a direct task turns out to exceed direct-task bounds, **escalate to planned exactly once**,
 rewrite the Context Record with `escalated_from: direct`, then re-enter the gate in section 3
@@ -80,7 +83,8 @@ Before that first mutation, write `/run/dca/out/context.json`:
                           "coordinated_changes": {"applies": false, "evidence": ["..."]},
                           "unclear_root_cause": {"applies": false, "evidence": ["..."]}},
  "repository_map": {"scope": "minimal|component", "target_files": [], "related_tests": [],
-                    "conventions": [], "repo_wide_exploration": {"performed": false}},
+                    "conventions": [], "repo_wide_exploration": {"performed": false},
+                    "test_discovery": {"performed": true, "result": "found|none", "evidence": []}},
  "verification_approach": {"type": "deterministic|alternative", "checks": [],
                            "definition": "...", "limitation": "..."},
  "plan_ref": null, "written_at": "<timestamp>"}
@@ -102,16 +106,13 @@ above and name the one that applies or confirm none does; the Context Record exi
 classification; on planned work `/run/dca/out/plan.md` exists; on planned work the Context Record's
 `plan_ref` names it. Only then may you run the baseline, edit a file, or run a check.
 
-**On escalating**, stop mutating the workspace at the point you discover the work exceeds direct
-bounds. Rewrite the Context Record as planned with `escalated_from: direct` and a `component`
-scope, write `/run/dca/out/plan.md`, set `plan_ref`, and only then continue. Neither record may ever
-describe an escalation that did not happen.
-
-Escalation is for scope that genuinely **could not** be known when you classified - not a way to
-recover from not having read what the map already required. It does not clear the ordering rule: a
-run that ends up planned is still measured against the plan preceding its first workspace mutation,
-so an escalation you could have avoided by opening the covering tests is scored as the late plan it
-is. The remedy is upstream, in section 1: earn `direct` before claiming it.
+**On escalating**, stop mutating the workspace at the point you discover the work exceeds direct bounds.
+Rewrite the Context Record as planned with `escalated_from: direct` and a `component` scope, write
+`/run/dca/out/plan.md`, set `plan_ref`, and only then continue. Neither record may ever describe an
+escalation that did not happen. Escalation is for scope that genuinely **could not** be known when you
+classified, and it does not clear the ordering rule: a run that ends up planned is still measured
+against the plan preceding its FIRST mutation, so an avoidable escalation scores as the late plan it is
+- the remedy is upstream, in section 1: earn `direct` before claiming it.
 
 ## 4. Verification first
 

@@ -66,18 +66,57 @@ def basis(contract=False, coordinated=False, unclear=False, evidence=None):
     }
 
 
+LOOKED = "searched for importers of the changed module and for a tests/ tree"
+
+
+def discovery(result="found", performed=True, evidence=None):
+    return {"performed": performed, "result": result,
+            "evidence": [LOOKED if evidence is None else evidence]}
+
+
 def record(value="direct", reason="one clear change in one file", tests=("tests/test_ledger.py",),
-           **overrides):
+           test_discovery=None, **overrides):
+    found = "found" if tests else "none"
     body = {
         "classification": {"value": value, "reason": reason},
         "classification_basis": basis(),
         "repository_map": {"scope": "minimal" if value == "direct" else "component",
-                           "target_files": ["billing/amount.py"], "related_tests": list(tests)},
+                           "target_files": ["billing/amount.py"], "related_tests": list(tests),
+                           "test_discovery": discovery(found) if test_discovery is None
+                           else test_discovery},
         "verification_approach": {"type": "deterministic", "checks": ["make test"]},
         "plan_ref": None if value == "direct" else "/run/dca/out/plan.md",
     }
     body.update(overrides)
     return body
+
+
+class FakeAnalysis:
+    """Just enough of RunAnalysis for the corroboration checks: a record position and read history.
+
+    Built from (order, agent, tool, paths) tuples so a test can say exactly who read what and when,
+    which is the whole substance of what the host corroborates.
+    """
+
+    def __init__(self, context_record_at=10, reads=()):
+        self.context_record_at = context_record_at
+        self._reads = list(reads)
+
+    def inspected_paths_before(self, order, agent="root"):
+        return {path for at, who, _tool, paths in self._reads if at < order and who == agent
+                for path in paths}
+
+    def inspected_before(self, cited, order, agent="root"):
+        from dca.events import same_path
+        return any(same_path(cited, observed)
+                   for observed in self.inspected_paths_before(order, agent))
+
+    def looked_for_files_before(self, order, agent="root"):
+        return any(at < order and who == agent for at, who, _tool, _paths in self._reads)
+
+
+def read(order, path, agent="root"):
+    return (order, agent, "read_file", [f"/workspace/{path}"])
 
 
 class TestTheTwoValidatorsAgree(unittest.TestCase):
@@ -174,10 +213,148 @@ class TestStructureIsGated(unittest.TestCase):
 class TestSubstanceIsScored(unittest.TestCase):
     """What the HOST rejects once the structure is sound. Scored, never a refusal."""
 
-    def test_20_a_direct_claim_naming_no_related_tests_is_unbuilt(self):
+    ANALYSIS = None  # set per test where corroboration matters
+
+    def failures(self, body, analysis=None):
+        return bench.classification_basis_failures(body, analysis)
+
+    # --- test discovery accounting: "none found" is an answer, "never looked" is not -------------
+
+    def searched(self, order=3):
+        """A dispatched root search, which is what corroborates a "found none" claim."""
+        return FakeAnalysis(context_record_at=10,
+                            reads=[(order, "root", "grep", ["/workspace/tests"])])
+
+    def test_19_a_found_none_claim_needs_a_search_to_have_happened(self):
+        """An absence is the one claim no path can evidence, so the search itself is the evidence.
+
+        Without this the `none` branch was the cheapest route through the whole gate - cheaper than
+        looking - which reopened, for that branch alone, exactly the failure this exists to catch.
+        """
+        body = record(tests=(), test_discovery=discovery("none"))
+        never_looked = FakeAnalysis(context_record_at=10, reads=[])
+        failures = self.failures(body, never_looked)
+        self.assertTrue(any("made no search or read of any kind" in f for f in failures))
+        self.assertEqual(self.failures(body, self.searched()), [],
+                         "a search before the record corroborates the claim")
+
+    def test_19a_a_search_after_the_record_is_too_late(self):
+        body = record(tests=(), test_discovery=discovery("none"))
+        self.assertTrue(self.failures(body, self.searched(order=12)))
+
+    def test_19b_another_agents_search_does_not_corroborate_roots_claim(self):
+        body = record(tests=(), test_discovery=discovery("none"))
+        analysis = FakeAnalysis(context_record_at=10,
+                                reads=[(3, "researcher", "grep", ["/workspace/tests"])])
+        self.assertTrue(self.failures(body, analysis))
+
+    def test_20_no_tests_with_explicit_discovery_is_valid(self):
+        """A repository may genuinely have no tests, and a task may forbid adding any.
+
+        The earlier rule here demanded a non-empty `related_tests` for every direct classification.
+        That was wrong and would have failed an accepted direct fixture whose task states outright
+        that the repository has no automated tests and the change must not add any - the fixture was
+        right and the rule was too strong.
+        """
+        body = record(tests=(), test_discovery=discovery("none"))
+        self.assertEqual(self.failures(body), [])
+
+    def test_20a_no_tests_and_no_discovery_accounting_is_refused(self):
+        """The distinction that carries the weight: looked-and-found-none vs never-looked."""
         body = record(tests=())
-        failures = bench.classification_basis_failures(body)
-        self.assertTrue(any("names no related tests" in f for f in failures))
+        del body["repository_map"]["test_discovery"]
+        failures = self.failures(body)
+        self.assertTrue(any("does not account for test discovery" in f for f in failures))
+
+    def test_20b_discovery_not_performed_is_refused(self):
+        for performed in (False, None, "yes"):
+            with self.subTest(performed=performed):
+                body = record(tests=(), test_discovery=discovery("none", performed=performed))
+                self.assertTrue(any("performed other than true" in f for f in self.failures(body)))
+
+    def test_20c_an_unrecognised_discovery_result_is_refused(self):
+        for result in ("maybe", "", None, "some"):
+            with self.subTest(result=result):
+                body = record(tests=(), test_discovery=discovery(result))
+                self.assertTrue(any("test_discovery.result" in f for f in self.failures(body)))
+
+    def test_20d_discovery_must_say_where_it_looked(self):
+        for thin in ("none", "n/a", ""):
+            with self.subTest(evidence=thin):
+                body = record(tests=(), test_discovery=discovery("none", evidence=thin))
+                self.assertTrue(any("cites nothing substantive" in f for f in self.failures(body)))
+
+    def test_20e_discovery_and_related_tests_may_not_contradict(self):
+        found_but_named_none = record(tests=(), test_discovery=discovery("found"))
+        self.assertTrue(any("names none in related_tests" in f
+                            for f in self.failures(found_but_named_none)))
+        none_but_named_some = record(tests=("tests/test_a.py",), test_discovery=discovery("none"))
+        self.assertTrue(any("contradict" in f for f in self.failures(none_but_named_some)))
+
+    def test_20f_a_no_tests_repository_with_alternative_verification_is_valid(self):
+        """The shape of the accepted direct fixture this rule must not break."""
+        body = record(tests=(), test_discovery=discovery("none"),
+                      verification_approach={"type": "alternative",
+                                             "definition": "run the script and compare output",
+                                             "limitation": "no automated suite exists"})
+        self.assertEqual(self.failures(body), [])
+        self.assertIsNone(gate._record_problem(body), "the gate must accept it too")
+
+    # --- corroboration: a cited test must have been READ, by root, before the record -------------
+
+    def test_25_a_named_test_read_by_root_before_the_record_is_corroborated(self):
+        body = record(tests=("tests/test_ledger.py",))
+        analysis = FakeAnalysis(context_record_at=10, reads=[read(4, "tests/test_ledger.py")])
+        self.assertEqual(self.failures(body, analysis), [])
+
+    def test_26_a_named_test_never_read_is_refused(self):
+        body = record(tests=("tests/test_ledger.py",))
+        analysis = FakeAnalysis(context_record_at=10, reads=[read(4, "billing/amount.py")])
+        failures = self.failures(body, analysis)
+        self.assertTrue(any("never read it before writing the Context Record" in f
+                            for f in failures))
+
+    def test_27_a_test_only_found_by_searching_is_not_evidence(self):
+        """A grep proves the path exists. It cannot tell you what the test asserts."""
+        analysis = FakeAnalysis(context_record_at=10,
+                                reads=[(4, "root", "grep", ["/workspace/tests/test_ledger.py"])])
+        # The fake models only reads, so a search contributes nothing - which is the real behaviour:
+        # events.inspected_paths_before skips DISCOVER_TOOLS. Proven directly in test_events.
+        analysis._reads = []
+        body = record(tests=("tests/test_ledger.py",))
+        self.assertTrue(self.failures(body, analysis))
+
+    def test_28_a_test_read_after_the_record_is_too_late(self):
+        body = record(tests=("tests/test_ledger.py",))
+        analysis = FakeAnalysis(context_record_at=10, reads=[read(12, "tests/test_ledger.py")])
+        self.assertTrue(self.failures(body, analysis))
+
+    def test_29_a_read_by_the_researcher_or_reviewer_does_not_count(self):
+        """Delegation must not launder root's obligation to look before it classifies."""
+        for agent in ("researcher", "reviewer"):
+            with self.subTest(agent=agent):
+                body = record(tests=("tests/test_ledger.py",))
+                analysis = FakeAnalysis(
+                    context_record_at=10,
+                    reads=[read(4, "tests/test_ledger.py", agent=agent)])
+                self.assertTrue(self.failures(body, analysis))
+
+    def test_29a_corroboration_is_skipped_when_there_is_nothing_to_corroborate_against(self):
+        """No stream, or no record written, leaves the structural findings and adds none."""
+        body = record(tests=("tests/test_ledger.py",))
+        self.assertEqual(self.failures(body, None), [])
+        self.assertEqual(self.failures(body, FakeAnalysis(context_record_at=None)), [])
+
+    def test_29b_a_no_tests_record_needs_no_PATH_corroboration_but_still_needs_a_search(self):
+        """There is no path to corroborate when the claim is that none exist - but the LOOKING is
+        still corroborated. This test previously asserted the opposite and was wrong."""
+        body = record(tests=(), test_discovery=discovery("none"))
+        self.assertTrue(self.failures(body, FakeAnalysis(context_record_at=10, reads=[])),
+                        "claiming none without looking is refused")
+        looked = FakeAnalysis(context_record_at=10,
+                              reads=[(3, "root", "grep", ["/workspace/tests"])])
+        self.assertEqual(self.failures(body, looked), [],
+                         "and no individual path is demanded, because none is claimed")
 
     def test_21_a_direct_claim_citing_nothing_in_the_repository_is_refused(self):
         for vague in ("nothing else needs to change here at all",
@@ -211,6 +388,139 @@ class TestSubstanceIsScored(unittest.TestCase):
         self.assertEqual(bench.classification_basis_failures(body), [])
         self.assertFalse((body["repository_map"].get("repo_wide_exploration") or {}).get("performed"),
                          "earning direct must not require a repository-wide scan")
+
+
+class TestInspectionIsReadNotSearch(unittest.TestCase):
+    """`events.RunAnalysis.inspected_paths_before` on real streams, not a fake.
+
+    This is the layer the corroboration rests on, so it is exercised against the genuine parser: a
+    search must not count as a read, a refused call must not count at all, and another agent's reads
+    must not count for root.
+    """
+
+    def stream(self, calls):
+        """`calls` is (type, agent, tool, arguments) in order, written as the harness writes them."""
+        directory = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, directory, True)
+        path = os.path.join(directory, "events.jsonl")
+        with open(path, "w", encoding="utf-8") as handle:
+            for index, (kind, agent, tool, arguments) in enumerate(calls):
+                handle.write(json.dumps({
+                    "type": kind, "agent_name": agent,
+                    "timestamp": f"2026-09-27T00:00:{index:02d}Z",
+                    "tool_call": {"id": f"c{index}", "type": "function",
+                                  "function": {"name": tool,
+                                               "arguments": json.dumps(arguments)}}}) + "\n")
+        from dca import events as E
+        return E.analyze_file(path)
+
+    def test_40_a_structured_read_counts(self):
+        for tool in ("read_file", "Read", "view", "read"):
+            with self.subTest(tool=tool):
+                a = self.stream([("tool_call", "root", tool, {"path": "/workspace/tests/t.py"})])
+                self.assertTrue(a.inspected_before("tests/t.py", 99))
+
+    def test_41_a_search_does_not_count(self):
+        for tool in ("grep", "Grep", "glob", "Glob", "search", "list_directory"):
+            with self.subTest(tool=tool):
+                a = self.stream([("tool_call", "root", tool, {"path": "/workspace/tests/t.py"})])
+                self.assertFalse(a.inspected_before("tests/t.py", 99),
+                                 f"{tool} proves the path exists, not that it was read")
+
+    def test_42_a_shell_read_counts_but_a_shell_search_does_not(self):
+        for command in ("cat tests/t.py", "head -20 tests/t.py", "nl tests/t.py",
+                        "tail -5 tests/t.py"):
+            with self.subTest(command=command):
+                a = self.stream([("tool_call", "root", "shell", {"command": command})])
+                self.assertTrue(a.inspected_before("tests/t.py", 99), command)
+        for command in ("grep -rn foo tests/t.py", "find . -name t.py", "ls tests/"):
+            with self.subTest(command=command):
+                a = self.stream([("tool_call", "root", "shell", {"command": command})])
+                self.assertFalse(a.inspected_before("tests/t.py", 99), command)
+
+    def test_42a_never_credit_a_read_the_gate_would_have_refused(self):
+        """The invariant that keeps the two lists from drifting apart.
+
+        A review caught this: `sed`, `awk`, `less`, `more`, `od` and `strings` print files, so they were
+        credited as reads - but none is in `shellparse.READ_ONLY_PROGRAMS`, because each can WRITE
+        (`sed -i`, `awk > file`). `command_effect` therefore calls them `mutate` and the gate refuses
+        them before a Context Record exists, which is exactly when the covering tests must be read.
+        Crediting them promised a read path the gate blocks: the agent's genuine attempt would be
+        denied and it would then be scored for not reading what it was prevented from reading. The set
+        is now DERIVED from the gate's, so this cannot regress by hand-editing one list.
+        """
+        from dca import events as E, shellparse
+        self.assertTrue(E.INSPECT_PROGRAMS <= shellparse.READ_ONLY_PROGRAMS)
+        self.assertTrue(E.INSPECT_PROGRAMS, "the intersection must not be empty")
+        for program in ("sed", "awk", "less", "more", "od", "strings"):
+            with self.subTest(program=program):
+                self.assertNotIn(program, E.INSPECT_PROGRAMS)
+        for command in ("sed -n 1,40p tests/t.py", "less tests/t.py", "awk NR<40 tests/t.py"):
+            with self.subTest(command=command):
+                self.assertEqual(shellparse.command_effect(command)[0], "mutate",
+                                 "if the gate now permits this, revisit INSPECT_PROGRAMS")
+                a = self.stream([("tool_call", "root", "shell", {"command": command})])
+                self.assertFalse(a.inspected_before("tests/t.py", 99))
+
+    def test_47_looking_at_all_is_distinguishable_from_reading_a_file(self):
+        """`looked_for_files_before` is the mirror of inspection: a search counts, nothing counts as
+        nothing. It is what lets a "found none" claim be corroborated."""
+        searched = self.stream([("tool_call", "root", "grep", {"path": "/workspace/tests"})])
+        self.assertTrue(searched.looked_for_files_before(99))
+        self.assertFalse(searched.inspected_before("tests/t.py", 99), "a grep is not a read")
+        idle = self.stream([("tool_call", "root", "write_file", {"path": "/workspace/a.py"})])
+        self.assertFalse(idle.looked_for_files_before(99))
+        refused = self.stream([("hook_blocked", "root", "grep", {"path": "/workspace/tests"})])
+        self.assertFalse(refused.looked_for_files_before(99), "a refused search found nothing")
+        other = self.stream([("tool_call", "reviewer", "grep", {"path": "/workspace/tests"})])
+        self.assertFalse(other.looked_for_files_before(99, agent="root"))
+
+    def test_43_a_refused_call_read_nothing(self):
+        a = self.stream([("hook_blocked", "root", "read_file", {"path": "/workspace/tests/t.py"})])
+        self.assertFalse(a.inspected_before("tests/t.py", 99))
+
+    def test_44_only_the_named_agents_reads_count(self):
+        a = self.stream([("tool_call", "researcher", "read_file", {"path": "/workspace/tests/t.py"})])
+        self.assertFalse(a.inspected_before("tests/t.py", 99, agent="root"))
+        self.assertTrue(a.inspected_before("tests/t.py", 99, agent="researcher"))
+
+    def test_45_order_is_respected(self):
+        a = self.stream([("tool_call", "root", "read_file", {"path": "/workspace/tests/t.py"})])
+        self.assertFalse(a.inspected_before("tests/t.py", 0))
+        self.assertTrue(a.inspected_before("tests/t.py", 1))
+
+    def test_46_scratch_reads_are_not_repository_evidence(self):
+        a = self.stream([("tool_call", "root", "read_file",
+                          {"path": "/run/dca/out/context.json"})])
+        self.assertEqual(a.inspected_paths_before(99), set())
+
+
+class TestTheScenarioThatFailed(unittest.TestCase):
+    """The generic shape of the miss: a covering test that names a second implementation.
+
+    Written without any fixture's symbols - a target function, a test importing two implementations
+    and asserting one rule across them. Reading it is what makes the work planned; not reading it is
+    what produced a wrong `direct`.
+    """
+
+    def test_50_reading_the_covering_test_supports_planned(self):
+        body = record(value="planned", tests=("tests/test_rule.py",),
+                      reason="one rule is enforced in two implementations",
+                      classification_basis=basis(coordinated=True,
+                                                 evidence="tests/test_rule.py imports both "
+                                                          "surfaces and asserts one invariant"))
+        self.assertIsNone(gate._record_problem(body))
+        self.assertEqual(bench.classification_basis_failures(
+            body, FakeAnalysis(context_record_at=9, reads=[read(3, "tests/test_rule.py")])), [])
+
+    def test_51_claiming_direct_while_the_basis_says_coordinated_is_refused_by_the_gate(self):
+        body = record(classification_basis=basis(coordinated=True))
+        self.assertIn("classifies direct while", gate._record_problem(body))
+
+    def test_52_claiming_direct_without_reading_the_covering_test_is_scored_a_failure(self):
+        body = record(tests=("tests/test_rule.py",))
+        analysis = FakeAnalysis(context_record_at=9, reads=[read(3, "src/surface_one.py")])
+        self.assertTrue(bench.classification_basis_failures(body, analysis))
 
 
 class TestTheShippedTextIsGeneric(unittest.TestCase):

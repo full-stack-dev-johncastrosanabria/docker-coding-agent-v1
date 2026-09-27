@@ -686,10 +686,20 @@ CONTEXT = {"classification": {"value": "direct", "reason": "one file"},
                                        "evidence": ["tests/test_a.py is the only importer"]},
                "unclear_root_cause": {"applies": False,
                                       "evidence": ["the failing assertion names the branch"]}},
+           # A no-tests direct record: these cases are about FR-001/FR-008 ORDERING, so the
+           # classification side is kept in the shape that needs no read-corroboration. The
+           # corroborated shape is exercised in test_classification_basis.
            "repository_map": {"scope": "minimal", "target_files": ["src/a.py"],
-                              "related_tests": ["tests/test_a.py"]},
+                              "related_tests": [],
+                              "test_discovery": {"performed": True, "result": "none",
+                                                 "evidence": ["searched for importers of src/a.py "
+                                                              "and for a tests/ tree; none exist"]}},
            "verification_approach": {"type": "deterministic", "checks": ["make test"]},
            "plan_ref": None}
+#: The search a real run makes before classifying. Present in these streams because CONTEXT records
+#: `test_discovery.result: "none"`, and the host corroborates that the looking happened - an absence is
+#: the one claim no path can evidence, so the search itself is the evidence.
+SEARCH = call("s", "grep", {"path": "/workspace"})
 WRITE_CONTEXT = call("c", "write_file", {"path": "/run/dca/out/context.json"})
 WRITE_PLAN = call("p", "write_file", {"path": "/run/dca/out/plan.md"})
 EDIT = call("e", "edit_file", {"path": "/workspace/src/a.py"})
@@ -793,7 +803,7 @@ class TestAcceptanceChecks(AcceptanceCase):
         return bench.acceptance_checks(fixture or self.FIXTURE, record or self.VALID, out)
 
     def test_110_a_correct_direct_run_passes_every_generic_check(self):
-        self.assertEqual(self.checks(report_doc(), [WRITE_CONTEXT, EDIT]), ([], []))
+        self.assertEqual(self.checks(report_doc(), [SEARCH, WRITE_CONTEXT, EDIT]), ([], []))
 
     def test_111_a_schema_invalid_report_fails_and_is_an_sc008_violation(self):
         reasons, violations = self.checks(report_doc(), record={"report_schema_valid": False})
@@ -828,7 +838,7 @@ class TestAcceptanceChecks(AcceptanceCase):
         for missing in ("classification", "repository_map", "verification_approach"):
             with self.subTest(missing=missing):
                 context = {k: v for k, v in CONTEXT.items() if k != missing}
-                reasons, _ = self.checks(report_doc(), [WRITE_CONTEXT, EDIT], context=context,
+                reasons, _ = self.checks(report_doc(), [SEARCH, WRITE_CONTEXT, EDIT], context=context,
                                          record=dict(self.VALID))
                 self.assertTrue(any("FR-001" in r for r in reasons), reasons)
                 shutil.rmtree(self.dir / "run")
@@ -836,10 +846,10 @@ class TestAcceptanceChecks(AcceptanceCase):
     def test_117_fr001_scratch_writes_and_shell_records_are_not_mutations(self):
         shell_record = call("s", "shell", {"cmd": "mkdir -p /run/dca/out && cat > "
                                            "/run/dca/out/context.json <<'EOF'\n{}\nEOF"})
-        self.assertEqual(self.checks(report_doc(), [WRITE_PLAN, shell_record, EDIT])[0], [])
+        self.assertEqual(self.checks(report_doc(), [SEARCH, WRITE_PLAN, shell_record, EDIT])[0], [])
 
     def test_118_fr001_is_vacuous_without_a_mutation_or_a_sandbox(self):
-        self.assertEqual(self.checks(report_doc(), [WRITE_CONTEXT])[0], [])
+        self.assertEqual(self.checks(report_doc(), [SEARCH, WRITE_CONTEXT])[0], [])
         shutil.rmtree(self.dir / "run")
         blocked = report_doc(final_outcome="blocked", run_integrity={"sandbox_created": False})
         self.assertEqual(self.checks(blocked, context=None, fixture=dict(
@@ -940,15 +950,15 @@ class TestAcceptanceChecks(AcceptanceCase):
                    "plan_ref": "/run/dca/out/plan.md"}
         review = {"performed": True, "identical": True}
         ok = report_doc(review=review, **planned)
-        self.assertEqual(self.checks(ok, [WRITE_CONTEXT, WRITE_PLAN, EDIT])[0], [])
+        self.assertEqual(self.checks(ok, [SEARCH, WRITE_CONTEXT, WRITE_PLAN, EDIT])[0], [])
         shutil.rmtree(self.dir / "run")
-        reasons, _ = self.checks(ok, [WRITE_CONTEXT, EDIT, WRITE_PLAN])
+        reasons, _ = self.checks(ok, [SEARCH, WRITE_CONTEXT, EDIT, WRITE_PLAN])
         self.assertTrue(any(r.startswith("FR-008") for r in reasons))
         shutil.rmtree(self.dir / "run")
         for bad, code in ((dict(ok, plan_ref=None), "FR-008"),
                           (dict(ok, review={"performed": False}), "FR-020")):
             with self.subTest(code=code):
-                reasons, _ = self.checks(bad, [WRITE_CONTEXT, WRITE_PLAN, EDIT])
+                reasons, _ = self.checks(bad, [SEARCH, WRITE_CONTEXT, WRITE_PLAN, EDIT])
                 self.assertTrue(any(r.startswith(code) for r in reasons), reasons)
                 shutil.rmtree(self.dir / "run")
 

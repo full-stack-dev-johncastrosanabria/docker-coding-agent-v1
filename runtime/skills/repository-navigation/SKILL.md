@@ -11,7 +11,10 @@ map that makes the change safe, then grow it only where the task actually leads.
 
 ## 1. Build a proportional map
 
-The map's scope follows the classification, not your curiosity:
+Build a **candidate** map first, decide, then let the scope follow. The classification is answered
+from the repository, so the map cannot wait for it: name the target files, find and read the tests
+that cover them, and only then classify. What the classification settles is how far the map may
+WIDEN from there - never your curiosity:
 
 - **direct → `minimal`**: the files the change touches, the tests that cover them, and the
   conventions those files already follow.
@@ -29,8 +32,28 @@ same-named test file) and OPEN them before you classify. One may assert a rule a
 implementations, or pin behaviour the task never mentioned; either makes the work planned, and you
 cannot know that from the task text or from the file you were pointed at.
 
-So the order is: target files, then the tests that cover them, then those tests read, then the
-criteria evaluated against what they showed, then the classification, then the record.
+So the order is: target files, then the tests that cover them found and READ (or established not to
+exist), then any immediately relevant convention or caller those tests point at, then the criteria
+evaluated against what they showed, then the classification - `direct` keeps this minimal map,
+`planned` widens it to the component - then the Context Record, then the plan if planned, and only
+then the first workspace mutation.
+
+### When there are no tests
+
+A repository with no automated tests is a real repository, and a task may forbid adding any. That is a
+finding, not a gap, so record it rather than leaving `related_tests` empty and silent:
+
+```json
+"test_discovery": {"performed": true, "result": "none",
+                   "evidence": ["searched for importers of the changed module and for a tests/ tree; "
+                                "the repository has neither, and the task forbids adding one"]}
+```
+
+`result` is `found` or `none`. With `found`, `related_tests` names them and you must have OPENED them:
+the host corroborates each named test against the run's event stream and a path you only searched for
+does not count. With `none`, `related_tests` stays empty and an alternative verification approach may
+be the right one. What is never acceptable is no `test_discovery` at all - that is indistinguishable
+from never having looked, which is the failure this exists to catch.
 
 Record the result per criterion, so the claim is checkable rather than asserted:
 
@@ -105,7 +128,8 @@ not mutations, so recording context is always allowed first.
                           "coordinated_changes": {"applies": false, "evidence": ["..."]},
                           "unclear_root_cause": {"applies": false, "evidence": ["..."]}},
  "repository_map": {"scope": "minimal|component", "target_files": [], "related_tests": [],
-                    "conventions": [], "repo_wide_exploration": {"performed": false}},
+                    "conventions": [], "repo_wide_exploration": {"performed": false},
+                    "test_discovery": {"performed": true, "result": "found|none", "evidence": []}},
  "verification_approach": {"type": "deterministic|alternative", "checks": [],
                            "definition": "...", "limitation": "..."},
  "plan_ref": null, "written_at": "<timestamp>"}

@@ -62,6 +62,75 @@ READ_ONLY_PROGRAMS = shellparse.READ_ONLY_PROGRAMS
 READ_ONLY_GIT = shellparse.READ_ONLY_GIT
 shell_is_read_only = shellparse.shell_is_read_only
 shell_scratch_writes = shellparse.shell_scratch_writes
+#: Structured tools whose result IS the file's contents. Compared on a normalised name, so each
+#: harness's spelling lands in the same place without this set naming a backend.
+INSPECT_TOOLS = frozenset({"read", "readfile", "view", "viewfile", "open", "openfile",
+                           "readmultiplefiles", "notebookread", "cat"})
+#: Structured tools that only DISCOVER a path: they return names, or matching lines, never the file.
+#: Kept explicit rather than inferred, because the whole corroboration rests on this distinction.
+DISCOVER_TOOLS = frozenset({"grep", "glob", "search", "find", "ls", "listdirectory",
+                            "directorytree", "codebasesearch", "filesearch", "gitgrep"})
+#: Shell programs that PRINT a file's contents, before intersecting with what the gate permits.
+#: `grep`, `rg`, `find`, `ls` and `tree` are deliberately absent even though shellparse calls them
+#: read-only: they establish that a path EXISTS, which is not the same as having read it.
+_PRINTS_A_FILE = frozenset({"cat", "head", "tail", "nl", "less", "more", "od", "strings", "sed",
+                            "awk"})
+#: ...intersected with the set the GATE accepts as read-only, and that intersection is the point.
+#: `sed`, `awk`, `less`, `more`, `od` and `strings` are NOT in shellparse.READ_ONLY_PROGRAMS - they can
+#: write (`sed -i`, `awk > file`), so `command_effect` calls them `mutate` and the gate REFUSES them
+#: before a Context Record exists. Crediting them here would promise a read path the gate blocks: the
+#: agent's genuine attempt to page a covering test would be denied, and it would then be scored for
+#: not having read what it was prevented from reading. Deriving the set instead of writing it out means
+#: the two can never drift apart again; a test pins the subset relation.
+INSPECT_PROGRAMS = _PRINTS_A_FILE & shellparse.READ_ONLY_PROGRAMS
+#: Punctuation a cited path may be wrapped in when it is quoted inside a sentence of evidence.
+_CITATION_TRIM = "".join((chr(34), chr(39), chr(96), ",", ";", ":"))
+
+
+def _normalised_tool(name):
+    """A tool name with case and separators removed, so `read_file`, `Read` and `readFile` agree."""
+    return re.sub(r"[^a-z0-9]", "", str(name or "").lower())
+
+
+def _shell_inspected(command):
+    """The paths a shell command actually PRINTED, or []. Unparseable commands prove nothing."""
+    parsed = shellparse.parse(command)
+    if not parsed.ok:
+        return []
+    found = []
+    for segment in parsed.segments:
+        program = os.path.basename(str(segment.program or ""))
+        if program not in INSPECT_PROGRAMS:
+            continue
+        for word in segment.argv[1:]:
+            text = str(word)
+            # Flags and their values are not paths; `sed -n 1,20p file` must yield only `file`.
+            if text.startswith("-") or not text or text in ("p", "d"):
+                continue
+            if re.fullmatch(r"[0-9,]+p?", text):
+                continue
+            found.append(text)
+    return found
+
+
+def same_path(cited, observed):
+    """True when `cited` names the file `observed` is. Either side may be relative.
+
+    A bare filename matches only by basename, and anything with a separator must match as a path
+    SUFFIX - so `tests/test_a.py` is satisfied by `/workspace/tests/test_a.py` but not by
+    `vendor/other/tests/test_a.py`... which it would be, and that is the honest limit of comparing
+    two strings. It is deliberately lenient about the workspace prefix, which differs per run, and
+    deliberately strict about everything after it.
+    """
+    left = str(cited or "").strip().strip(_CITATION_TRIM).replace(chr(92), "/").lstrip("./")
+    right = str(observed or "").strip().replace(chr(92), "/")
+    if not left or not right:
+        return False
+    if "/" not in left:
+        return os.path.basename(right) == left
+    return right == left or right.endswith("/" + left)
+
+
 _command_text = shellparse._command_text
 _target_paths = shellparse._target_paths
 _under_scratch = shellparse._under_scratch
@@ -520,6 +589,71 @@ class RunAnalysis:
         if self.context_record_at is None:
             return False
         return self.context_record_at < self.first_effective_mutation
+
+    def inspected_paths_before(self, order, agent="root"):
+        """The repository paths `agent` actually READ before tool call `order`.
+
+        Host-authoritative corroboration for anything the agent CITES as evidence. The distinction
+        that carries the weight is read versus search: a grep establishes that a path exists, a read
+        establishes that its contents reached the agent. Citing a test you only searched for is citing
+        a filename, and the Repository Map is supposed to rest on what the tests SAY.
+
+        Three exclusions, each deliberate:
+
+          * a call the runtime never dispatched returned nothing, so a refused read proves nothing;
+          * only `agent`'s own calls count - the reviewer and the researcher cannot discharge root's
+            obligation to look before it classifies, or delegation would launder the requirement;
+          * scratch-dir paths are the run's own bookkeeping, never repository evidence.
+
+        What this PROVES is that the file was opened before that point. Whether what it contained
+        supports the agent's conclusion stays AGENT-CLAIMED: the host reads paths and order, not
+        meaning.
+        """
+        seen = set()
+        for record in self.tool_calls:
+            if record.order >= order or record.not_dispatched:
+                continue
+            if agent is not None and record.agent != agent:
+                continue
+            name = _normalised_tool(record.name)
+            if name in DISCOVER_TOOLS:
+                continue
+            if name in INSPECT_TOOLS:
+                candidates = list(record.paths or [])
+            elif record.command:
+                candidates = _shell_inspected(record.command)
+            else:
+                continue
+            for path in candidates:
+                if not _under_scratch(path, SCRATCH_DIR):
+                    seen.add(str(path))
+        return seen
+
+    def looked_for_files_before(self, order, agent="root"):
+        """True when `agent` made any dispatched call that could have FOUND files before `order`.
+
+        A search counts here and a read counts here, which is the opposite of
+        `inspected_paths_before` and deliberate: this answers "did it look at all", not "did it read
+        that file". It exists so a claim that NOTHING was found can be corroborated. Asserting an
+        absence is the one claim no path can evidence - there is nothing to cite - so the only thing
+        the host can check is that a search happened before the claim was made.
+        """
+        for record in self.tool_calls:
+            if record.order >= order or record.not_dispatched:
+                continue
+            if agent is not None and record.agent != agent:
+                continue
+            name = _normalised_tool(record.name)
+            if name in DISCOVER_TOOLS or name in INSPECT_TOOLS:
+                return True
+            if record.command and shellparse.shell_is_read_only(record.command):
+                return True
+        return False
+
+    def inspected_before(self, cited, order, agent="root"):
+        """True when `agent` read a file matching `cited` before tool call `order`."""
+        return any(same_path(cited, observed)
+                   for observed in self.inspected_paths_before(order, agent))
 
     def counters(self):
         return {"steps": self.steps, "retries": self.retries,
