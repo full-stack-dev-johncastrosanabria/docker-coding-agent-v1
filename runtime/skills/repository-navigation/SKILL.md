@@ -11,7 +11,10 @@ map that makes the change safe, then grow it only where the task actually leads.
 
 ## 1. Build a proportional map
 
-The map's scope follows the classification, not your curiosity:
+Build a **candidate** map first, decide, then let the scope follow. The classification is answered
+from the repository, so the map cannot wait for it: name the target files, find and read the tests
+that cover them, and only then classify. What the classification settles is how far the map may
+WIDEN from there - never your curiosity:
 
 - **direct → `minimal`**: the files the change touches, the tests that cover them, and the
   conventions those files already follow.
@@ -19,6 +22,69 @@ The map's scope follows the classification, not your curiosity:
   public surface, its callers, and the tests that pin its behavior.
 
 Record, in the Context Record: `target_files`, `related_tests`, `conventions`, and `scope`.
+
+### Earn the classification before you record it
+
+`related_tests` is not bookkeeping - it is where the classification is decided. **A test that imports
+what you are about to change is the cheapest possible statement of what else depends on it.** Find
+those tests the obvious way (search for the symbol or module you are changing, not just for a
+same-named test file) and OPEN them before you classify. One may assert a rule across two
+implementations, or pin behaviour the task never mentioned; either makes the work planned, and you
+cannot know that from the task text or from the file you were pointed at.
+
+So the order is: target files, then the tests that cover them found and READ (or established not to
+exist), then any immediately relevant convention or caller those tests point at, then the criteria
+evaluated against what they showed, then the classification - `direct` keeps this minimal map,
+`planned` widens it to the component - then the Context Record, then the plan if planned, and only
+then the first workspace mutation.
+
+### When there are no tests
+
+A repository with no automated tests is a real repository, and a task may forbid adding any. That is a
+finding, not a gap, so record it rather than leaving `related_tests` empty and silent:
+
+```json
+"test_discovery": {"performed": true, "result": "none",
+                   "evidence": ["searched for importers of the changed module and for a tests/ tree; "
+                                "the repository has neither, and the task forbids adding one"]}
+```
+
+`result` is `found` or `none`. With `found`, `related_tests` names them and you must have OPENED them:
+the host corroborates each named test against the run's event stream and a path you only searched for
+does not count. With `none`, `related_tests` stays empty and an alternative verification approach may
+be the right one. What is never acceptable is no `test_discovery` at all - that is indistinguishable
+from never having looked, which is the failure this exists to catch.
+
+Record the result per criterion, so the claim is checkable rather than asserted:
+
+```json
+"classification_basis": {
+  "contract_change":     {"applies": false,
+                          "evidence": ["api/handlers.py is the only caller of can_publish and passes "
+                                       "the same arguments; nothing about its signature moves"]},
+  "coordinated_changes": {"applies": true,
+                          "evidence": ["tests/test_permissions.py imports can_publish from api/auth.py "
+                                       "AND from jobs/scheduled.py and asserts both refuse the same "
+                                       "expired token, so the rule lives in two places"]},
+  "unclear_root_cause":  {"applies": false,
+                          "evidence": ["the failing assertion names the expiry comparison directly"]}
+}
+```
+
+That example is illustrative only - use your own repository's paths. The rules:
+
+- all three criteria appear, each with an explicit `applies` boolean;
+- `direct` requires all three `false`; `planned` requires at least one `true`;
+- the classification `reason` and the basis agree;
+- evidence names files, tests or callers. "None apply" is a conclusion, not evidence, and a direct
+  classification whose `coordinated_changes` evidence cites nothing in the repository is read as
+  unbuilt - as is one that names no `related_tests` at all.
+
+The policy gate refuses a record with no basis, a basis silent on a criterion, or a basis that
+contradicts its own classification, so this is checked before your first mutation rather than after.
+
+**This is not a licence to widen the map.** Opening the tests that cover your target IS the minimal
+map; the repository-wide exception below is unchanged and still needs its recorded reason.
 
 ## 2. Retrieve progressively
 
@@ -58,15 +124,20 @@ not mutations, so recording context is always allowed first.
 
 ```json
 {"classification": {"value": "direct|planned", "reason": "..."},
+ "classification_basis": {"contract_change": {"applies": false, "evidence": ["..."]},
+                          "coordinated_changes": {"applies": false, "evidence": ["..."]},
+                          "unclear_root_cause": {"applies": false, "evidence": ["..."]}},
  "repository_map": {"scope": "minimal|component", "target_files": [], "related_tests": [],
-                    "conventions": [], "repo_wide_exploration": {"performed": false}},
+                    "conventions": [], "repo_wide_exploration": {"performed": false},
+                    "test_discovery": {"performed": true, "result": "found|none", "evidence": []}},
  "verification_approach": {"type": "deterministic|alternative", "checks": [],
                            "definition": "...", "limitation": "..."},
  "plan_ref": null, "written_at": "<timestamp>"}
 ```
 
 If the classification escalates from direct to planned, rewrite the record with
-`escalated_from: "direct"` and a `component` scope.
+`escalated_from: "direct"` and a `component` scope. Escalation is for scope that could not have been
+known here - not for scope this map would have shown you had you read it.
 
 ## Signals you got the scope wrong
 

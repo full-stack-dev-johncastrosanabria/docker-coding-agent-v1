@@ -292,6 +292,57 @@ _MAX_RECORD_BYTES = 1_000_000
 SKILL_TOOLS = frozenset({"read_skill", "read_skill_file", "skill"})
 
 
+#: The planned criteria root.md section 1 defines. The classification is a claim about ALL of them,
+#: so the record has to speak to each one by name; a criterion left out is a criterion not evaluated.
+CLASSIFICATION_CRITERIA = ("contract_change", "coordinated_changes", "unclear_root_cause")
+#: Shorter than this is not evidence. It exists to refuse "none", "n/a" and "none apply", which assert
+#: the conclusion instead of supporting it.
+MIN_EVIDENCE_CHARS = 12
+
+
+def basis_problem(record, value):
+    """Why `record`'s `classification_basis` does not support classifying it `value`, or None.
+
+    `direct` is a claim that NO planned criterion applies, and the absence of a discovery is not
+    evidence for it: a task looks direct right up until the covering test is read. So the basis is
+    where that claim becomes checkable - every criterion named, each carrying an explicit boolean,
+    each boolean backed by something concrete enough to point at.
+
+    `direct` and `planned` cost the SAME here, deliberately. Make either one cheaper and it gets
+    bought with misclassifications: a cheap `direct` invites asserting it without looking, and a cheap
+    `planned` invites escaping the work by over-classifying, which would fail the direct fixtures just
+    as surely. Only the STRUCTURE is checked, and only against what the record itself says - the host
+    judges substance later, where a thin answer is a scored failure instead of a refusal the run cannot
+    get out of.
+    """
+    basis = record.get("classification_basis")
+    if not isinstance(basis, dict):
+        return ("it has no classification_basis, so its classification is asserted rather than "
+                "evidenced")
+    applies = {}
+    for name in CLASSIFICATION_CRITERIA:
+        entry = basis.get(name)
+        if not isinstance(entry, dict):
+            return f"its classification_basis does not evaluate {name}"
+        if not isinstance(entry.get("applies"), bool):
+            return f"its classification_basis gives {name} no explicit true/false applies"
+        evidence = entry.get("evidence")
+        if not isinstance(evidence, list) or not evidence:
+            return f"its classification_basis cites no evidence for {name}"
+        if not any(isinstance(item, str) and len(item.strip()) >= MIN_EVIDENCE_CHARS
+                   for item in evidence):
+            return (f"its classification_basis cites nothing substantive for {name}: name the file, "
+                    f"test or caller you read")
+        applies[name] = entry["applies"]
+    if value == "direct" and any(applies.values()):
+        named = ", ".join(name for name in CLASSIFICATION_CRITERIA if applies[name])
+        return f"it classifies direct while its own classification_basis says {named} applies"
+    if value == "planned" and not any(applies.values()):
+        return ("it classifies planned while its own classification_basis says no planned criterion "
+                "applies")
+    return None
+
+
 def _record_problem(record):
     """Why `record` is not a Context Record (FR-001), or None. The same test the host applies to the
     retrieved record (dca.bench._context_record_problem)."""
@@ -301,6 +352,9 @@ def _record_problem(record):
     if not isinstance(classification, dict) or classification.get("value") not in ("direct", "planned") \
             or not str(classification.get("reason") or "").strip():
         return "it has no classification with a reason"
+    problem = basis_problem(record, classification.get("value"))
+    if problem:
+        return problem
     if not isinstance(record.get("repository_map"), dict):
         return "it has no repository_map"
     approach = record.get("verification_approach")

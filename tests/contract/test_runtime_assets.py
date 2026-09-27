@@ -97,8 +97,22 @@ class TestRootInstruction(unittest.TestCase):
         self.raw = text(INSTRUCTIONS / "root.md")
         self.body = normalized(INSTRUCTIONS / "root.md")
 
-    def test_20_root_md_is_under_150_lines(self):
-        self.assertLess(len(self.raw.splitlines()), 150)
+    def test_20_root_md_stays_short(self):
+        """root.md is loaded into EVERY run's context, so its length is a real cost, not a style rule.
+
+        THIS CAP HAS BEEN RAISED TWICE, and the history belongs here rather than in a commit nobody
+        will find: 150 -> 170 when the pre-classification gate arrived (`direct` must be earned, and
+        the escalation paragraph had to say what escalation is not for), then 170 -> 175 when that gate
+        gained test-discovery accounting and read-corroboration. Both raises were for contract rules,
+        and both were paid for first: the entire procedure and every worked example live in the
+        repository-navigation skill, which loads only while the map is being built, so a run pays for
+        the RULE alone. Two redundant sentences were also cut rather than carried.
+
+        A third raise should be resisted. If root.md needs more, move something out instead - the split
+        between rule and procedure is what has kept this affordable, and a cap that only ever goes up
+        is not a cap. 175 lines is roughly 2 KB on every single run.
+        """
+        self.assertLess(len(self.raw.splitlines()), 175)
 
     def test_21_it_requires_classification_with_a_reason(self):
         self.assertIn("direct", self.body)
@@ -318,6 +332,132 @@ class TestEvidenceOrdering(unittest.TestCase):
                 self.assertTrue("context record" in body or "context.json" in body)
                 self.assertRegex(body, r"before the first (build or verification command|workspace "
                                        r"mutation)|after the context record is written")
+
+
+class TestPlannedWorkDiscipline(unittest.TestCase):
+    """T083: the two disciplines live runs kept missing, made operational in the shipped text.
+
+    Both misses were procedural, not semantic. The criteria for planned work and the meaning of
+    `review.identical` were already correct and are unchanged; what was absent was the moment at
+    which the agent is told to apply them - a checklist at the first mutation, and a statement of
+    what a fingerprint field may contain. These assertions pin the operational wording, one topic
+    per assertion, for the same reason the rest of this module does: a rewrite that drops one
+    sentence would otherwise pass while the behaviour it produced silently regressed.
+    """
+
+    def setUp(self):
+        self.root = normalized(INSTRUCTIONS / "root.md")
+        self.receipt = normalized(SKILLS / "change-receipt" / "SKILL.md")
+
+    def test_70_coordinated_multi_surface_changes_are_planned(self):
+        self.assertIn("needing more than one implementation surface to move together for one rule "
+                      "to hold is several coordinated changes", self.root)
+
+    def test_71_a_contract_change_is_named_by_what_it_alters(self):
+        self.assertIn("altering what an existing operation accepts, refuses, raises or exposes "
+                      "through a signature, a public field or a file is a contract change",
+                      self.root)
+
+    def test_72_size_is_never_the_reason_to_classify_direct(self):
+        self.assertIn("a small diff, a simple edit and a low line count are not evidence of direct "
+                      "work", self.root)
+
+    def test_73_the_criteria_are_re_checked_at_the_first_mutation(self):
+        self.assertIn("before the first workspace mutation, check all four, in this order",
+                      self.root)
+        self.assertIn("re-read the planned criteria above and name the one that applies or confirm "
+                      "none does", self.root)
+
+    def test_74_planned_work_needs_the_plan_and_plan_ref_before_any_mutation(self):
+        for phrase in ("on planned work `/run/dca/out/plan.md` exists",
+                       "on planned work the context record's `plan_ref` names it",
+                       "only then may you run the baseline, edit a file, or run a check"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.root)
+
+    def test_75_escalation_stops_mutating_and_plans_before_continuing(self):
+        for phrase in ("stop mutating the workspace at the point you discover the work exceeds direct "
+                       "bounds",
+                       "rewrite the context record as planned with `escalated_from: direct` and a "
+                       "`component` scope, write `/run/dca/out/plan.md`, set `plan_ref`, and only "
+                       "then continue"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.root)
+
+    def test_76_escalation_is_neither_retroactive_nor_inventable(self):
+        """FR-009 unchanged, and its limits stated: escalating does not rewrite the ordering that
+        already happened, and a record may never describe an escalation that did not.
+
+        The earlier wording here said "the mutations you already made remain what they were", which
+        read as though escalating settled the ordering question. It does not: a run that ends up
+        planned is still measured against the plan preceding its first mutation, so the wording now
+        says so and points the remedy upstream at earning `direct`.
+        """
+        self.assertIn("it does not clear the ordering rule", self.root)
+        self.assertIn("neither record may ever describe an escalation that did not happen",
+                      self.root)
+        self.assertIn("escalation is for scope that genuinely **could not** be known", self.root)
+
+    def test_77_the_agent_is_never_asked_to_read_internal_runtime_state(self):
+        """The class-A regression this replaces: the instruction told the agent to read
+        `/run/dca/state/fingerprints.jsonl`. One backend's root session could, another's could only
+        sometimes, so the same correct work passed on one and was blocked on the other. No shipped
+        instruction may make the agent reach into the runtime's own state to prove a host invariant.
+        """
+        for path in sorted(list(INSTRUCTIONS.glob("*.md"))
+                           + [SKILLS / name / "SKILL.md" for name in RUNTIME_SKILLS]):
+            with self.subTest(path=str(path.relative_to(ROOT))):
+                body = text(path)
+                self.assertNotIn("fingerprints.jsonl", body)
+                self.assertNotIn("/run/dca/state", body)
+
+    def test_78_review_identity_is_stated_to_be_host_verified(self):
+        self.assertIn("you do not compute, read or copy the review fingerprints", self.receipt)
+        self.assertIn("the **host** reads that record and decides whether the candidate stayed "
+                      "identical", self.receipt)
+
+    def test_79_the_agent_still_owns_what_only_it_knows(self):
+        self.assertIn("never claim a review you did not run", self.receipt)
+        self.assertIn("`review.performed`** is yours to state", self.receipt)
+
+    def test_80_being_unable_to_read_runtime_state_can_never_fail_a_run(self):
+        self.assertIn("being unable to read that state can never fail your run", self.receipt)
+        self.assertIn("cannot be reported `succeeded` without a plan and a review performed on an "
+                      "unchanged candidate", self.receipt)
+
+
+class TestRuntimeTextIsProviderNeutral(unittest.TestCase):
+    """The shipped instructions must read the same to every backend.
+
+    The remediation was prompted by misses seen on particular backends, so the risk it introduces is
+    wording that helps one of them and not the other. Nothing the agent reads may name a provider, a
+    model or a benchmark fixture: an instruction that does is tuning, not a contract.
+    """
+
+    #: Every markdown file an agent actually reads inside the VM.
+    def shipped(self):
+        return sorted(list(INSTRUCTIONS.glob("*.md"))
+                      + [SKILLS / name / "SKILL.md" for name in RUNTIME_SKILLS])
+
+    def test_85_no_provider_or_model_is_named(self):
+        forbidden = re.compile(r"claude|codex|anthropic|openai|chatgpt|gpt-|sonnet|opus|gemini",
+                               re.I)
+        for path in self.shipped():
+            with self.subTest(path=str(path.relative_to(ROOT))):
+                self.assertIsNone(forbidden.search(text(path)),
+                                  "shipped runtime text must not name a provider or model")
+
+    def test_86_no_benchmark_fixture_is_named(self):
+        # A fixture id in the instructions would make the agent's behaviour a function of the
+        # benchmark rather than of the contract.
+        fixture = re.compile(r"\b[A-Z][0-9]\b|\bfixture\b", re.I)
+        for path in self.shipped():
+            with self.subTest(path=str(path.relative_to(ROOT))):
+                found = [m.group(0) for m in fixture.finditer(text(path))]
+                # `fixtures` as a category of repository content is allowed in the trust boundary;
+                # a fixture IDENTIFIER is not.
+                self.assertEqual([f for f in found if not f.lower().startswith("fixture")], [],
+                                 "shipped runtime text must not name a benchmark fixture")
 
 
 if __name__ == "__main__":

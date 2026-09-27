@@ -1,0 +1,32 @@
+{
+  "id": "M6",
+  "category": "medium",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "A loan may be renewed at most twice. A third renewal must now be refused: `renew` raises a new `RenewalLimit` exception defined in `library/loans.py` and leaves the loan exactly as it was, and the front desk must report the refusal to the borrower as `\"<item> cannot be renewed again\"` instead of raising. The first two renewals keep working as they do today.",
+  "acceptance_criteria": [
+    "RenewalLimit is an Exception subclass defined in library/loans.py",
+    "the first and second renewals still extend the loan by two weeks and count the renewal",
+    "a third renewal raises RenewalLimit and leaves weeks and renewals unchanged",
+    "handle_renewal returns '<item> cannot be renewed again' for a loan at its limit, without raising and without changing the loan",
+    "handle_renewal still reports a successful renewal in its existing wording",
+    "all existing tests still pass"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "planned",
+  "allowed_change_scope": ["library/*.py", "tests/*.py"],
+  "prohibited_checks": ["no-test-weakening", "reviewer-byte-identical"],
+  "oracle": "oracle.sh",
+  "golden": {
+    "good": "golden/good.patch",
+    "bad": [
+      "golden/bad/off-by-one.patch",
+      "golden/bad/mutates-on-refusal.patch",
+      "golden/bad/desk-raises.patch",
+      "golden/bad/review-fingerprints-differ.patch",
+      "golden/bad/classified-direct.patch"
+    ]
+  }
+}

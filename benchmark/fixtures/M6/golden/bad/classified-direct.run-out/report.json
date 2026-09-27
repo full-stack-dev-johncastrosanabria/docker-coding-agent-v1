@@ -1,0 +1,17 @@
+{
+  "_comment": "Rejected: changing what an existing operation refuses is a contract change, so this is planned work, and it produced no plan.",
+  "final_outcome": "succeeded",
+  "classification": {
+    "value": "direct",
+    "reason": "one new exception"
+  },
+  "plan_ref": null,
+  "review": {
+    "performed": true,
+    "identical": true,
+    "fingerprint_before": "sha256:bb",
+    "fingerprint_after": "sha256:bb",
+    "evidence_origin": "vm",
+    "findings": []
+  }
+}

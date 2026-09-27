@@ -1,7 +1,7 @@
 {
   "gate": "G1a",
   "status": "PASS",
-  "run_at": "2026-09-20T22:26:53Z",
+  "run_at": "2026-09-27T06:13:38Z",
   "versions": {
     "sbx": "v0.43.0"
   },
@@ -41,9 +41,9 @@
     },
     {
       "id": "G1a.base",
-      "description": "every sandbox in this gate came from the exact pinned sandbox_bases.claude base: the reference sbx resolved, the cached template's repository, tag and image id, and the pinned digest all agree; no base was discovered or substituted",
+      "description": "both sandboxes were created with the exact digest-qualified pinned Claude base; the image sbx resolved for each creation matches that immutable reference",
       "result": "PASS",
-      "evidence_ref": "pinned docker/sandbox-templates:claude-code-docker sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2; sbx resolved docker/sandbox-templates:claude-code-docker; cached template docker.io/docker/sandbox-templates:claude-code-docker id 94670d5b2a24"
+      "evidence_ref": "pinned docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2; requested docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2; login resolved docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2; fresh resolved docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2"
     },
     {
       "id": "G1a.policy",

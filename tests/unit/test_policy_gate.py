@@ -544,6 +544,14 @@ class LogHygiene(GateHarness):
 
 
 VALID_RECORD = {"classification": {"value": "direct", "reason": "one bug in one file"},
+                "classification_basis": {
+                    "contract_change": {"applies": False,
+                                        "evidence": ["src/app.py's helper has no other callers"]},
+                    "coordinated_changes": {"applies": False,
+                                            "evidence": ["tests/test_app.py is the only test that "
+                                                         "imports it"]},
+                    "unclear_root_cause": {"applies": False,
+                                           "evidence": ["the failing assertion names the branch"]}},
                 "repository_map": {"scope": "minimal", "target_files": ["src/app.py"]},
                 "verification_approach": {"type": "deterministic",
                                          "checks": [{"id": "make test", "required": True}]},

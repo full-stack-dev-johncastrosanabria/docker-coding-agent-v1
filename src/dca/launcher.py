@@ -210,6 +210,10 @@ class Launcher:
 
         self.evidence = None
         self.versions = None
+        # The managed hook record, once collected. `None` means no managed evidence was gathered at
+        # all (the run never got that far); an empty list means it was gathered and was empty, which
+        # is unproven identity rather than no opinion.
+        self.review_fingerprints = None
         self.source_ref = None
         self.source_commit = None
         self.dirty_paths = []
@@ -541,11 +545,28 @@ class Launcher:
         except Exception as exc:
             raise InfraAbort(f"the sandbox kit could not be built: {exc}") from exc
 
-        self.sandbox = f"dca-{request.run_id}"
+        name = f"dca-{request.run_id}"
         template = BACKEND_TEMPLATE[request.backend]
+        # The base is chosen by its immutable digest BEFORE the sandbox exists. Refusing here,
+        # before `sbx create` runs, is what keeps the agent default - a mutable tag - from ever
+        # being the image that boots.
+        reference, _, pinned_base = pinned_base_reference(self.versions, request.backend)
+        if not pinned_base:
+            raise InfraAbort(
+                f"runtime/versions.yaml pins no complete sandbox base for {request.backend!r} "
+                "(both `base` and `version` are required), so no sandbox can be created: the "
+                "launcher never resolves or substitutes a base at runtime.")
         try:
-            # Step 2: a MOUNTLESS sandbox with shared skills off, from the pinned base.
-            created = self.sbx.create(template, self.sandbox, self.kit_dir)
+            # `self.sandbox` is what `cleanup` removes, so it is set only once creation has actually
+            # been ATTEMPTED - never before a purely local check like the pin guard above. Set any
+            # earlier, a config error that never reached sbx would still make cleanup run
+            # `sbx rm --force` on a name sbx never knew, and a non-zero exit from that would be
+            # recorded as a cleanup FAILURE for a sandbox that was never created. It is set before
+            # the call rather than after it because a create that fails partway can still leave a
+            # sandbox behind, and that one must be removed.
+            self.sandbox = name
+            # Step 2: a MOUNTLESS sandbox with shared skills off, from the pinned base DIGEST.
+            created = self.sbx.create(template, self.sandbox, self.kit_dir, pinned_base)
             self._check_resolved_base(created)
 
             # Step 3: the strict per-sandbox network policy, plus host-authoritative grants.
@@ -573,32 +594,33 @@ class Launcher:
         return self.sandbox
 
     def _check_resolved_base(self, created_output):
-        """The base sbx resolved must be the exact pinned one. Never substituted, never guessed."""
-        pinned = ((self.versions.get("sandbox_bases") or {}).get(self.request.backend) or {})
-        reference, digest = pinned.get("base"), pinned.get("version")
-        if not reference:
+        """Prove THIS sandbox booted the exact pinned digest, from sbx's own creation record.
+
+        The sandbox is created from the digest-qualified reference, and `sbx create` states the
+        image it resolved for that sandbox on an `image <reference>` line. The pinned reference must
+        EQUAL one of those lines. A substring search over the whole output would not do: the same
+        reference also appears in the progress line that pulls it, and would appear in an echoed
+        invocation or a "did you mean" hint, so a create that resolved something else could satisfy
+        it while exiting 0. Only the resolved-image line states what the sandbox was built from.
+
+        The template store is deliberately NOT consulted. `sbx template ls` reports what the
+        MUTABLE tag currently maps to, so once upstream moves that tag the store names a newer
+        digest even on a run that correctly booted the pinned one: consulting it would fail a
+        correct run, and it could never prove more than this record already does. There is
+        therefore no fallback. If no resolved-image line names the pinned reference, the run is
+        aborted: an unprovable base is treated exactly like a wrong one.
+        """
+        reference, _, pinned = pinned_base_reference(self.versions, self.request.backend)
+        if not pinned:
             raise InfraAbort(f"there is no pinned sandbox base for {self.request.backend}")
-        if reference in (created_output or ""):
+        resolved = _resolved_image_lines(created_output)
+        if pinned in resolved:
             return
-        # sbx does not always echo the reference; the template store is then the authority, and
-        # it has to prove the same identity the gates prove: repository, tag, and an image id that
-        # prefixes the pinned digest. Both V1 bases share one repository, so less than that could
-        # accept the other backend's base. An unreadable store proves nothing and fails closed.
-        try:
-            templates = self.sbx.templates()
-        except (SbxError, OSError) as exc:
-            raise InfraAbort(
-                f"sbx did not report the base it resolved and the template store could not be "
-                f"read to confirm the pinned base {reference} {digest}: {exc}") from exc
-        cached = _pinned_template(templates, reference)
-        if cached is None:
-            raise InfraAbort(
-                f"sbx did not report the base it resolved and the pinned base {reference} "
-                f"{digest} was not found in the template store")
-        if not _template_matches(cached, digest):
-            raise InfraAbort(
-                f"the template store's {reference} is image {cached.get('id')!r}, not the pinned "
-                f"{digest}: the sandbox was not created from the pinned base")
+        raise InfraAbort(
+            f"sbx did not report creating the sandbox from the pinned base {pinned}, so this "
+            f"sandbox cannot be shown to have booted the pinned image. The launcher never accepts "
+            f"a base resolved from the mutable tag {reference} instead. What sbx reported it "
+            f"resolved: {', '.join(resolved) if resolved else '(no image line)'}")
 
     def _deliver(self, bundle):
         request = self.request
@@ -812,11 +834,19 @@ class Launcher:
             except (SbxError, OSError):
                 continue
             collected[name] = destination
-        try:
-            self.sbx.copy_out(self.sandbox, f"{STATE_DIR}/gate.log.jsonl",
-                              os.path.join(self.request.out, "gate.log.jsonl"))
-        except (SbxError, OSError):
-            pass
+        for name in ("gate.log.jsonl", "fingerprints.jsonl"):
+            try:
+                self.sbx.copy_out(self.sandbox, f"{STATE_DIR}/{name}",
+                                  os.path.join(self.request.out, name))
+            except (SbxError, OSError):
+                # Best effort, and deliberately so. A record that could not be copied is evidence
+                # that is ABSENT, and absent review evidence already blocks a planned success; an
+                # abort here would add a way for a finished run to die without protecting anything.
+                continue
+        # FR-022 is decided from the managed hook record, never from the agent's copy of it. Read
+        # here, while the file is still fresh out of the VM and before cleanup removes the sandbox.
+        self.review_fingerprints = fingerprint_module.read_review_records(
+            os.path.join(self.request.out, "fingerprints.jsonl"))
         agent_report = None
         if "report.agent.json" in collected:
             try:
@@ -928,6 +958,7 @@ class Launcher:
             agent_report=agent_report, change_set=change_set,
             limits_configured=self.host_limits(), versions=self.version_block(),
             launcher_checks=launcher_checks,
+            review_fingerprints=self.review_fingerprints,
             limit_evidence_predates=_evidence_predates_limit(analysis, host_stop,
                                                              launcher_checks))
         self.write_outputs(final)
@@ -997,28 +1028,26 @@ def _classification_of(agent_report):
     return value if value in ("direct", "planned") else None
 
 
-def _pinned_template(templates, reference):
-    """The `sbx template ls --json` entry with the pinned reference's exact repository and tag.
+def pinned_base_reference(versions, backend):
+    """`(reference, digest, "<reference>@<digest>")` for `backend`'s pinned base, or three Nones.
 
-    The store reports the repository fully qualified (docker.io/...), so both spellings match; a
-    tag alone identifies nothing. Mirrors gates/preflight.py `template_image`.
+    runtime/versions.yaml is the ONE source of the pin; nothing here invents, completes or caches a
+    second copy of it. The joined form is what `sbx create` is given, so the image is selected by
+    its immutable digest rather than by a tag upstream can move, and it is what the creation record
+    is then checked against - the same string on both sides, so the request and its proof cannot
+    drift apart. Both halves come back too, so a caller needing the bare reference for a message
+    does not re-derive it.
     """
-    repository, _, tag = reference.rpartition(":")
-    if not repository or not isinstance(templates, dict):
-        return None
-    images = templates.get("images")
-    for image in images if isinstance(images, list) else ():
-        if (isinstance(image, dict) and image.get("tag") == tag
-                and image.get("repository") in (repository, f"docker.io/{repository}")):
-            return image
-    return None
+    pinned = ((versions.get("sandbox_bases") or {}).get(backend) or {})
+    reference, digest = pinned.get("base"), pinned.get("version")
+    if not reference or not digest:
+        return None, None, None
+    return reference, digest, f"{reference}@{digest}"
 
 
-def _template_matches(cached, digest):
-    """The cached image id (a short digest) prefixes the full pinned digest."""
-    identifier = cached.get("id")
-    return (isinstance(identifier, str) and len(identifier) >= 12 and isinstance(digest, str)
-            and digest.startswith(f"sha256:{identifier}"))
+def _resolved_image_lines(output):
+    """The `image <reference>` lines `sbx create` prints, so a refusal can say what it did resolve."""
+    return [found.strip() for found in re.findall(r"^\s*image\s+(.+)$", output or "", re.M)]
 
 
 def _evidence_predates_limit(analysis, host_stop, launcher_checks):

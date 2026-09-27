@@ -49,6 +49,7 @@ rules = _load("dca_eligibility_rules", ROOT / "gates" / "eligibility_rules.py")
 
 EXPECTED_IDS = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
 SMALL_ACCEPTANCE_IDS = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8"]
+MEDIUM_ACCEPTANCE_IDS = ["M1", "M2", "M4", "M6"]
 
 
 def reliability_suite():
@@ -72,7 +73,8 @@ class TestFixtureSuite(unittest.TestCase):
 
     def test_01_every_fixture_is_discovered_in_natural_order_and_is_schema_valid(self):
         fixtures = bench.discover()
-        self.assertEqual([f["id"] for f in fixtures], SMALL_ACCEPTANCE_IDS + EXPECTED_IDS)
+        self.assertEqual([f["id"] for f in fixtures],
+                         SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS + EXPECTED_IDS)
 
     def test_02_small_fixtures_are_direct_and_medium_fixtures_are_planned(self):
         for fixture in reliability_suite():
@@ -580,13 +582,15 @@ class TestReliabilityNamespace(unittest.TestCase):
         self.assertEqual([f["id"] for f in reliability_suite()],
                          [f"R{i}" for i in range(1, 11)])
         self.assertEqual([f["id"] for f in bench.acceptance_fixtures(bench.discover())],
-                         SMALL_ACCEPTANCE_IDS, "no reliability fixture counts as acceptance")
+                         SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS,
+                         "no reliability fixture counts as acceptance")
 
     def test_91_the_committed_acceptance_fixtures_are_exactly_the_ones_created_so_far(self):
-        # T079/T080 created K1-K8; M*, F* and S* arrive with T082-T094, never under an R name.
+        # T079/T080 created K1-K8 and T082 created M1, M2, M4 and M6; M3, M5, F* and S* arrive
+        # with T084-T094, never under an R name.
         names = sorted(d.name for d in (ROOT / "benchmark" / "fixtures").iterdir() if d.is_dir())
         self.assertEqual([n for n in names if not re.fullmatch(r"R([1-9]|10)", n)],
-                         sorted(SMALL_ACCEPTANCE_IDS))
+                         sorted(SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS))
 
     def test_92_the_baseline_keeps_its_historical_ids_and_maps_them(self):
         baseline = json.loads(self.BASELINE.read_text())
@@ -675,9 +679,27 @@ def call(identifier, name, arguments):
 
 
 CONTEXT = {"classification": {"value": "direct", "reason": "one file"},
-           "repository_map": {"scope": "minimal", "target_files": ["src/a.py"]},
+           "classification_basis": {
+               "contract_change": {"applies": False,
+                                   "evidence": ["src/a.py's helper has no other callers"]},
+               "coordinated_changes": {"applies": False,
+                                       "evidence": ["tests/test_a.py is the only importer"]},
+               "unclear_root_cause": {"applies": False,
+                                      "evidence": ["the failing assertion names the branch"]}},
+           # A no-tests direct record: these cases are about FR-001/FR-008 ORDERING, so the
+           # classification side is kept in the shape that needs no read-corroboration. The
+           # corroborated shape is exercised in test_classification_basis.
+           "repository_map": {"scope": "minimal", "target_files": ["src/a.py"],
+                              "related_tests": [],
+                              "test_discovery": {"performed": True, "result": "none",
+                                                 "evidence": ["searched for importers of src/a.py "
+                                                              "and for a tests/ tree; none exist"]}},
            "verification_approach": {"type": "deterministic", "checks": ["make test"]},
            "plan_ref": None}
+#: The search a real run makes before classifying. Present in these streams because CONTEXT records
+#: `test_discovery.result: "none"`, and the host corroborates that the looking happened - an absence is
+#: the one claim no path can evidence, so the search itself is the evidence.
+SEARCH = call("s", "grep", {"path": "/workspace"})
 WRITE_CONTEXT = call("c", "write_file", {"path": "/run/dca/out/context.json"})
 WRITE_PLAN = call("p", "write_file", {"path": "/run/dca/out/plan.md"})
 EDIT = call("e", "edit_file", {"path": "/workspace/src/a.py"})
@@ -781,7 +803,7 @@ class TestAcceptanceChecks(AcceptanceCase):
         return bench.acceptance_checks(fixture or self.FIXTURE, record or self.VALID, out)
 
     def test_110_a_correct_direct_run_passes_every_generic_check(self):
-        self.assertEqual(self.checks(report_doc(), [WRITE_CONTEXT, EDIT]), ([], []))
+        self.assertEqual(self.checks(report_doc(), [SEARCH, WRITE_CONTEXT, EDIT]), ([], []))
 
     def test_111_a_schema_invalid_report_fails_and_is_an_sc008_violation(self):
         reasons, violations = self.checks(report_doc(), record={"report_schema_valid": False})
@@ -816,7 +838,7 @@ class TestAcceptanceChecks(AcceptanceCase):
         for missing in ("classification", "repository_map", "verification_approach"):
             with self.subTest(missing=missing):
                 context = {k: v for k, v in CONTEXT.items() if k != missing}
-                reasons, _ = self.checks(report_doc(), [WRITE_CONTEXT, EDIT], context=context,
+                reasons, _ = self.checks(report_doc(), [SEARCH, WRITE_CONTEXT, EDIT], context=context,
                                          record=dict(self.VALID))
                 self.assertTrue(any("FR-001" in r for r in reasons), reasons)
                 shutil.rmtree(self.dir / "run")
@@ -824,10 +846,10 @@ class TestAcceptanceChecks(AcceptanceCase):
     def test_117_fr001_scratch_writes_and_shell_records_are_not_mutations(self):
         shell_record = call("s", "shell", {"cmd": "mkdir -p /run/dca/out && cat > "
                                            "/run/dca/out/context.json <<'EOF'\n{}\nEOF"})
-        self.assertEqual(self.checks(report_doc(), [WRITE_PLAN, shell_record, EDIT])[0], [])
+        self.assertEqual(self.checks(report_doc(), [SEARCH, WRITE_PLAN, shell_record, EDIT])[0], [])
 
     def test_118_fr001_is_vacuous_without_a_mutation_or_a_sandbox(self):
-        self.assertEqual(self.checks(report_doc(), [WRITE_CONTEXT])[0], [])
+        self.assertEqual(self.checks(report_doc(), [SEARCH, WRITE_CONTEXT])[0], [])
         shutil.rmtree(self.dir / "run")
         blocked = report_doc(final_outcome="blocked", run_integrity={"sandbox_created": False})
         self.assertEqual(self.checks(blocked, context=None, fixture=dict(
@@ -928,15 +950,15 @@ class TestAcceptanceChecks(AcceptanceCase):
                    "plan_ref": "/run/dca/out/plan.md"}
         review = {"performed": True, "identical": True}
         ok = report_doc(review=review, **planned)
-        self.assertEqual(self.checks(ok, [WRITE_CONTEXT, WRITE_PLAN, EDIT])[0], [])
+        self.assertEqual(self.checks(ok, [SEARCH, WRITE_CONTEXT, WRITE_PLAN, EDIT])[0], [])
         shutil.rmtree(self.dir / "run")
-        reasons, _ = self.checks(ok, [WRITE_CONTEXT, EDIT, WRITE_PLAN])
+        reasons, _ = self.checks(ok, [SEARCH, WRITE_CONTEXT, EDIT, WRITE_PLAN])
         self.assertTrue(any(r.startswith("FR-008") for r in reasons))
         shutil.rmtree(self.dir / "run")
         for bad, code in ((dict(ok, plan_ref=None), "FR-008"),
                           (dict(ok, review={"performed": False}), "FR-020")):
             with self.subTest(code=code):
-                reasons, _ = self.checks(bad, [WRITE_CONTEXT, WRITE_PLAN, EDIT])
+                reasons, _ = self.checks(bad, [SEARCH, WRITE_CONTEXT, WRITE_PLAN, EDIT])
                 self.assertTrue(any(r.startswith(code) for r in reasons), reasons)
                 shutil.rmtree(self.dir / "run")
 
@@ -1253,8 +1275,10 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
         return bench.build_seed(str(Path(self.fixtures[fid]["_dir"]) / "seed"), str(self.dir / name))
 
     def test_170_k1_to_k8_are_small_direct_fixtures_that_always_apply(self):
-        self.assertEqual(list(self.fixtures), SMALL_ACCEPTANCE_IDS)
-        for fid, fixture in self.fixtures.items():
+        self.assertEqual(list(self.fixtures),
+                         SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS)
+        for fid in SMALL_ACCEPTANCE_IDS:
+            fixture = self.fixtures[fid]
             with self.subTest(fixture=fid):
                 self.assertEqual((fixture["category"], fixture["trust_level"],
                                   fixture["gate_condition"], fixture["expected_disposition"],
@@ -1328,11 +1352,173 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
                 self.assertEqual(bench.out_of_scope([{"path": p} for p in paths],
                                                     fixture["allowed_change_scope"]), [])
 
-    def test_177_the_acceptance_count_now_holds_every_small_fixture(self):
-        # The full protocol stays refused until T082-T094 add the other 20 applicable fixtures.
+    def test_177_the_acceptance_count_now_holds_every_small_and_planned_fixture(self):
+        # The full protocol stays refused until T084-T094 add the other 16 applicable fixtures.
         with self.assertRaises(errors.PreconditionError) as caught:
             bench.acceptance_plan(bench.discover(), "trusted", False, THRESHOLDS)
-        self.assertIn("'small': 8, 'medium': 0", str(caught.exception))
+        self.assertIn("'small': 8, 'medium': 4", str(caught.exception))
+
+    def test_178_m1_m2_m4_and_m6_are_medium_planned_fixtures_that_always_apply(self):
+        """T082: the US2 contract fields, checked before any provider run."""
+        for fid in MEDIUM_ACCEPTANCE_IDS:
+            fixture = self.fixtures[fid]
+            with self.subTest(fixture=fid):
+                self.assertEqual((fixture["category"], fixture["trust_level"],
+                                  fixture["gate_condition"], fixture["expected_disposition"],
+                                  fixture["expected_classification"]),
+                                 ("medium", "both", "always", "succeeded", "planned"))
+                text = " ".join([fixture["task"], *fixture["acceptance_criteria"]]).lower()
+                self.assertNotRegex(text, r"claude|codex|anthropic|openai", "provider-neutral")
+                # Planned work is reviewed, so the reviewer must leave the candidate untouched.
+                self.assertIn("reviewer-byte-identical", fixture["prohibited_checks"])
+
+    def test_179_each_planned_fixture_states_the_rule_its_oracle_enforces(self):
+        """Every M oracle reads the planned-work record, and M2 and M4 add their own clause."""
+        for fid in MEDIUM_ACCEPTANCE_IDS:
+            oracle = (ROOT / "benchmark" / "fixtures" / fid / "oracle.sh").read_text()
+            with self.subTest(fixture=fid):
+                self.assertIn("planned_report.py", oracle)
+        m2 = (ROOT / "benchmark" / "fixtures" / "M2" / "oracle.sh").read_text()
+        self.assertIn("--escalation-consistent", m2,
+                      "M2 must hold a recorded FR-009 escalation to the contract")
+        self.assertNotIn("--escalated-from-direct", m2,
+                         "FR-009 is conditional: M2 must not demand an escalation that a correctly "
+                         "classified planned run never makes")
+        m4 = (ROOT / "benchmark" / "fixtures" / "M4" / "oracle.sh").read_text()
+        self.assertIn("--repo-wide-exploration", m4, "M4 must require FR-001b's justification")
+
+
+class TestPlannedWorkRecord(unittest.TestCase):
+    """FR-009 as the canonical contract states it: CONDITIONAL (benchmark/tools/planned_report.py).
+
+    spec.md escalates "when discovered work exceeds the original classification"; plan.md allows it
+    "at most once"; data-model.md records `escalated_from` "only after the single direct->planned
+    escalation"; runtime/skills/change-receipt says to omit it "unless the single direct->planned
+    escalation actually happened". So the artifact is evidence of a transition, never a requirement.
+
+    What this suite does NOT claim: that a genuine escalation is host-verifiable. Both artifacts read
+    here are authored by the agent, and the host adopts the classification from the agent's own
+    report (launcher._classification_of), so these are consistency checks only.
+    """
+
+    DIGEST = "a" * 64
+
+    def setUp(self):
+        self.dir = WORK / "planned-record"
+        shutil.rmtree(self.dir, ignore_errors=True)
+        self.dir.mkdir(parents=True)
+        spec = importlib.util.spec_from_file_location(
+            "dca_planned_report", ROOT / "benchmark" / "tools" / "planned_report.py")
+        self.helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.helper)
+
+    def run_out(self, classification, record=None, scope="component", name="r"):
+        out = self.dir / name
+        shutil.rmtree(out, ignore_errors=True)
+        out.mkdir()
+        (out / "report.json").write_text(json.dumps({
+            "final_outcome": "succeeded", "classification": classification,
+            "plan_ref": "/run/dca/out/plan.md",
+            "review": {"performed": True, "identical": True,
+                       "fingerprint_before": self.DIGEST, "fingerprint_after": self.DIGEST}}))
+        if record is not None:
+            (out / "context.json").write_text(json.dumps({
+                "classification": record, "repository_map": {"scope": scope}}))
+        return str(out)
+
+    def check(self, classification, record=None, scope="component", name="r"):
+        return self.helper.check(self.run_out(classification, record, scope, name),
+                                 escalation_consistent=True)
+
+    PLANNED = {"value": "planned", "reason": "two locales enforce one rule"}
+    ESCALATED = {"value": "planned", "reason": "found a second surface", "escalated_from": "direct"}
+
+    def test_180_planned_up_front_omits_escalated_from_and_is_accepted(self):
+        """The shape a correctly classified task produces. Requiring the field would demand a lie."""
+        self.assertEqual(self.check(self.PLANNED, self.PLANNED), [])
+
+    def test_181_a_genuine_escalation_is_accepted_and_still_validated(self):
+        self.assertEqual(self.check(self.ESCALATED, self.ESCALATED), [])
+
+    def test_182_direct_to_planned_is_the_only_escalation_allowed(self):
+        for value in ("planned", "blocked", "direct-ish", ""):
+            with self.subTest(escalated_from=value):
+                claim = dict(self.PLANNED, escalated_from=value)
+                problems = self.check(claim, claim)
+                self.assertTrue(any("only escalation the contract allows" in p for p in problems),
+                                problems)
+
+    def test_183_de_escalation_and_a_non_planned_outcome_are_refused(self):
+        """No de-escalation, caught on two independent legs.
+
+        A run that ends `direct` is refused by the base contract rule that the final classification
+        must be planned - not by the escalation logic, which never sees it. The escalation-side leg is
+        a record that reports an escalation while still reading `direct`; that one is
+        `_escalation_problems`' own.
+        """
+        ends_direct = self.check({"value": "direct", "reason": "one function"}, self.PLANNED)
+        self.assertTrue(any("not 'planned'" in p for p in ends_direct), ends_direct)
+        record_says_direct = self.check(self.ESCALATED,
+                                       dict(self.ESCALATED, value="direct"), name="d2")
+        self.assertTrue(any("contradicts it" in p for p in record_says_direct), record_says_direct)
+
+    def test_184_an_escalation_must_agree_across_both_artifacts(self):
+        report_only = self.check(self.ESCALATED, self.PLANNED)
+        self.assertTrue(any("only in the completion report" in p for p in report_only), report_only)
+        record_only = self.check(self.PLANNED, self.ESCALATED, name="r2")
+        self.assertTrue(any("contradict" in p for p in record_only), record_only)
+
+    def test_185_a_record_that_escalated_must_read_planned_at_component_scope(self):
+        contradictory = dict(self.ESCALATED, value="direct")
+        problems = self.check(self.ESCALATED, contradictory, name="r3")
+        self.assertTrue(any("contradicts it" in p for p in problems), problems)
+        narrow = self.check(self.ESCALATED, self.ESCALATED, scope="minimal", name="r4")
+        self.assertTrue(any("component scope" in p for p in narrow), narrow)
+
+    def test_186_a_claimed_escalation_with_no_retrieved_record_is_uncorroborated(self):
+        problems = self.helper.check(self.run_out(self.ESCALATED, None, name="r5"),
+                                     escalation_consistent=True)
+        self.assertTrue(any("cannot be corroborated" in p for p in problems), problems)
+
+    def test_187_review_identical_must_be_evidenced_by_equal_digests(self):
+        out = self.run_out(self.PLANNED, self.PLANNED, name="r6")
+        report = json.loads((Path(out) / "report.json").read_text())
+        for review, expected in (
+                ({"performed": True, "identical": True}, "missing"),
+                ({"performed": True, "identical": True,
+                  "fingerprint_before": "taken after the review", "fingerprint_after": self.DIGEST},
+                 "records no digest"),
+                ({"performed": True, "identical": True,
+                  "fingerprint_before": self.DIGEST, "fingerprint_after": "b" * 64}, "differ")):
+            with self.subTest(case=expected):
+                report["review"] = review
+                (Path(out) / "report.json").write_text(json.dumps(report))
+                problems = self.helper.check(out, escalation_consistent=True)
+                self.assertTrue(any(expected in p for p in problems), problems)
+
+    def test_188_a_fingerprint_may_name_the_method_that_produced_it(self):
+        """Live runs label their digests, and a label carries the same evidence as bare hex.
+
+        T083 evidence: one Claude run recorded `sha256(git diff)=<hex>` for both fingerprints - two
+        real, equal digests - and an earlier shape test that demanded bare hex rejected that correct
+        answer. Only the digest inside the string decides; prose with no digest still fails.
+        """
+        out = self.run_out(self.PLANNED, self.PLANNED, name="r7")
+        report = json.loads((Path(out) / "report.json").read_text())
+        for label in ("{d}", "sha256:{d}", "sha256(git diff)={d}", "sha256(git diff) {d}"):
+            with self.subTest(label=label):
+                digest = label.format(d=self.DIGEST)
+                report["review"] = {"performed": True, "identical": True,
+                                    "fingerprint_before": digest, "fingerprint_after": digest}
+                (Path(out) / "report.json").write_text(json.dumps(report))
+                self.assertEqual(self.helper.check(out, escalation_consistent=True), [])
+        # A label cannot paper over a real difference.
+        report["review"] = {"performed": True, "identical": True,
+                            "fingerprint_before": f"sha256(git diff)={self.DIGEST}",
+                            "fingerprint_after": f"sha256(git diff)={'b' * 64}"}
+        (Path(out) / "report.json").write_text(json.dumps(report))
+        problems = self.helper.check(out, escalation_consistent=True)
+        self.assertTrue(any("differ" in p for p in problems), problems)
 
 
 if __name__ == "__main__":

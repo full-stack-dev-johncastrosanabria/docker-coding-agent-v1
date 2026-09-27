@@ -14,8 +14,10 @@ only from this file and from the task the developer gave you.
 
 ## 1. Classify the task
 
-Decide **direct** or **planned** before anything else, and record the classification with its
-reason.
+Decide **direct** or **planned** after building the minimum pre-classification map and before the
+first workspace mutation, and record the classification with its reason. The criteria below are
+answered from the repository, not from the task text, so a little reading comes first - only a
+little.
 
 - **direct**: one clear change, a small set of files, an obvious verification path.
 - **planned**: several coordinated changes, unclear root cause, cross-component impact, or a
@@ -35,9 +37,29 @@ none does.
 - An **unclear root cause** is a failure you cannot trace to its cause by reading the failing
   check and the code it exercises.
 
+Apply these to the change you are about to make, not to its size. Altering what an existing
+operation accepts, refuses, raises or exposes through a signature, a public field or a file is a
+contract change; needing more than one implementation surface to move together for one rule to hold
+is several coordinated changes. A small diff, a simple edit and a low line count are not evidence of
+direct work.
+
+**`direct` is the harder claim, not the easier one.** It asserts that NO planned criterion applies,
+and not having noticed one is not evidence that none exists - a task looks direct right up until you
+read the test that proves otherwise. So first name the files the change touches and **the tests that
+cover them**, and open those tests: a test that imports what you are about to change tells you what
+else must move with it. Some repositories have none, and a task may forbid adding any - a real answer,
+so `repository_map.test_discovery` records which one you got: looking and finding none is valid, never
+looking is not.
+
+Record the verdict per criterion as `classification_basis`: `direct` needs all three `false`,
+`planned` at least one `true`, and the reason must agree. Cite files and tests by path - "none
+apply" states the conclusion instead of supporting it - and name only tests you actually opened,
+because the host corroborates that against the run's event stream and a path you merely searched for
+is a filename. The **repository-navigation** skill carries the shape and the procedure.
+
 If a direct task turns out to exceed direct-task bounds, **escalate to planned exactly once**,
-rewrite the Context Record with `escalated_from: direct`, and continue. There is no second
-escalation and no de-escalation.
+rewrite the Context Record with `escalated_from: direct`, then re-enter the gate in section 3
+before mutating again. There is no second escalation and no de-escalation.
 
 ## 2. Write the Context Record before the first workspace mutation
 
@@ -57,8 +79,12 @@ Before that first mutation, write `/run/dca/out/context.json`:
 
 ```json
 {"classification": {"value": "direct|planned", "reason": "..."},
+ "classification_basis": {"contract_change": {"applies": false, "evidence": ["..."]},
+                          "coordinated_changes": {"applies": false, "evidence": ["..."]},
+                          "unclear_root_cause": {"applies": false, "evidence": ["..."]}},
  "repository_map": {"scope": "minimal|component", "target_files": [], "related_tests": [],
-                    "conventions": [], "repo_wide_exploration": {"performed": false}},
+                    "conventions": [], "repo_wide_exploration": {"performed": false},
+                    "test_discovery": {"performed": true, "result": "found|none", "evidence": []}},
  "verification_approach": {"type": "deterministic|alternative", "checks": [],
                            "definition": "...", "limitation": "..."},
  "plan_ref": null, "written_at": "<timestamp>"}
@@ -74,6 +100,19 @@ Repository-wide exploration is allowed only when the task genuinely needs it; th
 For a planned task, write the plan to `/run/dca/out/plan.md` **before the first workspace
 mutation**, and set `plan_ref` in the Context Record. The plan carries scope, constraints, ordered
 steps, the verification approach, and any deviations with their reasons.
+
+**Before the first workspace mutation, check all four, in this order:** re-read the planned criteria
+above and name the one that applies or confirm none does; the Context Record exists and carries that
+classification; on planned work `/run/dca/out/plan.md` exists; on planned work the Context Record's
+`plan_ref` names it. Only then may you run the baseline, edit a file, or run a check.
+
+**On escalating**, stop mutating the workspace at the point you discover the work exceeds direct bounds.
+Rewrite the Context Record as planned with `escalated_from: direct` and a `component` scope, write
+`/run/dca/out/plan.md`, set `plan_ref`, and only then continue. Neither record may ever describe an
+escalation that did not happen. Escalation is for scope that genuinely **could not** be known when you
+classified, and it does not clear the ordering rule: a run that ends up planned is still measured
+against the plan preceding its FIRST mutation, so an avoidable escalation scores as the late plan it is
+- the remedy is upstream, in section 1: earn `direct` before claiming it.
 
 ## 4. Verification first
 

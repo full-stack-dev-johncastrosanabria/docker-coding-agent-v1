@@ -97,7 +97,6 @@ class FinalizationCase(unittest.TestCase):
             "settings": {"ssh.agentForwardingEnabled": False, "ssh.agentSocketPath": ""},
             "policy": {"rules": [], "governance": {"active": False}},
             "sandboxes": [],
-            "create_output": f"created from {self.versions['sandbox_bases']['claude']['base']}",
             "copy_out": {},
             "exec_output": {},
         }

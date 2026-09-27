@@ -1,6 +1,6 @@
 # Gate review — architectural eligibility
 
-Generated `2026-09-22T02:04:04Z` from the committed evidence in `gates/`, bound to
+Generated `2026-09-27T06:13:43Z` from the committed evidence in `gates/`, bound to
 `runtime/versions.yaml` digest `sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088`.
 Re-run with `python3 gates/review.py`; T062 and T073 re-run it as their evidence lands.
 

@@ -1,0 +1,2 @@
+{"type": "tool_call", "tool_call": {"id": "c0", "type": "function", "function": {"name": "Write", "arguments": "{\"path\": \"/run/dca/out/context.json\", \"content\": \"{...}\"}"}}}
+{"type": "tool_call", "tool_call": {"id": "r", "type": "function", "function": {"name": "Read", "arguments": "{\"path\": \"/run/dca/out/context.json\"}"}}}

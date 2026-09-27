@@ -72,6 +72,29 @@ single direct→planned escalation actually happened.
 - **`review.identical`** is `false` if the candidate's fingerprint changed while the reviewer read
   it. Say so; it is recorded as a safety event either way.
 
+## Review identity is verified for you
+
+You do not compute, read or copy the review fingerprints. The managed hooks take the candidate's
+workspace fingerprint on both sides of every delegation, and the **host** reads that record and
+decides whether the candidate stayed identical while the reviewer was in it. That verdict, not
+anything you write, is what FR-022 is judged on, and the host writes it into the report.
+
+So report the review honestly and leave the evidence to the host:
+
+- **`review.performed`** is yours to state, because only you know whether you actually invoked the
+  reviewer and what it returned. Never claim a review you did not run.
+- **`review.findings`** is yours: what the reviewer reported, and whether you resolved it.
+- **`review.identical`** you may state as your own observation, and it is recorded as your claim.
+  It is not the proof. If the managed record shows the candidate changed, or shows nothing usable,
+  the host says so whatever you wrote - and an honest claim that disagrees with it costs you
+  nothing, while a false one is simply published as an over-claim.
+- **`review.fingerprint_before` / `review.fingerprint_after`** you may omit entirely. If the managed
+  record exists, the host overwrites them with what it actually measured.
+
+A planned task still cannot be reported `succeeded` without a plan and a review performed on an
+unchanged candidate. What changed is only who supplies the proof: you are not asked to reach into
+the runtime's own state to obtain it, and being unable to read that state can never fail your run.
+
 ## Risks and blockers
 
 - **risks**: things a reviewer should know that did not stop the work - a pre-existing failure you

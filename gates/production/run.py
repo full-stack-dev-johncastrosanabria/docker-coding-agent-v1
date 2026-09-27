@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "runtime" / "sandbox" / "kit"))
 
 from dca.sbx import Sbx, SbxError  # noqa: E402
+from dca.launcher import pinned_base_reference  # noqa: E402
 from scripts.verify_checks import EXPECTED_CODEX_TOOLS  # noqa: E402
 import stage  # noqa: E402
 
@@ -73,19 +74,37 @@ def run_cell(backend, profile, sbx, versions, network):
     deny = list(cell["deny"])
     created = False
     try:
+        # Created from the IMMUTABLE digest, exactly as the launcher does it, so what conformance
+        # observes is the production provisioning path and not a re-implementation of it.
+        _, _, pinned_reference = pinned_base_reference(versions, backend)
+        if not pinned_reference:
+            raise RuntimeError(f"runtime/versions.yaml pins no complete sandbox base for {backend}")
         create_status, output, create_error = sbx.run(
-            "create", TEMPLATES[backend], "--name", name, "--skills", "off", "--kit", str(kit),
-            check=False)
+            "create", TEMPLATES[backend], "--template", pinned_reference,
+            "--name", name, "--skills", "off", "--kit", str(kit), check=False)
         (WORK / f"create-{name}.txt").write_text(
             output + "\nSTDERR:\n" + create_error, encoding="utf-8")
         created = any(item.get("name") == name for item in sbx.list_sandboxes())
         if create_status != 0:
             raise RuntimeError(f"sbx create exited {create_status}; see {WORK / f'create-{name}.txt'}")
-        checked(rows, "base.reference", pinned["base"] in output,
-                {"pin": pinned["base"], "observed": re.findall(r"^\s*image\s+(.+)$", output, re.M)})
-        templates = sbx.templates()
-        checked(rows, "base.digest", pinned["version"][7:19] in json.dumps(templates),
-                {"pin": pinned["version"], "cached_image_match": pinned["version"][7:19] in json.dumps(templates)})
+        # Both rows are read off the RESOLVED-IMAGE lines, never the whole output: the reference
+        # also appears in the line that pulls it, so a substring search over stdout would accept a
+        # create that resolved something else.
+        #
+        # TECHNICAL DEBT (T083, deliberately not fixed here): this duplicates
+        # `dca.launcher._resolved_image_lines`, which uses the same regex on the same output. The
+        # two can drift. It was left alone on purpose - this gate harness produced the accepted
+        # foundation evidence, and changing it would invalidate that evidence for a readability
+        # gain. Unify it, behind a public helper, the next time the harness is re-run anyway.
+        observed = [found.strip() for found in re.findall(r"^\s*image\s+(.+)$", output, re.M)]
+        checked(rows, "base.reference",
+                any(line.split("@", 1)[0] == pinned["base"] for line in observed),
+                {"pin": pinned["base"], "observed": observed})
+        # The DIGEST is proven from sbx's own record of what it resolved FOR THIS SANDBOX, not from
+        # `sbx template ls`: that store reports what the mutable upstream tag maps to now, so it
+        # names a newer digest even on a run that correctly booted the pinned one.
+        checked(rows, "base.digest", pinned_reference in observed,
+                {"pin": pinned_reference, "observed": observed})
         sbx.allow_network(name, allow)
         sbx.deny_network(name, deny)
         if backend == "codex" and profile == "trusted":

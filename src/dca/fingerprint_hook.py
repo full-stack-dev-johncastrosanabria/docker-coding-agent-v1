@@ -54,10 +54,22 @@ def _payload():
 
 
 def _event_and_agent(payload):
+    """The event name and the agent the record belongs to.
+
+    `to_agent` is in the chain because of a real gap: a switch event names the agent being switched
+    TO, not an `agent_name`. The vendor schema is explicit - `subagent_stop` "the sub-agent's name is
+    in agent_name", while `on_agent_switch` "receives from_agent, to_agent, and agent_switch_kind".
+    Without `to_agent` every switch record resolved to "unknown", which left that backend with a
+    reviewer STOP and no reviewer START, so the host could never pair the two and every planned run
+    was unprovable. It comes last so a payload that does carry an explicit name still wins, and
+    `from_agent` is deliberately NOT read: it names the agent being left, so on the switch into the
+    reviewer it would attribute the record to whoever delegated.
+    """
     event = (payload.get("hook_event_name") or payload.get("event")
              or (payload.get("hook_specific_output") or {}).get("hook_event_name") or "unknown")
     agent = (payload.get("agent_name") or payload.get("agent_type")
-             or payload.get("subagent_type") or payload.get("agent") or "unknown")
+             or payload.get("subagent_type") or payload.get("agent")
+             or payload.get("to_agent") or "unknown")
     return str(event), str(agent)
 
 

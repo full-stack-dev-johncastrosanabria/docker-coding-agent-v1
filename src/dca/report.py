@@ -38,6 +38,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(os.path.dirname(_HERE))
 
 try:
+    from . import fingerprint as fingerprint_module
     from . import jsonschema
     from .errors import OUTCOME_EXIT
 except ImportError:  # loaded by path in tests and in the sandbox
@@ -53,6 +54,7 @@ except ImportError:  # loaded by path in tests and in the sandbox
             spec.loader.exec_module(module)
         return module
 
+    fingerprint_module = _sideload("dca_fingerprint", "fingerprint.py")
     jsonschema = _sideload("dca_jsonschema", "jsonschema.py")
     OUTCOME_EXIT = _sideload("dca_errors", "errors.py").OUTCOME_EXIT
 
@@ -152,17 +154,52 @@ def _clean_criteria(criteria):
     return cleaned
 
 
-def _clean_review(review):
-    if not isinstance(review, dict):
+def _clean_review(review, identity=None):
+    """The review block. The agent says what it DID; the host says whether identity is PROVEN.
+
+    `performed` and `findings` are the agent's to report - only it knows whether it invoked the
+    reviewer and what came back. `identical` and the two fingerprints are FR-022's evidence, and
+    they are taken from `identity`, the host's reading of the managed hook record, whenever that
+    record exists. The agent's own values are then not authority but a claim: kept as
+    `agent_identical` so a disagreement is visible, and overwritten in the authoritative fields.
+
+    This is the authority boundary, and it matters in both directions. An agent that writes prose
+    where a digest belongs cannot fail a run whose managed fingerprints are equal; an agent that
+    writes `identical: true` cannot pass one whose managed fingerprints differ or are missing.
+    `identical` is left ABSENT when identity is simply unproven - absent is not `false`, because
+    `false` asserts the candidate moved and raises a safety event, and "we cannot tell" is a
+    different statement from "it changed".
+    """
+    if not isinstance(review, dict) and not (identity and identity.get("agent")):
         return None
+    review = review if isinstance(review, dict) else {}
     cleaned = {}
-    for key in ("performed", "identical"):
-        if isinstance(review.get(key), bool):
-            cleaned[key] = review[key]
+    if isinstance(review.get("performed"), bool):
+        cleaned["performed"] = review["performed"]
+    if identity is None:
+        for key in ("performed", "identical"):
+            if isinstance(review.get(key), bool):
+                cleaned[key] = review[key]
+        for key in ("fingerprint_before", "fingerprint_after"):
+            if isinstance(review.get(key), str):
+                cleaned[key] = review[key]
+        cleaned["evidence_origin"] = "vm"
+        return _with_findings(cleaned, review)
+    if isinstance(review.get("identical"), bool):
+        cleaned["agent_identical"] = review["identical"]
+    if identity.get("proven"):
+        cleaned["identical"] = True
+    elif identity.get("mismatch"):
+        cleaned["identical"] = False
     for key in ("fingerprint_before", "fingerprint_after"):
-        if isinstance(review.get(key), str):
-            cleaned[key] = review[key]
-    cleaned["evidence_origin"] = "vm"
+        if isinstance(identity.get(key), str):
+            cleaned[key] = identity[key]
+    cleaned["identity_reason"] = str(identity.get("reason") or "")
+    cleaned["evidence_origin"] = "managed-hook"
+    return _with_findings(cleaned, review)
+
+
+def _with_findings(cleaned, review):
     findings = []
     for finding in review.get("findings") or []:
         if not isinstance(finding, dict):
@@ -369,11 +406,17 @@ def decide(draft, limit_evidence_predates=None):
 def build(run_id, backend, trust_level, task_fingerprint, source, sandbox_settings, analysis,
           agent_report, change_set, limits_configured, versions, launcher_checks=(),
           approvals=(), cost_enforced=False, limit_evidence_predates=None,
-          primary_reason=None, human_action_required=None, safety_events=()):
+          primary_reason=None, human_action_required=None, safety_events=(),
+          review_fingerprints=None):
     """Merge host evidence with the agent's claim and finalize. Returns the report dict.
 
     `analysis` is a `dca.events.RunAnalysis`; everything it contributes - run integrity, counters,
     token usage, the limit that was reached - is host-side and is never read from the agent.
+
+    `review_fingerprints` is the managed hook record the launcher copied out of the VM. When it is
+    given - even as an empty list - FR-022 is decided from it and the agent's own fingerprints stop
+    being authority. `None` means the caller supplied no managed evidence at all and the agent's
+    claim is read as before, which is what keeps callers that predate the managed record working.
     """
     usable = _is_agent_report_usable(agent_report)
     agent = agent_report if usable else {}
@@ -440,7 +483,9 @@ def build(run_id, backend, trust_level, task_fingerprint, source, sandbox_settin
         if isinstance(agent.get("repository_map"), dict):
             draft["repository_map"] = _repository_map(agent["repository_map"])
         draft["plan_ref"] = agent.get("plan_ref") if isinstance(agent.get("plan_ref"), str) else None
-        review = _clean_review(agent.get("review"))
+        identity = (fingerprint_module.review_identity(review_fingerprints)
+                    if review_fingerprints is not None else None)
+        review = _clean_review(agent.get("review"), identity)
         draft["review"] = review
 
     outcome, reason, action, overrides, safety = decide(draft, limit_evidence_predates)

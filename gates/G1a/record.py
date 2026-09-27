@@ -19,6 +19,7 @@ four gates of this block cannot drift from one another.
 
 Usage:
   python3 gates/G1a/record.py --policy allow|deny        emit the accepted G4 claude/trusted rules
+  python3 gates/G1a/record.py --base-ref                 emit the immutable Claude base reference
   python3 gates/G1a/record.py --proves-pro <auth.json>   exit 0 only if that sandbox proves PRO
   python3 gates/G1a/record.py --preflight <obs> [<work>] exit 0 only if the shared state holds
   python3 gates/G1a/record.py <obs> [<work>]             write gates/G1a.json
@@ -27,6 +28,7 @@ Usage:
 import datetime
 import json
 import os
+import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -196,6 +198,47 @@ def api_key_presence(work, sandbox):
     return seen
 
 
+def pinned_base_reference(versions):
+    """The immutable Claude template reference required by sandbox creation."""
+    image, digest = common.claude_base(versions)
+    if not image or "@" in image or not isinstance(digest, str):
+        return None
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+        return None
+    return f"{image}@{digest}"
+
+
+def created_image(work, sandbox):
+    """Read the image sbx resolved, rather than trusting a mutable cached tag."""
+    output = common.read_file(work, f"create-{sandbox}.txt")
+    if not isinstance(output, str):
+        return None
+    matches = re.findall(r"^\s*image\s+(\S+)\s*$", output, re.MULTILINE)
+    return matches[0] if len(matches) == 1 else None
+
+
+def pinned_base_row(obs, work, versions):
+    expected = pinned_base_reference(versions)
+    login = created_image(work, LOGIN_SANDBOX)
+    fresh = created_image(work, FRESH_SANDBOX)
+    holds = (
+        expected is not None
+        and obs.get("requested_base") == expected
+        and obs.get(f"create_{LOGIN_SANDBOX}_exit") == "0"
+        and obs.get(f"create_{FRESH_SANDBOX}_exit") == "0"
+        and login == expected
+        and fresh == expected
+    )
+    return (
+        f"{GATE}.base",
+        "both sandboxes were created with the exact digest-qualified pinned Claude base; "
+        "the image sbx resolved for each creation matches that immutable reference",
+        holds,
+        f"pinned {expected or 'invalid'}; requested {obs.get('requested_base') or 'not recorded'}; "
+        f"login resolved {login or 'not reported'}; fresh resolved {fresh or 'not reported'}",
+    )
+
+
 def evaluate(obs, work, versions=None, g4_path=common.G4_EVIDENCE):
     if versions is None:
         versions = common.read_versions(VERSIONS)
@@ -204,8 +247,8 @@ def evaluate(obs, work, versions=None, g4_path=common.G4_EVIDENCE):
         rows.append((*row, True))
     preflight_ok = all(row[2] for row in rows)
 
-    base = common.base_identity_row(GATE, obs, work, versions)
-    rows.append((*base, preflight_ok and "templates_exit" in obs))
+    base = pinned_base_row(obs, work, versions)
+    rows.append((*base, preflight_ok and f"create_{FRESH_SANDBOX}_exit" in obs))
     policy = common.policy_row(GATE, obs, "trusted", g4_path)
     rows.append((*policy, preflight_ok and "policy_allow" in obs))
     bindings_ok = preflight_ok and base[2] and policy[2]
@@ -467,6 +510,14 @@ def main(argv):
     args = argv[1:]
     mode = args.pop(0) if args and args[0].startswith("--") else None
 
+    if mode == "--base-ref":
+        reference = pinned_base_reference(common.read_versions(VERSIONS))
+        if reference is None:
+            print("G1a: missing or invalid pinned Claude base", file=sys.stderr)
+            return 1
+        print(reference)
+        return 0
+
     if mode == "--policy":
         which = args[0] if args else ""
         allow, deny = common.claude_policy("trusted")
@@ -499,7 +550,7 @@ def main(argv):
     path = args[0] if args else None
     work = args[1] if len(args) > 1 else WORK
     if path is None or mode not in (None, "--preflight"):
-        print("usage: python3 gates/G1a/record.py [--policy|--proves-pro|--preflight] "
+        print("usage: python3 gates/G1a/record.py [--base-ref|--policy|--proves-pro|--preflight] "
               "<observations.env> [<work-dir>]", file=sys.stderr)
         return 2
 

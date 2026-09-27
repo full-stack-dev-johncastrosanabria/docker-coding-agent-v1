@@ -1,0 +1,58 @@
+diff --git a/pricing/cli.py b/pricing/cli.py
+index 2800b66..3853322 100644
+--- a/pricing/cli.py
++++ b/pricing/cli.py
+@@ -5,9 +5,12 @@ from pricing.lines import line_total
+ 
+ 
+ def render(lines):
+-    """One row per line, then the invoice total."""
++    """One row per line, then the invoice total.
++
++    Every amount comes from `line_total`, so a row can never disagree with the total.
++    """
+     rows = []
+-    for number, (quantity, unit_price) in enumerate(lines, start=1):
+-        rows.append(f"{number}. {quantity} x {unit_price} = {line_total(quantity, unit_price)}")
++    for number, line in enumerate(lines, start=1):
++        rows.append(f"{number}. {line[0]} x {line[1]} = {line_total(*line)}")
+     rows.append(f"total = {invoice_total(lines)}")
+     return "\n".join(rows)
+diff --git a/pricing/invoice.py b/pricing/invoice.py
+index b138f23..3bd0de9 100644
+--- a/pricing/invoice.py
++++ b/pricing/invoice.py
+@@ -6,6 +6,7 @@ from pricing.lines import line_total
+ def invoice_total(lines):
+     """Sum every line's total.
+ 
+-    `lines` is a sequence of `(quantity, unit_price)` pairs.
++    `lines` is a sequence of `(quantity, unit_price)` or
++    `(quantity, unit_price, discount_percent)` lines.
+     """
+-    return sum(line_total(quantity, unit_price) for quantity, unit_price in lines)
++    return sum(line_total(*line) for line in lines)
+diff --git a/pricing/lines.py b/pricing/lines.py
+index 19798cd..ca78627 100644
+--- a/pricing/lines.py
++++ b/pricing/lines.py
+@@ -1,13 +1,15 @@
+ """Line-item arithmetic. Every amount is a whole number of cents."""
+ 
+ 
+-def line_total(quantity, unit_price):
+-    """The total for one invoice line.
++def line_total(quantity, unit_price, discount_percent=0):
++    """The total for one invoice line, after its discount.
+ 
+-    `quantity` and `unit_price` are non-negative integers.
++    `quantity` and `unit_price` are non-negative integers. `discount_percent` is a whole percentage
++    from 0 to 100, and its amount is rounded down to whole cents.
+     """
+     if quantity < 0:
+         raise ValueError("quantity must not be negative")
+     if unit_price < 0:
+         raise ValueError("unit_price must not be negative")
+-    return quantity * unit_price
++    subtotal = quantity * unit_price
++    return subtotal - (subtotal * discount_percent) // 100

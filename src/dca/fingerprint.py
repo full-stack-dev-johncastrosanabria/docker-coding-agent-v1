@@ -26,6 +26,7 @@ on the platform, or on how many times it is computed.
 """
 
 import hashlib
+import json
 import os
 import subprocess
 
@@ -126,3 +127,135 @@ def workspace_fingerprint(repo):
     """`sha256:<hex>` over HEAD, the index and the worktree including untracked non-ignored files."""
     body = "\n".join(fingerprint_lines(repo)) + "\n"
     return PREFIX + hashlib.sha256(body.encode("utf-8", "surrogateescape")).hexdigest()
+
+# --- the managed review record (FR-022, host-authoritative) ---------------------------------------
+#
+# `fingerprint_hook.py` appends one JSON object per delegation boundary to
+# /run/dca/state/fingerprints.jsonl. The host copies that file out and decides FR-022 from it. The
+# AGENT is never asked to read it: making the root model re-read internal runtime state to prove a
+# host invariant is both unnecessary and backend-dependent - one backend's root session could read
+# it and another's could not, so the same correct run passed on one and was blocked on the other.
+#
+# Event names differ per harness - SubagentStart/SubagentStop on one, on_agent_switch/subagent_stop
+# on the other - so a side is derived from GENERIC tokens rather than from any provider's spelling.
+# Nothing here is provider-specific. The root's own turn_end/stop hooks land in the same file and
+# are NOT a third spelling of this pair: they record the run, on a different agent, for a different
+# purpose, and the reviewer attribution below is what keeps them out of the comparison.
+
+REVIEWER = "review"
+START_TOKENS = ("start", "switch", "begin")
+STOP_TOKENS = ("stop", "end")
+
+
+def _recorded_digest(record):
+    """The usable `sha256:<hex>` this record carries, or None.
+
+    A record whose hook failed carries `error` and a null fingerprint. That is evidence that is
+    ABSENT, never evidence of sameness, so it yields None and the identity stays unproven.
+    """
+    if record.get("error"):
+        return None
+    value = record.get("fingerprint")
+    if not isinstance(value, str) or not value.startswith(PREFIX):
+        return None
+    return value if len(value) > len(PREFIX) else None
+
+
+def _side(event):
+    """`start`, `stop`, or None - by generic token, so no harness's event spelling is privileged."""
+    lowered = str(event or "").lower()
+    if any(token in lowered for token in STOP_TOKENS):
+        return "stop"
+    if any(token in lowered for token in START_TOKENS):
+        return "start"
+    return None
+
+
+def review_identity(records):
+    """The host's FR-022 verdict on `records`, in the order the hook appended them.
+
+    THE SHAPE OF A DELEGATION IS NOT THE SAME ON BOTH BACKENDS, and a live record is what settles
+    it. One harness fires the reviewer's own start and stop, so the reviewer owns both sides. The
+    other fires only a `subagent_stop` for the reviewer and brackets it with the ROOT's switch
+    records, because a switch payload names the executing agent rather than the agent entered - so
+    on that backend the reviewer has a stop and no start of its own. An implementation that demanded
+    a reviewer-attributed start therefore proved nothing on that backend and would have blocked
+    every planned run there; `gates/production/behavior.py` had already worked this out from real
+    evidence, and this follows the same reading. Its gate check additionally requires the trailing
+    switch to match, which is a stronger, independent cross-check on the same record.
+
+    So the window is: the nearest start-side fingerprint BEFORE the reviewer's stop, whoever it is
+    attributed to, and the reviewer's stop itself. That brackets exactly the reviewer's execution.
+
+    Proven only when both sides exist and are equal. Everything else is unproven, and unproven is
+    never treated as identical:
+
+      * a mismatch is a reviewer-immutability violation - the candidate moved while it was read;
+      * a missing, unreadable or unattributable side proves nothing, so a planned task cannot be
+        reported a success on it. Absent evidence is not permission.
+    """
+    verdict = {"proven": False, "mismatch": False, "fingerprint_before": None,
+               "fingerprint_after": None, "agent": None, "reason": ""}
+    ordered = [r for r in records if isinstance(r, dict)]
+    if not ordered:
+        verdict["reason"] = "the managed fingerprint record is empty or was not retrieved"
+        return verdict
+    sessions = []
+    for index, record in enumerate(ordered):
+        if REVIEWER not in str(record.get("agent") or "").lower():
+            continue
+        if _side(record.get("event")) != "stop":
+            continue
+        after = _recorded_digest(record)
+        before = None
+        for earlier in reversed(ordered[:index]):
+            if _side(earlier.get("event")) == "start":
+                before = _recorded_digest(earlier)
+                break
+        sessions.append((str(record.get("agent")), before, after))
+    if not sessions:
+        verdict["reason"] = ("no managed fingerprint records the reviewer finishing, so no window "
+                             "can be shown to bracket the review")
+        return verdict
+    # The LAST review is the decisive one: it is the one that preceded the report.
+    agent, before, after = sessions[-1]
+    verdict["agent"] = agent
+    if not before or not after:
+        missing = " and ".join(name for name, have in (("before", before), ("after", after))
+                              if not have)
+        verdict["reason"] = (f"the managed record has no usable {missing} fingerprint bracketing the "
+                             f"review, so the review is not evidenced")
+        return verdict
+    verdict["fingerprint_before"], verdict["fingerprint_after"] = before, after
+    if before == after:
+        verdict["proven"] = True
+        verdict["reason"] = "the managed fingerprints bracketing the review are equal"
+    else:
+        verdict["mismatch"] = True
+        verdict["reason"] = ("the managed fingerprints bracketing the review differ, so the "
+                             "candidate changed while it was being reviewed")
+    return verdict
+
+
+def read_review_records(path):
+    """The hook's JSON lines from `path`, in order. A line that will not parse is skipped.
+
+    An unreadable file yields an empty list, which `review_identity` reports as unproven. It never
+    raises: a missing record must block a planned success, not abort the run.
+    """
+    records = []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    decoded = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(decoded, dict):
+                    records.append(decoded)
+    except OSError:
+        return []
+    return records

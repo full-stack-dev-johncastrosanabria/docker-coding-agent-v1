@@ -1,0 +1,12 @@
+diff --git a/billing/usd.py b/billing/usd.py
+index 69c93cc..d484fa2 100644
+--- a/billing/usd.py
++++ b/billing/usd.py
+@@ -2,5 +2,5 @@
+ 
+ 
+ def format_usd(cents):
+-    """Format cents as dollars, for example 1234 -> '$12.34'."""
+-    return f"${cents // 100}.{cents % 100}"
++    """Format cents as dollars, for example 1234 -> '$12.34' and 5 -> '$0.05'."""
++    return f"${cents // 100}.{cents % 100:02d}"

@@ -1,0 +1,36 @@
+{
+  "_comment": "Rejected: the search was repository-wide by necessity, but nothing justifies it (FR-001b).",
+  "classification": {
+    "value": "planned",
+    "reason": "a contract change across three packages"
+  },
+  "repository_map": {
+    "scope": "component",
+    "target_files": [
+      "api/handlers.py",
+      "jobs/cleanup.py",
+      "reports/monthly.py",
+      "legacy/__init__.py",
+      "legacy/timeutil.py"
+    ],
+    "related_tests": [
+      "tests/test_surfaces.py"
+    ],
+    "conventions": [
+      "stdlib only",
+      "core.clock is the one clock"
+    ],
+    "repo_wide_exploration": {
+      "performed": true,
+      "reason": ""
+    }
+  },
+  "verification_approach": {
+    "type": "deterministic",
+    "checks": [
+      "python3 -m unittest discover -s tests -t ."
+    ]
+  },
+  "plan_ref": "/run/dca/out/plan.md",
+  "written_at": "2000-01-01T00:00:00Z"
+}

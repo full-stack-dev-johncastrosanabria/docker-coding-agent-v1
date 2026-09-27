@@ -1,0 +1,201 @@
+{
+  "evidence": "tasks.md T083 (US2 planned): `dca bench --fixtures 'M1,M2,M4,M6'` once per trusted-eligible backend",
+  "date": "2026-09-26",
+  "backend": "codex",
+  "trust": "trusted",
+  "dca_commit": "439251317e05ef564614f2847ae3f45c0146bfa6",
+  "dca_tree_clean": false,
+  "provenance": "4392513 with uncommitted changes - the digest-extraction oracle fix and its regression test, applied between the two campaigns. The uncommitted change is oracle-side SCORING only; no runtime, fixture or seed differed between the campaigns",
+  "semantics": "FR-001/FR-008 measured from the first EFFECTIVE workspace mutation (0ea5be6, acd1063). FR-009 is CONDITIONAL (4392513): a run correctly classified planned up front records no escalation, and the oracle holds a RECORDED escalation to the contract rather than demanding one.",
+  "suite_version": "c251ae9155a972a0e14a796a2eb4ab70333252a9",
+  "fixtures_unmodified": "no fixture was changed in response to any failure; every failure here is class C",
+  "oracle_image": "docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2",
+  "versions": {
+    "sbx": {
+      "exact": "v0.43.0",
+      "minimum": "0.43.0"
+    },
+    "docker_agent": "v1.136.0",
+    "claude_code": {
+      "exact": "2.1.278",
+      "tested": "2.1.277"
+    }
+  },
+  "environment": "preflight green before each campaign: docker agent v1.136.0 (re-pinned - Docker Desktop reverts it, twice observed), claude_code 2.1.278, sbx v0.43.0, pin_drift empty, Claude base restored by pinned digest, G4 fingerprint sha256:e282594f... recomputed exact, zero sandboxes. The watchdog guarded disk, memory, swap growth, image reclamation and the agent pin, and never fired.",
+  "source": "generated locally and ignored by Git: benchmark/results/bench-2026-09-26T02-42-17Z-d905/benchmark.json, benchmark/work/bench-2026-09-26T02-42-17Z-d905/",
+  "rescoring": "Oracle verdicts were recomputed by re-running the fixtures' own oracles in the pinned image against the RECORDED candidates and run outputs. Nothing was re-run against a model. The only rule that changed is the review-fingerprint shape test: a live Claude run recorded two identical 64-hex digests labelled `sha256(git diff)=`, and the old test demanded bare hex, rejecting a correct answer - a proven fixture/oracle defect (class B), fixed by extracting the digest. This follows the repository's existing re-scoring practice (the 2026-09-23 K campaign's rescored_at_commit).",
+  "bench": {
+    "bench_id": "bench-2026-09-26T02-42-17Z-d905",
+    "command": "bin/dca bench --backend codex --trust trusted --fixtures 'M1,M2,M4,M6'",
+    "repeat": 1,
+    "started_at": "2026-09-26T02:42:17Z",
+    "finished_at": "2026-09-26T02:54:44Z",
+    "passed_as_scored": 1,
+    "passed_rescored": 1,
+    "total": 4,
+    "runs": [
+      {
+        "fixture": "M1",
+        "run_id": "run-2026-09-26T02-42-18Z-d0347d",
+        "seed_commit": "0a5c0109ac854b01631135a07c8bb677b49ce344",
+        "result_as_scored": "failed",
+        "result_rescored": "failed",
+        "final_outcome": "succeeded",
+        "classification": "direct",
+        "expected_classification": "planned",
+        "escalated_from": null,
+        "plan_ref": false,
+        "review": {
+          "performed": null,
+          "identical": null
+        },
+        "context_record_at": 12,
+        "plan_at": null,
+        "first_attempted_mutation": 13,
+        "first_effective_mutation": 13,
+        "plan_before_first_effective_mutation": false,
+        "fr001_fr008_ordering": "pass",
+        "planned_work_record": [
+          "classification is 'direct', not 'planned'",
+          "plan_ref is not set, so no plan was recorded (FR-008)",
+          "there is no review record (FR-020)"
+        ],
+        "oracle_rescored": "fail",
+        "cleanup": "ok",
+        "tool_calls": 22,
+        "duration_seconds": 190.7,
+        "failure_class": "C - model miss",
+        "failure_detail": "classified `direct` a change that only works if three modules move together, so it wrote no plan and ran no review. A misclassification, not a product or fixture defect."
+      },
+      {
+        "fixture": "M2",
+        "run_id": "run-2026-09-26T02-45-30Z-a5cc58",
+        "seed_commit": "367af1fa548aa8fd5c75ff0e436c010424b8b876",
+        "result_as_scored": "failed",
+        "result_rescored": "failed",
+        "final_outcome": "succeeded",
+        "classification": "planned",
+        "expected_classification": "planned",
+        "escalated_from": "direct",
+        "plan_ref": true,
+        "review": {
+          "performed": true,
+          "identical": true
+        },
+        "context_record_at": 7,
+        "plan_at": 15,
+        "first_attempted_mutation": 8,
+        "first_effective_mutation": 8,
+        "plan_before_first_effective_mutation": false,
+        "fr001_fr008_ordering": [
+          "FR-008: plan.md was not written before the first workspace mutation"
+        ],
+        "planned_work_record": [
+          "a review fingerprint records no digest, so review.identical rests on prose rather than evidence (FR-022)"
+        ],
+        "oracle_rescored": "fail",
+        "cleanup": "ok",
+        "tool_calls": 29,
+        "duration_seconds": 192.6,
+        "failure_class": "C - model miss",
+        "failure_detail": "two distinct misses: the plan was written at tool call 15 while the first effective mutation was at 8, violating FR-008; and one review fingerprint recorded prose rather than a digest. Its ESCALATION record was genuine - escalated_from `direct`, agreeing across the report and the Context Record at component scope - and passed every FR-009 consistency check."
+      },
+      {
+        "fixture": "M4",
+        "run_id": "run-2026-09-26T02-48-45Z-929892",
+        "seed_commit": "0ab7f2be6b2d91ae1020df24ded057348ba5289f",
+        "result_as_scored": "passed",
+        "result_rescored": "passed",
+        "final_outcome": "succeeded",
+        "classification": "planned",
+        "expected_classification": "planned",
+        "escalated_from": null,
+        "plan_ref": true,
+        "review": {
+          "performed": true,
+          "identical": true
+        },
+        "context_record_at": 13,
+        "plan_at": 12,
+        "first_attempted_mutation": 14,
+        "first_effective_mutation": 14,
+        "plan_before_first_effective_mutation": true,
+        "fr001_fr008_ordering": "pass",
+        "planned_work_record": "pass",
+        "oracle_rescored": "pass",
+        "cleanup": "ok",
+        "tool_calls": 32,
+        "duration_seconds": 228.5
+      },
+      {
+        "fixture": "M6",
+        "run_id": "run-2026-09-26T02-52-35Z-6cf8c5",
+        "seed_commit": "1c503a6524cb8cf5660184e877aa37157cd812d8",
+        "result_as_scored": "failed",
+        "result_rescored": "failed",
+        "final_outcome": "succeeded",
+        "classification": "direct",
+        "expected_classification": "planned",
+        "escalated_from": null,
+        "plan_ref": false,
+        "review": {
+          "performed": null,
+          "identical": null
+        },
+        "context_record_at": 9,
+        "plan_at": null,
+        "first_attempted_mutation": 10,
+        "first_effective_mutation": 10,
+        "plan_before_first_effective_mutation": false,
+        "fr001_fr008_ordering": "pass",
+        "planned_work_record": [
+          "classification is 'direct', not 'planned'",
+          "plan_ref is not set, so no plan was recorded (FR-008)",
+          "there is no review record (FR-020)"
+        ],
+        "oracle_rescored": "fail",
+        "cleanup": "ok",
+        "tool_calls": 17,
+        "duration_seconds": 128.3,
+        "failure_class": "C - model miss",
+        "failure_detail": "classified `direct` a change to what an existing operation refuses, which root.md section 1 defines as a contract change, so it wrote no plan and ran no review."
+      }
+    ]
+  },
+  "fr001_fr008_ordering_by_fixture": {
+    "M1": "pass",
+    "M2": [
+      "FR-008: plan.md was not written before the first workspace mutation"
+    ],
+    "M4": "pass",
+    "M6": "pass"
+  },
+  "planned_classification": {
+    "M1": "direct",
+    "M2": "planned",
+    "M4": "planned",
+    "M6": "direct"
+  },
+  "escalation_records": {
+    "M1": null,
+    "M2": "direct",
+    "M4": null,
+    "M6": null
+  },
+  "cleanup_failures": 0,
+  "leftover_sandboxes": 0,
+  "verdict": "FAIL",
+  "verdict_reasons": [
+    "1/4 medium fixtures pass after re-scoring",
+    "M1: C - model miss - classified `direct` a change that only works if three modules move together, so it wrote no plan and ran no review. A misclassification, not a product or fixture defect.",
+    "M2: C - model miss - two distinct misses: the plan was written at tool call 15 while the first effective mutation was at 8, violating FR-008; and one review fingerprint recorded prose rather than a digest. Its ESCALATION record was genuine - escalated_from `direct`, agreeing across the report and the Context Record at component scope - and passed every FR-009 consistency check.",
+    "M6: C - model miss - classified `direct` a change to what an existing operation refuses, which root.md section 1 defines as a contract change, so it wrote no plan and ran no review."
+  ],
+  "fr009_live_escalation": {
+    "fixture": "M2",
+    "run_id": "run-2026-09-26T02-45-30Z-a5cc58",
+    "escalated_from": "direct",
+    "consistency": "the report and the retrieved Context Record agree and the record was rewritten to component scope, so every FR-009 consistency check passed",
+    "significance": "the first genuine live direct->planned escalation recorded. It confirms the corrected conditional contract still validates a real escalation when one occurs; this run failed on FR-008 plan ordering and FR-022 fingerprint evidence, not on its escalation record."
+  }
+}

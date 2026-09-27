@@ -1,0 +1,32 @@
+{
+  "id": "M4",
+  "category": "medium",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "The deprecated helper `stamp()` must be retired. Every use of it anywhere in this repository must call `core.clock.now()` instead, and the whole `legacy` package must then be deleted. This task does not list the call sites, and they are not confined to one package. `core.clock.now()` returns exactly what `stamp()` returned, so no behaviour may change.",
+  "acceptance_criteria": [
+    "no module outside the tests references stamp, legacy.timeutil or the legacy package, and the legacy package no longer exists",
+    "every former caller obtains its timestamp from core.clock.now(), so changing the clock changes every surface",
+    "api.handlers.health, jobs.cleanup.sweep and reports.monthly.header return exactly what they returned before",
+    "core/clock.py is unchanged",
+    "all existing tests still pass"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "planned",
+  "allowed_change_scope": ["api/*.py", "jobs/*.py", "reports/*.py", "legacy/*.py", "tests/*.py"],
+  "prohibited_checks": ["no-test-weakening", "reviewer-byte-identical"],
+  "oracle": "oracle.sh",
+  "golden": {
+    "good": "golden/good.patch",
+    "bad": [
+      "golden/bad/missed-a-call-site.patch",
+      "golden/bad/kept-the-legacy-package.patch",
+      "golden/bad/aliased-import.patch",
+      "golden/bad/captured-at-import.patch",
+      "golden/bad/no-exploration-justification.patch",
+      "golden/bad/classified-direct.patch"
+    ]
+  }
+}

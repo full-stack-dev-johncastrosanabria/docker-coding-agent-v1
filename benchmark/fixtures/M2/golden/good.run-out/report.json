@@ -1,0 +1,17 @@
+{
+  "_comment": "The fields M2's oracle reads (RUN_OUT). The agent read the tests covering the changed file - which the bounded direct map requires - saw the second locale, and classified planned on the first pass. No escalation happened, so escalated_from is correctly ABSENT: this is what a correct run looks like (FR-009 is conditional).",
+  "final_outcome": "succeeded",
+  "classification": {
+    "value": "planned",
+    "reason": "Several coordinated changes: tests/test_books.py requires format_usd and format_eur to render cents identically, so both formatters must be padded together to enforce one rule"
+  },
+  "plan_ref": "/run/dca/out/plan.md",
+  "review": {
+    "performed": true,
+    "identical": true,
+    "fingerprint_before": "sha256:7c1e9a4b2d8f60513a2b4c6d8e0f1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b",
+    "fingerprint_after": "sha256:7c1e9a4b2d8f60513a2b4c6d8e0f1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b",
+    "evidence_origin": "vm",
+    "findings": []
+  }
+}

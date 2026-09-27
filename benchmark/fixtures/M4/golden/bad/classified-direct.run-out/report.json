@@ -1,0 +1,24 @@
+{
+  "_comment": "Rejected: deleting a helper every package depends on is a contract change, so the work is planned, not direct.",
+  "final_outcome": "succeeded",
+  "classification": {
+    "value": "direct",
+    "reason": "swap one helper for another"
+  },
+  "plan_ref": null,
+  "review": {
+    "performed": true,
+    "identical": true,
+    "fingerprint_before": "sha256:aa",
+    "fingerprint_after": "sha256:aa",
+    "evidence_origin": "vm",
+    "findings": []
+  },
+  "repository_map": {
+    "scope": "component",
+    "repo_wide_exploration": {
+      "performed": true,
+      "reason": "the task states the call sites are not listed and are not confined to one package; the helper is also reached through a re-export and a module-attribute call, so the uses cannot be found without searching the whole repository"
+    }
+  }
+}

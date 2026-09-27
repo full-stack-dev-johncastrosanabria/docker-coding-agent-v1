@@ -49,6 +49,16 @@ ORDERING_PREFIX = "ordering."
 #: A valid Context Record, staged the way a run's agent writes it (FR-001).
 CONTEXT_RECORD = {
     "classification": {"value": "direct", "reason": "T062 gate probe"},
+    # The gate requires an evidence-backed basis before it allows any mutation, so the probe's record
+    # carries one. Every criterion false, consistent with the `direct` classification it claims.
+    "classification_basis": {
+        "contract_change": {"applies": False,
+                            "evidence": ["answer.txt has no callers: the probe writes a new file"]},
+        "coordinated_changes": {"applies": False,
+                                "evidence": ["check.sh is the only check that reads answer.txt"]},
+        "unclear_root_cause": {"applies": False,
+                               "evidence": ["the probe asserts a literal, with no failure to trace"]},
+    },
     "repository_map": {"scope": "minimal", "target_files": ["answer.txt"]},
     "verification_approach": {"type": "deterministic", "checks": [
         {"id": "sh check.sh", "command_or_method": "sh check.sh", "required": True}]},
