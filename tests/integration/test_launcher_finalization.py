@@ -296,6 +296,24 @@ class TestFinalVerificationAndReport(FinalizationCase):
             self.assertTrue(check["required"])
             self.assertTrue(check["after_last_change"])
 
+    def test_40a_the_runs_processes_are_stopped_again_after_the_launchers_own_checks(self):
+        # A check that timed out is still running in the VM - killing the local client does not
+        # stop it - and a check may leave a process behind. Both are stopped before retrieval.
+        instance = self.make(verify=["make test"])
+        instance.preconditions()
+        instance.provision()
+        instance.baseline_pids = {1, 2, 3}
+        instance.termination = {"host_stop": None, "workload": []}
+        instance.final_verification()
+        log = (self.state_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()
+        scripts = [json.loads(line)["argv"][-1] for line in log]
+        check = max(i for i, s in enumerate(scripts) if "make test" in s)
+        quiesce = max(i for i, s in enumerate(scripts) if "DCA_QUIESCE" in s)
+        self.assertGreater(quiesce, check)
+        recorded = json.loads(Path(instance.request.out, "termination.json").read_text(
+            encoding="utf-8"))
+        self.assertEqual([entry["phase"] for entry in recorded["workload"]], ["verification"])
+
     def test_41_a_failing_launcher_check_is_recorded_as_a_failure(self):
         self.state.setdefault("fail", {})["exec"] = 1
         self.write_state()

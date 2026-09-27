@@ -12,6 +12,11 @@ State lives in `$DCA_FAKE_SBX_DIR`:
   * `state.json`  - what to answer: `version`, `settings`, `policy`, `templates`, `sandboxes`,
     `fail` (a map of "subcommand" -> exit status, so a test can make exactly one step fail), and
     `streams` (a map of marker -> path to a recorded `.jsonl` stream that `exec` replays).
+    `stream_pause` ({"after_line": N, "seconds": S}) makes the replay go SILENT for S seconds
+    after its Nth line - an agent inside one long tool call, with nothing on the stream.
+    `process_baseline` and `quiesce_output` answer the launcher's two process-table execs (the
+    snapshot taken before the agent starts, and the stop of everything started since); both have
+    well-formed defaults, so a test only sets them to script a failure.
   * `calls.jsonl` - every invocation, appended, with its full argv.
 
 It deliberately refuses `policy init`, `reset` and `rm --all`: the launcher must never call them,
@@ -168,12 +173,20 @@ def main(argv):
                 sys.stderr.write(state["exec_stderr"])
                 sys.stderr.flush()
             delay = float(state.get("stream_delay", 0) or 0)
+            pause = state.get("stream_pause") or {}
             with open(stream_path, encoding="utf-8") as handle:
-                for line in handle:
+                for number, line in enumerate(handle, 1):
                     sys.stdout.write(line)
                     sys.stdout.flush()
                     if delay:
                         time.sleep(delay)
+                    if number == pause.get("after_line"):
+                        time.sleep(float(pause.get("seconds", 0)))
+        elif "DCA_PROCESS_BASELINE" in script:
+            sys.stdout.write(state.get("process_baseline",
+                                       "self 900\n1 0\n2 1\n3 2\n900 0\n901 900\n"))
+        elif "DCA_QUIESCE" in script:
+            sys.stdout.write(state.get("quiesce_output", "DCA_QUIESCE terminated=0 survivors=0\n"))
         else:
             sys.stdout.write((state.get("exec_output") or {}).get("default", ""))
         return exit_status
