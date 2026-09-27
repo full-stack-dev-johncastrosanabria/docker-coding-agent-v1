@@ -251,6 +251,24 @@ def _criteria_satisfied(criteria):
     return True, "every acceptance criterion is satisfied"
 
 
+def _limit_name(limits):
+    """`retries limit`, or the native ceiling's config path: the limit as a developer names it."""
+    if limits.get("limit_reached") == "native_ceiling":
+        ceiling = limits.get("native_ceiling") or {}
+        return f"native ceiling {ceiling.get('config_path') or '(unknown)'}"
+    return f"{limits.get('limit_reached')} limit"
+
+
+def _limit_stop_reason(limits, integrity):
+    """Why a run that a limit ended has no agent report: who stopped it, and at which limit."""
+    if limits.get("limit_reached") == "native_ceiling":
+        return (f"the Docker Agent runtime stopped the run at its {_limit_name(limits)} before the "
+                "agent wrote a completion report")
+    stopper = "the host" if integrity.get("agent_exit") == "host-limit" else "a host limit"
+    return (f"{stopper} stopped the run at its {_limit_name(limits)} before the agent wrote a "
+            "completion report")
+
+
 def _fr035a(verification, approvals, limit_reached):
     """FR-035a: `failed` when something conclusively failed, `blocked` when nothing could tell."""
     checks = (verification or {}).get("checks") or []
@@ -334,8 +352,17 @@ def decide(draft, limit_evidence_predates=None):
                       or "resolve the policy block reported below, then re-run",
                       "D-FIN.2 no sandbox was created")
 
-    # 1. No usable agent report.
+    # 1. No usable agent report. When a limit ended the run, the limit is why the agent never
+    # reported: the host (or the runtime's own ceiling) stopped it first. The outcome is the same,
+    # but the reason has to name the limit (FR-023a, FR-024), or the developer reads a limit stop
+    # as an agent that simply failed to write its report.
     if agent_outcome == MISSING:
+        if limit_reached:
+            return settle(BLOCKED, _limit_stop_reason(draft["limits"], integrity),
+                          f"the task did not finish within its {_limit_name(draft['limits'])}: "
+                          "inspect events.jsonl and the returned branch for the progress made, "
+                          "then narrow the task or raise the limit and re-run",
+                          "D-FIN.1 missing or invalid agent report")
         return settle(BLOCKED, "the agent produced no valid completion report",
                       "inspect events.jsonl and the returned branch, then re-run the task",
                       "D-FIN.1 missing or invalid agent report")

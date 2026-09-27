@@ -139,6 +139,36 @@ class TestMissingAgentReport(ReportCase):
         self.assertTrue(built["primary_reason"])
         self.assertTrue(built["human_action_required"])
 
+    def test_07_a_host_limit_that_stopped_the_agent_before_it_reported_is_the_reason(self):
+        # The host kills the agent at the limit, so it usually never writes its report. The report
+        # is still missing - rule 1 still decides - but the reason the task did not finish is the
+        # limit, and FR-023a says a blocked outcome at a limit names it (FR-024, FR-035a).
+        for reason in events.HOST_LIMIT_REASONS:
+            with self.subTest(reason=reason):
+                built = self.build(agent={}, run=analysis(host_stop={"reason": reason}))
+                self.assertEqual(built["final_outcome"], "blocked")
+                self.assertEqual(built["agent_outcome"], "missing")
+                self.assertEqual(built["limits"]["limit_reached"], reason)
+                self.assertIn(f"{reason} limit", built["primary_reason"])
+                self.assertIn("host", built["primary_reason"])
+                self.assertIn(f"{reason} limit", built["human_action_required"])
+                self.assertEqual([o["rule"] for o in built["outcome_overrides"]],
+                                 ["D-FIN.1 missing or invalid agent report"])
+
+    def test_08_a_native_ceiling_that_stopped_the_agent_before_it_reported_is_the_reason(self):
+        run = events.analyze(
+            "\n".join([json.dumps({"type": "stream_started", "session_id": "s"}),
+                       json.dumps({"type": "max_iterations_reached", "agent_name": "root",
+                                   "max_iterations": 150})]) + "\n", exit_status=1)
+        built = self.build(agent={}, run=run)
+        self.assertEqual(built["final_outcome"], "blocked")
+        self.assertEqual(built["limits"]["limit_reached"], "native_ceiling")
+        self.assertIn("agents.root.max_iterations", built["primary_reason"])
+
+    def test_09_without_a_limit_a_missing_report_is_still_the_reason(self):
+        built = self.build(agent={})
+        self.assertEqual(built["primary_reason"], "the agent produced no valid completion report")
+
 
 # --- D-FIN rule 2: run integrity ------------------------------------------------------------------
 
