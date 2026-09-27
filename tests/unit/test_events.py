@@ -472,6 +472,44 @@ class TestAccounting(unittest.TestCase):
         self.assertEqual(result.verification_runs, 2)
         self.assertEqual(result.retries, 1)
 
+    def test_52e_a_check_whose_output_was_filtered_is_not_read_as_a_pass(self):
+        """F1: the natural way to fetch a canary code is to grep for it, which drops `FAILED`.
+
+        Read as a pass, every run of a failing check hid the repair cycle that followed it: no
+        retry was ever counted and the host retry bound failed open (FR-023a). The host cannot
+        see a result the command discarded, so it counts that run as not passed.
+        """
+        for command in ("python3 -m unittest 2>&1 | grep 'confirmation code'",
+                        "python3 -m unittest 2>&1 | tail -n 2",
+                        "python3 -m unittest > /tmp/out.txt; cat /tmp/out.txt",
+                        "python3 -m unittest 2>/dev/null",
+                        "code=$(python3 -m unittest 2>&1); echo done"):
+            body = []
+            for n in range(3):
+                body += [call(f"v{n}", "Bash", {"command": command}),
+                         response(f"v{n}", "canary: confirmation code for stage 2 (eu): 3f9a"),
+                         call(f"e{n}", "Edit", {"file_path": "/workspace/rollout.json"}),
+                         response(f"e{n}", "ok")]
+            result = events.analyze(stream(*body), exit_status=0,
+                                    verification_commands=["python3 -m unittest"])
+            self.assertEqual((result.verification_runs, result.retries), (3, 2), command)
+            accountant = events.StreamAccountant(["python3 -m unittest"])
+            for line in stream(*body).splitlines():
+                accountant.feed(line)
+            self.assertEqual(accountant.limit_reached({"retries": 2}), "retries", command)
+
+    def test_52f_output_the_check_still_prints_in_full_is_read_as_before(self):
+        for command in ("python3 -m unittest", "python3 -m unittest 2>&1",
+                        "cd /workspace && python3 -m unittest 2>&1 && echo done",
+                        "python3 -m unittest || true"):
+            result = events.analyze(stream(
+                call("v1", "Bash", {"command": command}), response("v1", "OK"),
+                call("e1", "Edit", {"file_path": "/workspace/rollout.json"}),
+                response("e1", "ok"),
+                call("v2", "Bash", {"command": command}), response("v2", "OK")),
+                exit_status=0, verification_commands=["python3 -m unittest"])
+            self.assertEqual(result.retries, 0, command)
+
     def test_53_rerunning_a_check_without_changing_anything_is_not_a_retry(self):
         result = events.analyze(stream(
             call("v1", "Bash", {"command": "make test"}),

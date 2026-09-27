@@ -515,6 +515,34 @@ def response_outcome(text):
     return "pass"
 
 
+#: What may follow a check in the same pipeline without hiding its output from the response.
+_KEEPS_OUTPUT = re.compile(r"\s*2>&1")
+#: Where the pipeline that runs the check ends: the next command no longer touches its output.
+_PIPELINE_END = re.compile(r";|&&|\|\||\n")
+#: A pipe or a redirection of stdout or stderr: the check's own output did not reach the response.
+_DIVERTS_OUTPUT = re.compile(r"\||>")
+#: Openers that capture the check's output instead of printing it.
+_CAPTURES_OUTPUT = ("$(", "`", "<(")
+
+
+def _output_diverted(command, needle):
+    """True when `command` runs the check `needle` but its output never reached the response.
+
+    `response_outcome` can only read what the command printed. A check piped through `grep` or
+    `tail`, redirected to a file or captured into a variable prints nothing that says it failed, and
+    reading that silence as a pass hid every repair cycle after it, so the retry limit failed open
+    (FR-023a). Such a run is `unknown`: counted as not passed, the bias this module already chose.
+    """
+    haystack = _normalize_command(command)
+    start = haystack.find(needle)
+    if start < 0:
+        return False
+    if haystack[:start].rstrip().endswith(_CAPTURES_OUTPUT):
+        return True
+    tail = _KEEPS_OUTPUT.sub("", haystack[start + len(needle):])
+    return bool(_DIVERTS_OUTPUT.search(_PIPELINE_END.split(tail, 1)[0]))
+
+
 def _normalize_command(text):
     return " ".join(text.split())
 
@@ -924,7 +952,9 @@ def _account_retries(result, verification_commands):
         previous = last_run.get(matched)
         if previous is not None and mutated_since.get(matched) and previous[1] != "pass":
             result.retries += 1
-        last_run[matched] = (record.order, response_outcome(record.response))
+        outcome = ("unknown" if _output_diverted(record.command, matched)
+                   else response_outcome(record.response))
+        last_run[matched] = (record.order, outcome)
         mutated_since[matched] = False
 
 
