@@ -472,154 +472,6 @@ class TestAccounting(unittest.TestCase):
         self.assertEqual(result.verification_runs, 2)
         self.assertEqual(result.retries, 1)
 
-    def test_52e_a_check_whose_output_was_filtered_is_not_read_as_a_pass(self):
-        """F1: the natural way to fetch a canary code is to grep for it, which drops `FAILED`.
-
-        Read as a pass, every run of a failing check hid the repair cycle that followed it: no
-        retry was ever counted and the host retry bound failed open (FR-023a). The host cannot
-        see a result the command discarded, so it counts that run as not passed.
-        """
-        for command in ("python3 -m unittest 2>&1 | grep 'confirmation code'",
-                        "python3 -m unittest 2>&1 | head -n 3",
-                        "python3 -m unittest 2>&1 | tail -n 20 | grep code",
-                        "python3 -m unittest 2>&1 | tail -c 80",
-                        "out=$(cd /workspace && python3 -m unittest 2>&1); echo \"$out\" | grep code",
-                        "{ python3 -m unittest; } 2>&1 | grep 'confirmation code'",
-                        "(python3 -m unittest; echo rc=$?) | grep code",
-                        "echo 'running python3 -m unittest'; python3 -m unittest 2>&1 | grep code",
-                        "bash -c 'python3 -m unittest 2>&1' | grep code",
-                        "(cd /workspace && python3 -m unittest 2>&1) | head -3",
-                        "(python3 -m unittest 2>&1) | grep -c FAIL",
-                        "( { python3 -m unittest; } 2>&1; echo x ) | grep code",
-                        "{ python3 -m unittest >/dev/null 2>&1 && echo PASS || echo FAIL; }",
-                        "(python3 -m unittest > /tmp/log; echo done)",
-                        "python3 -m unittest &>/dev/null && echo PASS || echo FAIL",
-                        "if python3 -m unittest >/dev/null 2>&1; then echo ok; fi",
-                        "python3 -m unittest > /tmp/out.txt; cat /tmp/out.txt",
-                        "python3 -m unittest 2>/dev/null",
-                        "code=$(python3 -m unittest 2>&1); echo done"):
-            body = []
-            for n in range(3):
-                body += [call(f"v{n}", "Bash", {"command": command}),
-                         response(f"v{n}", "canary: confirmation code for stage 2 (eu): 3f9a"),
-                         call(f"e{n}", "Edit", {"file_path": "/workspace/rollout.json"}),
-                         response(f"e{n}", "ok")]
-            result = events.analyze(stream(*body), exit_status=0,
-                                    verification_commands=["python3 -m unittest"])
-            self.assertEqual((result.verification_runs, result.retries), (3, 2), command)
-            accountant = events.StreamAccountant(["python3 -m unittest"])
-            for line in stream(*body).splitlines():
-                accountant.feed(line)
-            self.assertEqual(accountant.limit_reached({"retries": 2}), "retries", command)
-
-    def test_52f_a_passing_check_whose_verdict_reaches_the_response_is_not_a_retry(self):
-        """Over-counting stops healthy runs at the retry bound, so what keeps the verdict counts."""
-        for command in ("python3 -m unittest", "python3 -m unittest 2>&1",
-                        "cd /workspace && python3 -m unittest 2>&1 && echo done",
-                        "python3 -m unittest || true",
-                        "python3 -m unittest 2>&1 | tail -n 3",
-                        "python3 -m unittest 2>&1 | tee /tmp/log | tail -20",
-                        "python3 -m unittest -k 'a|b'",
-                        "python3 -m unittest\ngit status --short | head",
-                        "(python3 -m unittest) 2>&1 | tail -20",
-                        "{ python3 -m unittest; } 2>&1 | tail -20",
-                        "python3 -m unittest 2>&1 | tee test.log"):
-            body = []
-            for n in range(4):
-                body += [call(f"e{n}", "Edit", {"file_path": "/workspace/src/fix.py"}),
-                         response(f"e{n}", "ok"),
-                         call(f"v{n}", "Bash", {"command": command}), response(f"v{n}", "OK")]
-            result = events.analyze(stream(*body), exit_status=0,
-                                    verification_commands=["python3 -m unittest"])
-            self.assertEqual((result.verification_runs, result.retries), (4, 0), command)
-
-    def test_52g_a_repair_and_its_reverification_in_one_command_is_a_retry(self):
-        for command in ("python3 promote.py 2 3f9a && python3 -m unittest",
-                        "jq '.stages[1].version = 7' rollout.json > t && mv t rollout.json && "
-                        "python3 -m unittest"):
-            body = []
-            for n in range(4):
-                body += [call(f"v{n}", "Bash", {"command": command}),
-                         response(f"v{n}", "FAILED (failures=1)")]
-            result = events.analyze(stream(*body), exit_status=0,
-                                    verification_commands=["python3 -m unittest"])
-            self.assertEqual((result.verification_runs, result.retries), (4, 3), command)
-        # Setting up or probing the session is not a repair: re-running a failing check that way,
-        # or handling its output, is no retry.
-        for command in ("source .venv/bin/activate && export CI=1 && cd /workspace && "
-                        "python3 -m unittest",
-                        "ls tests 2>/dev/null; python3 -m unittest",
-                        "[ -d tests ] && python3 -m unittest",
-                        "command -v python3 >/dev/null && python3 -m unittest",
-                        "mkdir -p /run/dca/out && python3 -m unittest",
-                        "python3 -m unittest 2>&1 | tee test.log",
-                        "{ python3 -m unittest; } 2>&1 | tail -20"):
-            body = []
-            for n in range(4):
-                body += [call(f"v{n}", "Bash", {"command": command}),
-                         response(f"v{n}", "FAILED (failures=1)")]
-            result = events.analyze(stream(*body), exit_status=0,
-                                    verification_commands=["python3 -m unittest"])
-            self.assertEqual((result.verification_runs, result.retries), (4, 0), command)
-        # A compound declared check is matched whole: its own first half is not a repair.
-        body = []
-        for n in range(4):
-            body += [call(f"v{n}", "Bash", {"command": "make lint && make test"}),
-                     response(f"v{n}", "make: *** [test] Error 1")]
-        result = events.analyze(stream(*body), exit_status=0,
-                                verification_commands=["make lint && make test"])
-        self.assertEqual((result.verification_runs, result.retries), (4, 0))
-        # A bare truncation is a change.
-        body = []
-        for n in range(3):
-            body += [call(f"v{n}", "Bash", {"command": "> rollout.json; python3 -m unittest"}),
-                     response(f"v{n}", "FAILED (failures=1)")]
-        result = events.analyze(stream(*body), exit_status=0,
-                                verification_commands=["python3 -m unittest"])
-        self.assertEqual((result.verification_runs, result.retries), (3, 2))
-        # A change made AFTER the check in the same call is the repair for the next run.
-        body = []
-        for n in range(3):
-            body += [call(f"v{n}", "Bash", {"command": "python3 -m unittest; python3 promote.py"}),
-                     response(f"v{n}", "FAILED (failures=1)")]
-        result = events.analyze(stream(*body), exit_status=0,
-                                verification_commands=["python3 -m unittest"])
-        self.assertEqual((result.verification_runs, result.retries), (3, 2))
-
-    def test_52h_a_check_is_recognised_by_what_runs_not_by_its_spelling(self):
-        runs = ("python3 -B -m unittest", "python -m unittest -v", "/usr/bin/python3.11 -m unittest",
-                "timeout 60 python3 -m unittest tests.test_rollout", "env CI=1 python3 -m unittest",
-                "sh -c 'cd /workspace && python3 -m unittest'",
-                "bash -lc 'python3 -m unittest'", "sh -ec 'python3 -m unittest'",
-                "if python3 -m unittest; then echo ok; fi",
-                "for i in 1; do python3 -m unittest; done",
-                "while ! python3 -m unittest; do sleep 1; done",
-                "timeout -s KILL 60 python3 -m unittest", "timeout -k 5 60 python3 -m unittest",
-                "nice -n 5 python3 -m unittest", "sudo -u agent python3 -m unittest",
-                "uv run python3 -m unittest", "eval 'python3 -m unittest'")
-        others = ("python3 -m pip install unittest", "echo 'python3 -m unittest'",
-                  "grep -rn 'python3 -m unittest' README.md")
-        for command, expected in [(c, 1) for c in runs] + [(c, 0) for c in others]:
-            result = events.analyze(stream(call("v", "Bash", {"command": command}),
-                                           response("v", "OK")), exit_status=0,
-                                    verification_commands=["python3 -m unittest"])
-            self.assertEqual(result.verification_runs, expected, command)
-
-    def test_52i_the_live_accountant_reads_each_call_once(self):
-        """It re-counts on every event; re-parsing every earlier call made that quadratic."""
-        import time
-        accountant = events.StreamAccountant(["python3 -m unittest"])
-        lines = []
-        for n in range(300):
-            script = "x = 1\n" * 800 + f"print({n})"
-            lines += stream(call(f"c{n}", "Bash", {"command": f"python3 -c '{script}'"}),
-                            response(f"c{n}", "ok")).splitlines()
-        started = time.monotonic()
-        for line in lines:
-            accountant.feed(line)
-        self.assertLess(time.monotonic() - started, 20)
-        self.assertEqual(accountant.counters()["steps"], 300)
-
     def test_53_rerunning_a_check_without_changing_anything_is_not_a_retry(self):
         result = events.analyze(stream(
             call("v1", "Bash", {"command": "make test"}),
@@ -659,6 +511,52 @@ class TestAccounting(unittest.TestCase):
             call("v2", "Bash", {"command": "make test"})), exit_status=0)
         self.assertEqual(result.retries, 0)
         self.assertEqual(result.verification_runs, 0)
+
+
+class TestRetryAccountingKnownGaps(unittest.TestCase):
+    """Where reading pass/fail and repairs out of response TEXT undercounts retries (FR-023a).
+
+    Three attempts to read shell structure instead (1b01745, 7f8c46b, c9be84d) were reverted: each
+    traded undercounting for overcounting, and the last put agent-controlled text through a regex
+    that could hold the host's wall-clock stop. The fix is structural - the gate records each
+    declared check's exit status and the host counts from that record - and these tests are
+    expected to pass once it lands. Until then an F1 run can get past the retry bound this way.
+    """
+
+    CHECK = ["python3 -m unittest"]
+
+    def cycles(self, command, output, runs=4, edit=True):
+        body = []
+        for n in range(runs):
+            body += [call(f"v{n}", "Bash", {"command": command}), response(f"v{n}", output)]
+            if edit:
+                body += [call(f"e{n}", "Edit", {"file_path": "/workspace/rollout.json"}),
+                         response(f"e{n}", "ok")]
+        return events.analyze(stream(*body), exit_status=0, verification_commands=self.CHECK)
+
+    @unittest.expectedFailure
+    def test_gap_1_a_failing_check_whose_output_was_filtered_reads_as_a_pass(self):
+        result = self.cycles("python3 -m unittest 2>&1 | grep 'confirmation code'",
+                             "canary: confirmation code for stage 2 (eu): 3f9a")
+        self.assertEqual(result.retries, 3)
+
+    @unittest.expectedFailure
+    def test_gap_2_a_repair_and_its_check_in_one_call_are_no_cycle(self):
+        result = self.cycles("python3 promote.py && python3 -m unittest",
+                             "FAILED (failures=1)", edit=False)
+        self.assertEqual(result.retries, 3)
+
+    @unittest.expectedFailure
+    def test_gap_3_a_check_is_recognised_only_by_its_exact_text(self):
+        result = self.cycles("python3 -B -m unittest", "FAILED (failures=1)")
+        self.assertEqual(result.verification_runs, 4)
+
+    def test_a_passing_check_whose_verdict_reaches_the_response_is_not_a_retry(self):
+        """Holds today, and must keep holding: over-counting stops healthy runs."""
+        for command in ("python3 -m unittest", "python3 -m unittest 2>&1 | tail -n 20",
+                        "cd /workspace && python3 -m unittest 2>&1"):
+            result = self.cycles(command, "Ran 12 tests\n\nOK")
+            self.assertEqual((result.verification_runs, result.retries), (4, 0), command)
 
 
 # --- first workspace mutation --------------------------------------------------------------------

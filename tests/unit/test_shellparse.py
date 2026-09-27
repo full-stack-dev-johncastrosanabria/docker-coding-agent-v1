@@ -62,13 +62,6 @@ class Segmentation(unittest.TestCase):
         parsed = shellparse.parse("pytest -q tests/unit")
         self.assertEqual(parsed.segments[0].argv, ["pytest", "-q", "tests/unit"])
 
-    def test_07_the_separator_after_each_segment_can_be_collected(self):
-        separators = []
-        segments, _ = shellparse._split_top_level("a 2>&1 | b; c -k 'x|y' && d;\n", separators)
-        self.assertEqual(len(segments), 4)
-        self.assertEqual(separators, ["|", ";", "&&", ";"])
-        self.assertEqual(shellparse._split_top_level("a | b")[0], ["a ", " b"])
-
 
 class Quoting(unittest.TestCase):
     def test_07_separators_inside_quotes_do_not_split(self):

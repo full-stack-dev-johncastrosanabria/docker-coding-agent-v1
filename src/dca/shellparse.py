@@ -121,15 +121,13 @@ def _heredoc_delimiter(line):
     return None
 
 
-def _split_top_level(text, separators=None):
+def _split_top_level(text):
     """Split into segment strings at unquoted separators, collecting substitutions separately.
 
     Returns (segment strings, substitution payloads). A substitution's payload is returned rather
-    than inlined so the caller can parse it recursively: it is a command in its own right. When
-    `separators` is a list, it receives the separator that ends each returned segment ("" for the
-    last), so a caller can tell a pipe from a sequence.
+    than inlined so the caller can parse it recursively: it is a command in its own right.
     """
-    segments, subs, ends = [], [], []
+    segments, subs = [], []
     current = []
     position = 0
     in_single = in_double = False
@@ -196,7 +194,6 @@ def _split_top_level(text, separators=None):
             matched = None
         if matched:
             segments.append("".join(current))
-            ends.append(matched)
             current = []
             position += len(matched)
             continue
@@ -207,11 +204,7 @@ def _split_top_level(text, separators=None):
     if in_single or in_double:
         raise _Refuse("unbalanced quote")
     segments.append("".join(current))
-    ends.append("")
-    kept = [(segment, end) for segment, end in zip(segments, ends) if segment.strip()]
-    if separators is not None:
-        separators.extend(end for _, end in kept)
-    return [segment for segment, _ in kept], subs
+    return [s for s in segments if s.strip()], subs
 
 
 def _read_balanced(text, start, opener, closer):
