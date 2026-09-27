@@ -203,6 +203,8 @@ STUB
     python3 gates/G1a/record.py --preflight "$OBS" "$WORK" || stop
 
     load_policy || { record policy_load_failed true; stop; }
+    BASE_REF=$(python3 gates/G1a/record.py --base-ref) || stop
+    record requested_base "$BASE_REF"
     record policy_allow "$POLICY_ALLOW"
     record policy_deny "$POLICY_DENY"
     record policy_login_allow "$POLICY_LOGIN_ALLOW"
@@ -214,7 +216,8 @@ STUB
     trap cleanup EXIT INT TERM
 
     # --- step 1: the login sandbox ----------------------------------------------------------------
-    run_sbx create claude --name "$LOGIN_SANDBOX" --skills off --kit "./$KIT" \
+    run_sbx create claude --template "$BASE_REF" --name "$LOGIN_SANDBOX" \
+        --skills off --kit "./$KIT" \
         >"$WORK/create-$LOGIN_SANDBOX.txt" 2>&1
     create_status=$?
     record "create_${LOGIN_SANDBOX}_exit" "$create_status"
@@ -223,8 +226,8 @@ STUB
 
     run_sbx template ls --json >"$WORK/templates.json" 2>"$WORK/templates.err"
     record templates_exit "$?"
-    record sbx_resolved_base "$(awk '/resolved|image/ && /sandbox-templates/ {print; exit}' \
-        "$WORK/create-$LOGIN_SANDBOX.txt" | sed 's/.*\(docker\/sandbox-templates:[a-z0-9.-]*\).*/\1/')"
+    record sbx_resolved_base "$(awk '$1 == "image" {print $2; exit}' \
+        "$WORK/create-$LOGIN_SANDBOX.txt")"
 
     apply_policy "$LOGIN_SANDBOX" login
     record policy_rules_exit "$?"
@@ -248,8 +251,10 @@ STUB
 
 check)
     [ -f "$OBS" ] || { echo "run 'sh gates/G1a/run.sh login' first" >&2; exit 1; }
-    capture_auth "$LOGIN_SANDBOX"
-    if python3 gates/G1a/record.py --proves-pro "$WORK/auth-$LOGIN_SANDBOX.json"; then
+    # A check may overlap the start of `run`. Keep its projection separate so it cannot
+    # truncate the step-1 evidence while `run` reads it after removing the login VM.
+    capture_auth "$LOGIN_SANDBOX" "$LOGIN_SANDBOX-check"
+    if python3 gates/G1a/record.py --proves-pro "$WORK/auth-$LOGIN_SANDBOX-check.json"; then
         echo "G1a: $LOGIN_SANDBOX proves the PRO subscription. Next: sh gates/G1a/run.sh run"
     else
         echo "G1a: $LOGIN_SANDBOX still does not prove the PRO subscription." >&2
@@ -260,6 +265,7 @@ check)
 run)
     [ -f "$OBS" ] || { echo "run 'sh gates/G1a/run.sh login' first" >&2; exit 1; }
     load_policy || { record policy_load_failed true; stop; }
+    BASE_REF=$(python3 gates/G1a/record.py --base-ref) || stop
     trap cleanup EXIT INT TERM
 
     # --- step 1: the trivial non-repository task, in the authenticated login sandbox --------------
@@ -276,12 +282,15 @@ run)
     rm -f "$WORK/created-$LOGIN_SANDBOX"
 
     # --- step 2: a completely fresh sandbox, no /login, no TTY, no API key -------------------------
-    run_sbx create claude --name "$FRESH_SANDBOX" --skills off --kit "./$KIT" \
+    run_sbx create claude --template "$BASE_REF" --name "$FRESH_SANDBOX" \
+        --skills off --kit "./$KIT" \
         >"$WORK/create-$FRESH_SANDBOX.txt" 2>&1
     create_status=$?
     record "create_${FRESH_SANDBOX}_exit" "$create_status"
     [ "$create_status" -eq 0 ] && : >"$WORK/created-$FRESH_SANDBOX"
     [ "$create_status" -eq 0 ] || stop
+    record sbx_resolved_base_fresh "$(awk '$1 == "image" {print $2; exit}' \
+        "$WORK/create-$FRESH_SANDBOX.txt")"
 
     apply_policy "$FRESH_SANDBOX" trusted
     record "policy_rules_fresh_exit" "$?"

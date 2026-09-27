@@ -850,12 +850,14 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **M6**: a behavioral change with a review record.
 
   All have `expected_classification: planned`. Depends: T074, T077. Evidence: oracle tests pass. (SC-010)
-- [ ] T083 [US2] **Validate** Run `dca bench --fixtures 'M1,M2,M4,M6'` on each trusted-eligible backend. Check:
+- [x] T083 [US2] **Validate** Run `dca bench --fixtures 'M1,M2,M4,M6'` on each trusted-eligible backend. Check:
   - plan before the first workspace mutation, and the **FR-001 ordering for planned fixtures** (from the event stream);
   - M2's escalation record, if the run escalated (FR-009 is conditional; a run correctly classified planned up front records no escalation). FR-009's escalation **trigger** is not host-measurable: the host adopts the classification from the agent's own report (`launcher._classification_of`) and never derives it, so the acceptance suite covers FR-009 as the planned outcome plus the consistency of any recorded escalation, and not as proof that newly discovered work drove a transition;
   - review present, with fingerprints identical.
 
   Depends: T073, T062, T076, T082. Evidence: `benchmark/results/<date>-<backend>-US2.json`.
+
+  **Done 2026-09-27:** Claude 4/4 and Codex 4/4 passed. Each event stream puts the Context Record and plan before the first effective workspace mutation; each planned run has an identical review fingerprint. M2 was classified planned in its initial Context Record on both backends, so no escalation was required. Evidence: `benchmark/results/2026-09-27-claude-US2.json` and `benchmark/results/2026-09-27-codex-US2.json`.
 
 ---
 

@@ -126,10 +126,16 @@ class G1aRecorder(unittest.TestCase):
         self._write("governance-after.json", governance)
 
         image, digest = self.common.claude_base(self.versions)
+        pinned_ref = f"{image}@{digest}"
         repository, _, tag = image.rpartition(":")
+        # The mutable tag may move; both create commands must use the immutable digest instead.
         self._write("templates.json", {"images": [
             {"repository": f"docker.io/{repository}", "tag": tag,
-             "id": digest.removeprefix("sha256:")[:12]}]})
+             "id": "549730947ed8"}]})
+        for sandbox in (LOGIN, FRESH):
+            self._write(f"create-{sandbox}.txt",
+                        f"── RESOLVE SETUP\n     image      {pinned_ref}\n"
+                        "   ✓ configuration resolved\n")
 
         # Step 1 proves the plan; the fresh sandbox reports null on the inherited path.
         self._write(f"auth-{LOGIN}.json", auth_doc(plan="pro"))
@@ -153,7 +159,9 @@ class G1aRecorder(unittest.TestCase):
             "pf_policy_exit": "0", "pf_ls_exit": "0",
             "governance_before_exit": "1", "governance_after_exit": "1",
             "ls_after_exit": "0", "policy_after_exit": "0", "templates_exit": "0",
-            "sbx_resolved_base": self.common.claude_base(self.versions)[0],
+            "requested_base": self.record_module.pinned_base_reference(self.versions),
+            "sbx_resolved_base": self.record_module.pinned_base_reference(self.versions),
+            "sbx_resolved_base_fresh": self.record_module.pinned_base_reference(self.versions),
             "policy_allow": ",".join(self.allow), "policy_deny": ",".join(self.deny),
             "policy_login_hosts": ",".join(self.login_hosts),
             "policy_rules_exit": "0", "policy_rules_fresh_exit": "0",
@@ -291,8 +299,18 @@ class G1aRecorder(unittest.TestCase):
         self.assertEqual(results["G1a.step2"], "NOT-RUN")
 
     def test_15_a_substituted_base_fails(self):
+        self._write(f"create-{LOGIN}.txt", "image      docker/other:latest\n")
         self.assertEqual(
-            self._results(self._capture(sbx_resolved_base="docker/other:latest"))["G1a.base"],
+            self._results(self._capture())["G1a.base"],
+            "FAIL")
+
+    def test_15_b_fresh_sandbox_must_use_the_pinned_digest(self):
+        self._write(f"create-{FRESH}.txt", "image      docker/other:latest\n")
+        self.assertEqual(self._results(self._capture())["G1a.base"], "FAIL")
+
+    def test_15_c_a_changed_creation_request_fails_even_with_matching_logs(self):
+        self.assertEqual(
+            self._results(self._capture(requested_base="docker/other:latest"))["G1a.base"],
             "FAIL")
 
     def test_16_a_policy_that_is_not_the_accepted_g4_one_fails(self):
