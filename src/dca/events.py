@@ -515,32 +515,167 @@ def response_outcome(text):
     return "pass"
 
 
-#: What may follow a check in the same pipeline without hiding its output from the response.
-_KEEPS_OUTPUT = re.compile(r"\s*2>&1")
-#: Where the pipeline that runs the check ends: the next command no longer touches its output.
-_PIPELINE_END = re.compile(r";|&&|\|\||\n")
-#: A pipe or a redirection of stdout or stderr: the check's own output did not reach the response.
-_DIVERTS_OUTPUT = re.compile(r"\||>")
-#: Openers that capture the check's output instead of printing it.
-_CAPTURES_OUTPUT = ("$(", "`", "<(")
+#: Pipeline stages that pass the END of a check's output through unchanged. Test runners print their
+#: verdict last, so `| tail -n 20` still shows a failure; `| grep`, `| head` or `| wc` do not.
+_KEEPS_VERDICT = frozenset({"cat", "tee", "tail"})
+#: `tail` options that no longer keep the last LINES: bytes, or following a file forever.
+_TAIL_LOSES_VERDICT = re.compile(r"^-(?:-bytes|-follow|[A-Za-z0-9]*[cfF])")
+#: Words that open a group without running anything, and prefixes that run the next words.
+_GROUP_WORDS = frozenset({"{", "}", "!"})
+_TIMEOUT = frozenset({"timeout", "gtimeout"})
+#: Builtins that set up the shell session a check runs in and change no file.
+_SESSION_BUILTINS = frozenset({"source", ".", "export", "set", "unset", "pushd", "popd", "ulimit",
+                               "umask", "alias", "sleep", "wait"})
 
 
-def _output_diverted(command, needle):
-    """True when `command` runs the check `needle` but its output never reached the response.
+def _program_key(word):
+    """`/usr/bin/python3.11`, `python3` and `python` all name the same check runner."""
+    base = word.rsplit("/", 1)[-1]
+    return re.sub(r"^(python)\d*(?:\.\d+)*$", r"\1", base)
 
-    `response_outcome` can only read what the command printed. A check piped through `grep` or
-    `tail`, redirected to a file or captured into a variable prints nothing that says it failed, and
-    reading that silence as a pass hid every repair cycle after it, so the retry limit failed open
-    (FR-023a). Such a run is `unknown`: counted as not passed, the bias this module already chose.
-    """
-    haystack = _normalize_command(command)
-    start = haystack.find(needle)
-    if start < 0:
+
+def _words(segment):
+    """The words a segment runs: substitutions, redirections, group brackets and prefixes removed."""
+    words = [w for w in shellparse._tokenize(segment) if w not in _GROUP_WORDS]
+    words = [w.lstrip("(").rstrip(")") if i in (0, len(words) - 1) else w
+             for i, w in enumerate(words)]
+    _, words = shellparse._strip_prefixes([w for w in words if w])
+    if words and _program_key(words[0]) in _TIMEOUT:
+        index = 1
+        while index < len(words) and words[index].startswith("-"):
+            index += 1
+        words = words[index + 1:]
+    return words
+
+
+def _check_signature(command):
+    """The words that identify a declared check: its last segment (`cd x && make test` -> make test)."""
+    try:
+        segments, _ = shellparse._split_top_level(shellparse._strip_heredoc_bodies(command))
+    except shellparse._Refuse:
+        return None
+    words = _words(segments[-1]) if segments else []
+    return words or None
+
+
+def _runs_check(words, signature):
+    """Does this segment run the check? Same runner, and the check's arguments in one run that only
+    options precede: `python3 -B -m unittest -v` runs `python3 -m unittest`, `pip install unittest`
+    does not."""
+    if not words or _program_key(words[0]) != _program_key(signature[0]):
         return False
-    if haystack[:start].rstrip().endswith(_CAPTURES_OUTPUT):
+    args, wanted = words[1:], signature[1:]
+    return any(args[i:i + len(wanted)] == wanted and all(a.startswith("-") for a in args[:i])
+               for i in range(len(args) - len(wanted) + 1))
+
+
+#: A redirection written as its own word (`2>&1`, `>`, `>out`): never a group bracket.
+_REDIRECTION_WORD = re.compile(r"^(?:\d+|&)?[<>]")
+
+
+def _brackets(segment):
+    """(opens, closes): the group brackets a segment starts with and ends with."""
+    words, skip = [], False
+    for word in segment.split():
+        if skip:
+            skip = False
+        elif _REDIRECTION_WORD.match(word):
+            skip = word.rstrip("&0123456789") in (">", ">>", "<", "&>", "2>", "1>")
+        else:
+            words.append(word)
+    if not words:
+        return 0, 0
+    first, last = words[0], words[-1]
+    opens = (first == "{") + len(first) - len(first.lstrip("("))
+    closes = (last == "}") + len(last) - len(last.rstrip(")"))
+    return opens, closes
+
+
+def _group_ends(segments):
+    """For each segment, the index of the segment that closes the outermost group around it.
+
+    `{ make test; } 2>&1 | grep x` and `(make test; echo $?) | grep x` divert the output of every
+    command in the group, so a check inside one is judged where the group ends.
+    """
+    ends, open_at, depth = list(range(len(segments))), None, 0
+    for index, segment in enumerate(segments):
+        opens, closes = _brackets(segment)
+        if opens and depth == 0:
+            open_at = index
+        depth = max(depth + opens - closes, 0)
+        if open_at is not None and depth == 0:
+            for inner in range(open_at, index + 1):
+                ends[inner] = index
+            open_at = None
+    if open_at is not None:     # unbalanced: judge the rest where the command ends
+        for inner in range(open_at, len(segments)):
+            ends[inner] = len(segments) - 1
+    return ends
+
+
+def _diverts(segments, separators, index):
+    """True when the output of segment `index` (judged where its group ends) never reaches the
+    response intact: redirected to a file or /dev/null, or piped through a stage that can drop the
+    verdict. `2>&1` and `>&2` only merge the streams, which the response shows anyway."""
+    if shellparse._OUTPUT_REDIRECTION.search(segments[index]):
         return True
-    tail = _KEEPS_OUTPUT.sub("", haystack[start + len(needle):])
-    return bool(_DIVERTS_OUTPUT.search(_PIPELINE_END.split(tail, 1)[0]))
+    while separators[index] == "|" and index + 1 < len(segments):
+        index += 1
+        words = _words(segments[index])
+        program = words[0].rsplit("/", 1)[-1] if words else None
+        if program not in _KEEPS_VERDICT or shellparse._OUTPUT_REDIRECTION.search(segments[index]):
+            return True
+        if program == "tail" and any(_TAIL_LOSES_VERDICT.match(w) for w in words[1:]):
+            return True
+    return False
+
+
+def _shell_steps(command, signatures):
+    """What a shell command does, in order: `("mutate",)` and `("check", key, diverted)` steps.
+
+    None when the command cannot be read, and the caller falls back to the whole-call view. Reading
+    each segment is what lets one call be both the repair and the re-verification
+    (`jq ... > t && mv t rollout.json && python3 -m unittest`), and lets a check be found wherever
+    the shell runs it - behind `cd`, inside a group or `sh -c`, or captured by `$( )` - without
+    mistaking `echo 'python3 -m unittest'` for a run of it.
+    """
+    steps = []
+    try:
+        _collect_steps(command, signatures, False, 0, steps)
+    except (shellparse._Refuse, RecursionError):
+        return None
+    return steps
+
+
+def _collect_steps(text, signatures, captured, depth, steps):
+    if depth > shellparse.MAX_DEPTH:
+        raise shellparse._Refuse("nesting too deep")
+    separators = []
+    segments, subs = shellparse._split_top_level(shellparse._strip_heredoc_bodies(text),
+                                                 separators)
+    ends = _group_ends(segments)
+    pending = list(subs)
+    for index, segment in enumerate(segments):
+        # A substitution runs before the command it is part of, and its output is captured.
+        for _ in range(segment.count("\x00SUB\x00")):
+            if pending:
+                _collect_steps(pending.pop(0), signatures, True, depth + 1, steps)
+        words = _words(segment)
+        if not words:
+            continue
+        diverted = captured or _diverts(segments, separators, ends[index])
+        key = next((key for key, signature in signatures if _runs_check(words, signature)), None)
+        if key is not None:
+            steps.append(("check", key, diverted))
+            continue
+        program = words[0].rsplit("/", 1)[-1]
+        if program in shellparse.SHELLS and "-c" in words[1:-1]:
+            _collect_steps(words[words.index("-c", 1) + 1], signatures, diverted, depth + 1, steps)
+            continue
+        if shellparse._OUTPUT_REDIRECTION.search(segment) or (
+                program not in _SESSION_BUILTINS and not shellparse._inspects(
+                    shellparse.Segment(words))):
+            steps.append(("mutate",))
 
 
 def _normalize_command(text):
@@ -926,36 +1061,48 @@ def _account_ordering(result, scratch_dir):
 def _account_retries(result, verification_commands):
     """Retries = repair/re-verify cycles (data-model.md "counters").
 
-    One retry is a workspace change followed by re-execution of a required check that had not
-    passed. A re-run with no intervening mutation is not a repair cycle - it is the same check
-    asked twice - and a re-run of a check that already passed is not a repair either.
+    One retry is a workspace change followed by re-execution of a required check that had not been
+    SEEN to pass. A re-run with no intervening change is the same check asked twice, and a re-run
+    of a check that was seen to pass is not a repair. A run whose output the command diverted
+    (`| grep`, `> file`, `$( )`) was not seen at all, so it counts as not passed: the retry bound
+    fails closed (FR-023a). A shell command is read segment by segment, so a change and a check in
+    one call count in the order they run.
     """
     commands = [c for c in (verification_commands or []) if isinstance(c, str) and c.strip()]
+    signatures = [(_normalize_command(c), sig) for c in commands
+                  for sig in [_check_signature(c)] if sig]
     if not commands:
         return
-    last_run = {}       # command -> (order, outcome)
-    mutated_since = {}  # command -> bool
+    last_run = {}       # check -> outcome of its last run
+    mutated_since = {}  # check -> bool
+
+    def mutate():
+        for key in mutated_since:
+            mutated_since[key] = True
+
     for record in result.tool_calls:
         if not record.dispatched:
             continue
-        matched = _matches_check(record, commands)
-        if matched is None:
+        steps = _shell_steps(record.command, signatures) if record.command else None
+        if steps is None:
+            matched = _matches_check(record, commands)
+            steps = [("check", matched, False)] if matched is not None else []
+        if not any(step[0] == "check" for step in steps):
             # Only a change that is NOT itself a declared check can be the "repair" half of a
-            # cycle. Running the check counts as a workspace mutation elsewhere (a build can
-            # rewrite the tree), but treating it as the repair would make every second run of a
-            # failing check look like a repair that never happened.
+            # cycle; the call's own classification decides whether it changed anything.
             if record.mutation:
-                for command in list(mutated_since):
-                    mutated_since[command] = True
+                mutate()
             continue
-        result.verification_runs += 1
-        previous = last_run.get(matched)
-        if previous is not None and mutated_since.get(matched) and previous[1] != "pass":
-            result.retries += 1
-        outcome = ("unknown" if _output_diverted(record.command, matched)
-                   else response_outcome(record.response))
-        last_run[matched] = (record.order, outcome)
-        mutated_since[matched] = False
+        for step in steps:
+            if step[0] == "mutate":
+                mutate()
+                continue
+            _, key, diverted = step
+            result.verification_runs += 1
+            if key in last_run and mutated_since.get(key) and last_run[key] != "pass":
+                result.retries += 1
+            last_run[key] = "unknown" if diverted else response_outcome(record.response)
+            mutated_since[key] = False
 
 
 def _classify(result, structural, fragment, saw_terminal, exit_status, host_stop, ceiling):

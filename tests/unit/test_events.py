@@ -480,7 +480,14 @@ class TestAccounting(unittest.TestCase):
         see a result the command discarded, so it counts that run as not passed.
         """
         for command in ("python3 -m unittest 2>&1 | grep 'confirmation code'",
-                        "python3 -m unittest 2>&1 | tail -n 2",
+                        "python3 -m unittest 2>&1 | head -n 3",
+                        "python3 -m unittest 2>&1 | tail -n 20 | grep code",
+                        "python3 -m unittest 2>&1 | tail -c 80",
+                        "out=$(cd /workspace && python3 -m unittest 2>&1); echo \"$out\" | grep code",
+                        "{ python3 -m unittest; } 2>&1 | grep 'confirmation code'",
+                        "(python3 -m unittest; echo rc=$?) | grep code",
+                        "echo 'running python3 -m unittest'; python3 -m unittest 2>&1 | grep code",
+                        "bash -c 'python3 -m unittest 2>&1' | grep code",
                         "python3 -m unittest > /tmp/out.txt; cat /tmp/out.txt",
                         "python3 -m unittest 2>/dev/null",
                         "code=$(python3 -m unittest 2>&1); echo done"):
@@ -498,17 +505,64 @@ class TestAccounting(unittest.TestCase):
                 accountant.feed(line)
             self.assertEqual(accountant.limit_reached({"retries": 2}), "retries", command)
 
-    def test_52f_output_the_check_still_prints_in_full_is_read_as_before(self):
+    def test_52f_a_passing_check_whose_verdict_reaches_the_response_is_not_a_retry(self):
+        """Over-counting stops healthy runs at the retry bound, so what keeps the verdict counts."""
         for command in ("python3 -m unittest", "python3 -m unittest 2>&1",
                         "cd /workspace && python3 -m unittest 2>&1 && echo done",
-                        "python3 -m unittest || true"):
-            result = events.analyze(stream(
-                call("v1", "Bash", {"command": command}), response("v1", "OK"),
-                call("e1", "Edit", {"file_path": "/workspace/rollout.json"}),
-                response("e1", "ok"),
-                call("v2", "Bash", {"command": command}), response("v2", "OK")),
-                exit_status=0, verification_commands=["python3 -m unittest"])
-            self.assertEqual(result.retries, 0, command)
+                        "python3 -m unittest || true",
+                        "python3 -m unittest 2>&1 | tail -n 3",
+                        "python3 -m unittest 2>&1 | tee /tmp/log | tail -20",
+                        "python3 -m unittest -k 'a|b'",
+                        "python3 -m unittest\ngit status --short | head"):
+            body = []
+            for n in range(4):
+                body += [call(f"e{n}", "Edit", {"file_path": "/workspace/src/fix.py"}),
+                         response(f"e{n}", "ok"),
+                         call(f"v{n}", "Bash", {"command": command}), response(f"v{n}", "OK")]
+            result = events.analyze(stream(*body), exit_status=0,
+                                    verification_commands=["python3 -m unittest"])
+            self.assertEqual((result.verification_runs, result.retries), (4, 0), command)
+
+    def test_52g_a_repair_and_its_reverification_in_one_command_is_a_retry(self):
+        for command in ("python3 promote.py 2 3f9a && python3 -m unittest",
+                        "jq '.stages[1].version = 7' rollout.json > t && mv t rollout.json && "
+                        "python3 -m unittest"):
+            body = []
+            for n in range(4):
+                body += [call(f"v{n}", "Bash", {"command": command}),
+                         response(f"v{n}", "FAILED (failures=1)")]
+            result = events.analyze(stream(*body), exit_status=0,
+                                    verification_commands=["python3 -m unittest"])
+            self.assertEqual((result.verification_runs, result.retries), (4, 3), command)
+        # Setting up the session is not a repair: re-running a failing check that way is no retry.
+        body = []
+        for n in range(3):
+            body += [call(f"v{n}", "Bash", {"command": "source .venv/bin/activate && export CI=1 "
+                                                       "&& cd /workspace && python3 -m unittest"}),
+                     response(f"v{n}", "FAILED (failures=1)")]
+        result = events.analyze(stream(*body), exit_status=0,
+                                verification_commands=["python3 -m unittest"])
+        self.assertEqual((result.verification_runs, result.retries), (3, 0))
+        # A change made AFTER the check in the same call is the repair for the next run.
+        body = []
+        for n in range(3):
+            body += [call(f"v{n}", "Bash", {"command": "python3 -m unittest; python3 promote.py"}),
+                     response(f"v{n}", "FAILED (failures=1)")]
+        result = events.analyze(stream(*body), exit_status=0,
+                                verification_commands=["python3 -m unittest"])
+        self.assertEqual((result.verification_runs, result.retries), (3, 2))
+
+    def test_52h_a_check_is_recognised_by_what_runs_not_by_its_spelling(self):
+        runs = ("python3 -B -m unittest", "python -m unittest -v", "/usr/bin/python3.11 -m unittest",
+                "timeout 60 python3 -m unittest tests.test_rollout", "env CI=1 python3 -m unittest",
+                "sh -c 'cd /workspace && python3 -m unittest'")
+        others = ("python3 -m pip install unittest", "echo 'python3 -m unittest'",
+                  "grep -rn 'python3 -m unittest' README.md")
+        for command, expected in [(c, 1) for c in runs] + [(c, 0) for c in others]:
+            result = events.analyze(stream(call("v", "Bash", {"command": command}),
+                                           response("v", "OK")), exit_status=0,
+                                    verification_commands=["python3 -m unittest"])
+            self.assertEqual(result.verification_runs, expected, command)
 
     def test_53_rerunning_a_check_without_changing_anything_is_not_a_retry(self):
         result = events.analyze(stream(
