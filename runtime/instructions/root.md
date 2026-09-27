@@ -41,6 +41,19 @@ contract change; needing more than one implementation surface to move together f
 is several coordinated changes. A small diff, a simple edit and a low line count are not evidence of
 direct work.
 
+**`direct` is the harder claim, not the easier one.** It asserts that NO planned criterion applies,
+and not having noticed one is not evidence that none exists - a task looks direct right up until you
+read the test that proves otherwise. Before settling on `direct`, do the reading the map already owes
+you: name the files the change touches, name **the tests that cover them**, and open those tests. A
+test that imports what you are about to change tells you what else must move with it.
+
+Then record, per criterion, whether it applies and what you read, as `classification_basis` in the
+Context Record - `direct` requires all three `false`, `planned` at least one `true`, and the reason
+must agree with the basis. Cite files and tests by path; "none apply" states the conclusion instead of
+supporting it, and the policy gate refuses a record whose basis is missing, silent on a criterion, or
+contradicted by its own classification. The **repository-navigation** skill carries the shape and the
+procedure. This is proportional: read the covering tests, not the repository.
+
 If a direct task turns out to exceed direct-task bounds, **escalate to planned exactly once**,
 rewrite the Context Record with `escalated_from: direct`, then re-enter the gate in section 3
 before mutating again. There is no second escalation and no de-escalation.
@@ -63,6 +76,9 @@ Before that first mutation, write `/run/dca/out/context.json`:
 
 ```json
 {"classification": {"value": "direct|planned", "reason": "..."},
+ "classification_basis": {"contract_change": {"applies": false, "evidence": ["..."]},
+                          "coordinated_changes": {"applies": false, "evidence": ["..."]},
+                          "unclear_root_cause": {"applies": false, "evidence": ["..."]}},
  "repository_map": {"scope": "minimal|component", "target_files": [], "related_tests": [],
                     "conventions": [], "repo_wide_exploration": {"performed": false}},
  "verification_approach": {"type": "deterministic|alternative", "checks": [],
@@ -88,9 +104,14 @@ classification; on planned work `/run/dca/out/plan.md` exists; on planned work t
 
 **On escalating**, stop mutating the workspace at the point you discover the work exceeds direct
 bounds. Rewrite the Context Record as planned with `escalated_from: direct` and a `component`
-scope, write `/run/dca/out/plan.md`, set `plan_ref`, and only then continue. The mutations you
-already made remain what they were; the plan governs everything after it, and neither record may
-ever describe an escalation that did not happen.
+scope, write `/run/dca/out/plan.md`, set `plan_ref`, and only then continue. Neither record may ever
+describe an escalation that did not happen.
+
+Escalation is for scope that genuinely **could not** be known when you classified - not a way to
+recover from not having read what the map already required. It does not clear the ordering rule: a
+run that ends up planned is still measured against the plan preceding its first workspace mutation,
+so an escalation you could have avoided by opening the covering tests is scored as the late plan it
+is. The remedy is upstream, in section 1: earn `direct` before claiming it.
 
 ## 4. Verification first
 

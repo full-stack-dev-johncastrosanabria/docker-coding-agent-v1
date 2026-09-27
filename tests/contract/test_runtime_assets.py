@@ -97,8 +97,16 @@ class TestRootInstruction(unittest.TestCase):
         self.raw = text(INSTRUCTIONS / "root.md")
         self.body = normalized(INSTRUCTIONS / "root.md")
 
-    def test_20_root_md_is_under_150_lines(self):
-        self.assertLess(len(self.raw.splitlines()), 150)
+    def test_20_root_md_stays_short(self):
+        """root.md is loaded into EVERY run's context, so its length is a real cost, not a style rule.
+
+        The cap was 150 and is now 170: the pre-classification gate (T083) added the rule that `direct`
+        must be earned, and the escalation paragraph had to say what escalation is not for. The
+        procedure and the JSON shape deliberately live in the repository-navigation skill, which is
+        loaded only when the map is being built, so only the RULE is paid for on every run. Raising
+        this is a deliberate trade recorded here, not a drifting threshold - it is still a hard cap.
+        """
+        self.assertLess(len(self.raw.splitlines()), 170)
 
     def test_21_it_requires_classification_with_a_reason(self):
         self.assertIn("direct", self.body)
@@ -371,11 +379,18 @@ class TestPlannedWorkDiscipline(unittest.TestCase):
                 self.assertIn(phrase, self.root)
 
     def test_76_escalation_is_neither_retroactive_nor_inventable(self):
-        # FR-009 unchanged: the earlier mutations stay what they were, and a record may never
-        # describe an escalation that did not happen.
-        self.assertIn("the mutations you already made remain what they were", self.root)
+        """FR-009 unchanged, and its limits stated: escalating does not rewrite the ordering that
+        already happened, and a record may never describe an escalation that did not.
+
+        The earlier wording here said "the mutations you already made remain what they were", which
+        read as though escalating settled the ordering question. It does not: a run that ends up
+        planned is still measured against the plan preceding its first mutation, so the wording now
+        says so and points the remedy upstream at earning `direct`.
+        """
+        self.assertIn("it does not clear the ordering rule", self.root)
         self.assertIn("neither record may ever describe an escalation that did not happen",
                       self.root)
+        self.assertIn("escalation is for scope that genuinely **could not** be known", self.root)
 
     def test_77_the_agent_is_never_asked_to_read_internal_runtime_state(self):
         """The class-A regression this replaces: the instruction told the agent to read

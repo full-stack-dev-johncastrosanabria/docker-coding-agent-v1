@@ -20,6 +20,49 @@ The map's scope follows the classification, not your curiosity:
 
 Record, in the Context Record: `target_files`, `related_tests`, `conventions`, and `scope`.
 
+### Earn the classification before you record it
+
+`related_tests` is not bookkeeping - it is where the classification is decided. **A test that imports
+what you are about to change is the cheapest possible statement of what else depends on it.** Find
+those tests the obvious way (search for the symbol or module you are changing, not just for a
+same-named test file) and OPEN them before you classify. One may assert a rule across two
+implementations, or pin behaviour the task never mentioned; either makes the work planned, and you
+cannot know that from the task text or from the file you were pointed at.
+
+So the order is: target files, then the tests that cover them, then those tests read, then the
+criteria evaluated against what they showed, then the classification, then the record.
+
+Record the result per criterion, so the claim is checkable rather than asserted:
+
+```json
+"classification_basis": {
+  "contract_change":     {"applies": false,
+                          "evidence": ["api/handlers.py is the only caller of can_publish and passes "
+                                       "the same arguments; nothing about its signature moves"]},
+  "coordinated_changes": {"applies": true,
+                          "evidence": ["tests/test_permissions.py imports can_publish from api/auth.py "
+                                       "AND from jobs/scheduled.py and asserts both refuse the same "
+                                       "expired token, so the rule lives in two places"]},
+  "unclear_root_cause":  {"applies": false,
+                          "evidence": ["the failing assertion names the expiry comparison directly"]}
+}
+```
+
+That example is illustrative only - use your own repository's paths. The rules:
+
+- all three criteria appear, each with an explicit `applies` boolean;
+- `direct` requires all three `false`; `planned` requires at least one `true`;
+- the classification `reason` and the basis agree;
+- evidence names files, tests or callers. "None apply" is a conclusion, not evidence, and a direct
+  classification whose `coordinated_changes` evidence cites nothing in the repository is read as
+  unbuilt - as is one that names no `related_tests` at all.
+
+The policy gate refuses a record with no basis, a basis silent on a criterion, or a basis that
+contradicts its own classification, so this is checked before your first mutation rather than after.
+
+**This is not a licence to widen the map.** Opening the tests that cover your target IS the minimal
+map; the repository-wide exception below is unchanged and still needs its recorded reason.
+
 ## 2. Retrieve progressively
 
 **Begin from the proportional Repository Map.** It is the starting point for every later read: you
@@ -58,6 +101,9 @@ not mutations, so recording context is always allowed first.
 
 ```json
 {"classification": {"value": "direct|planned", "reason": "..."},
+ "classification_basis": {"contract_change": {"applies": false, "evidence": ["..."]},
+                          "coordinated_changes": {"applies": false, "evidence": ["..."]},
+                          "unclear_root_cause": {"applies": false, "evidence": ["..."]}},
  "repository_map": {"scope": "minimal|component", "target_files": [], "related_tests": [],
                     "conventions": [], "repo_wide_exploration": {"performed": false}},
  "verification_approach": {"type": "deterministic|alternative", "checks": [],
@@ -66,7 +112,8 @@ not mutations, so recording context is always allowed first.
 ```
 
 If the classification escalates from direct to planned, rewrite the record with
-`escalated_from: "direct"` and a `component` scope.
+`escalated_from: "direct"` and a `component` scope. Escalation is for scope that could not have been
+known here - not for scope this map would have shown you had you read it.
 
 ## Signals you got the scope wrong
 
