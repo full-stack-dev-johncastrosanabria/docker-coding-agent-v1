@@ -679,7 +679,15 @@ def call(identifier, name, arguments):
 
 
 CONTEXT = {"classification": {"value": "direct", "reason": "one file"},
-           "repository_map": {"scope": "minimal", "target_files": ["src/a.py"]},
+           "classification_basis": {
+               "contract_change": {"applies": False,
+                                   "evidence": ["src/a.py's helper has no other callers"]},
+               "coordinated_changes": {"applies": False,
+                                       "evidence": ["tests/test_a.py is the only importer"]},
+               "unclear_root_cause": {"applies": False,
+                                      "evidence": ["the failing assertion names the branch"]}},
+           "repository_map": {"scope": "minimal", "target_files": ["src/a.py"],
+                              "related_tests": ["tests/test_a.py"]},
            "verification_approach": {"type": "deterministic", "checks": ["make test"]},
            "plan_ref": None}
 WRITE_CONTEXT = call("c", "write_file", {"path": "/run/dca/out/context.json"})

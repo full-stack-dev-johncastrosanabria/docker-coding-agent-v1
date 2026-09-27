@@ -424,6 +424,88 @@ def _unsupported_success(report):
     return f"verification type {kind!r} cannot support success"
 
 
+#: Mirrors policy_gate.CLASSIFICATION_CRITERIA / MIN_EVIDENCE_CHARS. The gate runs first and in the VM,
+#: so what matters is that this structural check never diverges from what the gate already let through -
+#: a record the gate accepted must not be rejected here for its shape. An equality test asserts both
+#: constants and both verdicts agree, rather than leaving it to this comment.
+CLASSIFICATION_CRITERIA = ("contract_change", "coordinated_changes", "unclear_root_cause")
+MIN_EVIDENCE_CHARS = 12
+#: Evidence has to point at something in the repository. Deliberately permissive about LANGUAGE - any
+#: path-like token, or a filename with a source/test/config extension - because the rule is "be
+#: concrete", not "be Python".
+_GROUNDED = re.compile(r"[\w.-]+/[\w./-]+"
+                       r"|[\w.-]+\.(?:py|js|jsx|ts|tsx|go|rs|java|kt|rb|php|c|h|cpp|cs|swift|sh|"
+                       r"md|ya?ml|json|toml|cfg|ini|sql)\b")
+
+
+def _basis_problem(record, value):
+    """Structural check on `classification_basis`, mirroring policy_gate.basis_problem."""
+    basis = record.get("classification_basis")
+    if not isinstance(basis, dict):
+        return ("the Context Record has no classification_basis, so its classification is asserted "
+                "rather than evidenced")
+    applies = {}
+    for name in CLASSIFICATION_CRITERIA:
+        entry = basis.get(name)
+        if not isinstance(entry, dict):
+            return f"the Context Record's classification_basis does not evaluate {name}"
+        if not isinstance(entry.get("applies"), bool):
+            return (f"the Context Record's classification_basis gives {name} no explicit "
+                    f"true/false applies")
+        evidence = entry.get("evidence")
+        if not isinstance(evidence, list) or not evidence:
+            return f"the Context Record's classification_basis cites no evidence for {name}"
+        if not any(isinstance(item, str) and len(item.strip()) >= MIN_EVIDENCE_CHARS
+                   for item in evidence):
+            return (f"the Context Record's classification_basis cites nothing substantive for "
+                    f"{name}")
+        applies[name] = entry["applies"]
+    if value == "direct" and any(applies.values()):
+        named = ", ".join(name for name in CLASSIFICATION_CRITERIA if applies[name])
+        return (f"the Context Record classifies direct while its classification_basis says {named} "
+                f"applies")
+    if value == "planned" and not any(applies.values()):
+        return ("the Context Record classifies planned while its classification_basis says no "
+                "planned criterion applies")
+    return None
+
+
+def classification_basis_failures(record):
+    """The host's SUBSTANCE checks on an accepted-structure basis (FR-001a), or [].
+
+    The gate already refused anything structurally incomplete, so what is left is whether a `direct`
+    claim rests on evidence the agent could only have had by doing the reading the proportional map
+    already requires. Two things are asked of it, and only of `direct`, because `direct` is the claim
+    that closes off further scope:
+
+      * the map names the tests that cover the target. repository-navigation's minimal map is "the
+        files the change touches, the tests that cover them" - a direct classification with no related
+        tests named has not been built on that map, whatever its prose says;
+      * the `coordinated_changes` evidence points at something in the repository. Asserting that
+        nothing else has to move together is exactly the assertion that a covering test can refute,
+        so it has to cite what was read rather than describe it.
+
+    `planned` is not held to this: it is the conservative answer, and taxing it would push runs toward
+    the cheaper wrong one. A thin answer here is a scored FAILURE, never a refusal - the run has
+    finished by the time the host reads it, so there is nothing left to get stuck on.
+    """
+    classification = record.get("classification") or {}
+    if classification.get("value") != "direct":
+        return []
+    failures = []
+    related = (record.get("repository_map") or {}).get("related_tests")
+    if not isinstance(related, list) or not [t for t in related if str(t or "").strip()]:
+        failures.append("FR-001a: a direct classification names no related tests, so the minimal map "
+                        "the classification rests on was never built")
+    entry = ((record.get("classification_basis") or {}).get("coordinated_changes") or {})
+    evidence = entry.get("evidence") if isinstance(entry.get("evidence"), list) else []
+    if not any(isinstance(item, str) and _GROUNDED.search(item) for item in evidence):
+        failures.append("FR-001a: the direct classification's coordinated_changes evidence names no "
+                        "file, test or caller, so it describes the conclusion instead of citing what "
+                        "was read")
+    return failures
+
+
 def _context_record_problem(path):
     record = _read_json(path)
     if record is None:
@@ -432,6 +514,9 @@ def _context_record_problem(path):
     if classification.get("value") not in ("direct", "planned") \
             or not str(classification.get("reason") or "").strip():
         return "the Context Record has no classification with a reason"
+    problem = _basis_problem(record, classification.get("value"))
+    if problem:
+        return problem
     if not isinstance(record.get("repository_map"), dict):
         return "the Context Record has no Repository Map"
     approach = record.get("verification_approach")
@@ -561,9 +646,12 @@ def ordering_failures(report, out_dir):
             failures.append(f"FR-001: no Context Record was written before the first workspace "
                             f"mutation (tool call {first})")
         else:
-            problem = _context_record_problem(os.path.join(out_dir, "context.json"))
+            record_path = os.path.join(out_dir, "context.json")
+            problem = _context_record_problem(record_path)
             if problem:
                 failures.append(f"FR-001: {problem}")
+            else:
+                failures += classification_basis_failures(_read_json(record_path) or {})
     if (report.get("classification") or {}).get("value") == "planned":
         if first is not None and (analysis.plan_at is None or analysis.plan_at >= first):
             failures.append("FR-008: plan.md was not written before the first workspace mutation")
