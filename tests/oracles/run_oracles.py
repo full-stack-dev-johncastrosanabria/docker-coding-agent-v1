@@ -52,8 +52,9 @@ def candidate(fixture, patch, workdir):
     repo = os.path.join(workdir, "repo")
     shutil.rmtree(repo, ignore_errors=True)
     bench.build_seed(os.path.join(fixture["_dir"], fixture.get("seed", "seed")), repo)
-    if patch is not None:
-        proc = subprocess.run(["git", "-C", repo, "apply", "--index", "--allow-empty",
+    # An empty patch is applied by not applying it: `git apply --allow-empty` needs git 2.35.
+    if patch is not None and os.path.getsize(os.path.join(fixture["_dir"], patch)) > 0:
+        proc = subprocess.run(["git", "-C", repo, "apply", "--index",
                                os.path.join(fixture["_dir"], patch)],
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
         if proc.returncode != 0:
