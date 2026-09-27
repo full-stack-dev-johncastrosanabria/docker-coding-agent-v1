@@ -36,6 +36,7 @@ because the host is the authority on direct/planned semantics.
 """
 
 import collections
+import functools
 import json
 import os
 import re
@@ -520,12 +521,24 @@ def response_outcome(text):
 _KEEPS_VERDICT = frozenset({"cat", "tee", "tail"})
 #: `tail` options that no longer keep the last LINES: bytes, or following a file forever.
 _TAIL_LOSES_VERDICT = re.compile(r"^-(?:-bytes|-follow|[A-Za-z0-9]*[cfF])")
-#: Words that open a group without running anything, and prefixes that run the next words.
-_GROUP_WORDS = frozenset({"{", "}", "!"})
-_TIMEOUT = frozenset({"timeout", "gtimeout"})
-#: Builtins that set up the shell session a check runs in and change no file.
+#: Builtins and tests that set up or probe the session a check runs in and change no file.
 _SESSION_BUILTINS = frozenset({"source", ".", "export", "set", "unset", "pushd", "popd", "ulimit",
-                               "umask", "alias", "sleep", "wait"})
+                               "umask", "alias", "sleep", "wait", "[", "[[", "command", "type",
+                               "hash"})
+#: Compound-command keywords that run nothing themselves.
+_NO_OP_KEYWORDS = frozenset({"for", "select", "case", "esac", "done", "fi", "}", ")"})
+#: Wrappers that run the rest of their words, and their options that take a value.
+_WRAPPERS = {"timeout": ({"-s", "-k", "--signal", "--kill-after"}, 1),
+             "gtimeout": ({"-s", "-k", "--signal", "--kill-after"}, 1),
+             "nice": ({"-n", "--adjustment"}, 0),
+             "sudo": ({"-u", "-g", "-C", "-D", "-h", "-p", "-U"}, 0)}
+#: Leading keywords and group openers, and trailing group closers before any redirection.
+_LEADING_SYNTAX = re.compile(r"^\s*(?:(?:if|then|else|elif|do|while|until|!|\{)\s+|\(\s*)+")
+_TRAILING_SYNTAX = re.compile(r"(?:\s*[)}])+(?=(?:\s+(?:\d+|&)?[<>]\S*)*\s*$)")
+#: A redirection operator and its target, or a descriptor duplication (`2>&1`, `>&2`, `2>&-`).
+_REDIRECTION = re.compile(r"(?:\d+|&)?(?:>>?|<)(?:&(?:\d+|-)|\|?[ \t]*"
+                          r"(?:'[^']*'|\"[^\"]*\"|[^\s;&|<>()]+))")
+_SUB = "\x00SUB\x00"
 
 
 def _program_key(word):
@@ -534,60 +547,34 @@ def _program_key(word):
     return re.sub(r"^(python)\d*(?:\.\d+)*$", r"\1", base)
 
 
+def _without_syntax(segment):
+    return _TRAILING_SYNTAX.sub("", _LEADING_SYNTAX.sub("", segment))
+
+
+def _raw_words(segment):
+    """The words of a segment as written: no keywords, brackets or redirections. Redirections go
+    first, so `2>&1` leaves no `2` word and `(check 2>&1)` keeps its `)` visible as syntax."""
+    return shellparse._tokenize(_REDIRECTION.sub(" ", _without_syntax(segment)))
+
+
 def _words(segment):
-    """The words a segment runs: substitutions, redirections, group brackets and prefixes removed."""
-    words = [w for w in shellparse._tokenize(segment) if w not in _GROUP_WORDS]
-    words = [w.lstrip("(").rstrip(")") if i in (0, len(words) - 1) else w
-             for i, w in enumerate(words)]
-    _, words = shellparse._strip_prefixes([w for w in words if w])
-    if words and _program_key(words[0]) in _TIMEOUT:
+    """The words a segment runs: prefixes and wrappers (`env`, `timeout -s KILL 60`) removed."""
+    _, words = shellparse._strip_prefixes(_raw_words(segment))
+    while words and _program_key(words[0]) in _WRAPPERS:
+        valued, positional = _WRAPPERS[_program_key(words[0])]
         index = 1
         while index < len(words) and words[index].startswith("-"):
-            index += 1
-        words = words[index + 1:]
+            index += 2 if words[index] in valued else 1
+        words = words[index + positional:]
     return words
-
-
-def _check_signature(command):
-    """The words that identify a declared check: its last segment (`cd x && make test` -> make test)."""
-    try:
-        segments, _ = shellparse._split_top_level(shellparse._strip_heredoc_bodies(command))
-    except shellparse._Refuse:
-        return None
-    words = _words(segments[-1]) if segments else []
-    return words or None
-
-
-def _runs_check(words, signature):
-    """Does this segment run the check? Same runner, and the check's arguments in one run that only
-    options precede: `python3 -B -m unittest -v` runs `python3 -m unittest`, `pip install unittest`
-    does not."""
-    if not words or _program_key(words[0]) != _program_key(signature[0]):
-        return False
-    args, wanted = words[1:], signature[1:]
-    return any(args[i:i + len(wanted)] == wanted and all(a.startswith("-") for a in args[:i])
-               for i in range(len(args) - len(wanted) + 1))
-
-
-#: A redirection written as its own word (`2>&1`, `>`, `>out`): never a group bracket.
-_REDIRECTION_WORD = re.compile(r"^(?:\d+|&)?[<>]")
 
 
 def _brackets(segment):
     """(opens, closes): the group brackets a segment starts with and ends with."""
-    words, skip = [], False
-    for word in segment.split():
-        if skip:
-            skip = False
-        elif _REDIRECTION_WORD.match(word):
-            skip = word.rstrip("&0123456789") in (">", ">>", "<", "&>", "2>", "1>")
-        else:
-            words.append(word)
-    if not words:
-        return 0, 0
-    first, last = words[0], words[-1]
-    opens = (first == "{") + len(first) - len(first.lstrip("("))
-    closes = (last == "}") + len(last) - len(last.rstrip(")"))
+    lead = _LEADING_SYNTAX.match(segment)
+    trail = _TRAILING_SYNTAX.search(segment)
+    opens = sum(lead.group(0).count(c) for c in "{(") if lead else 0
+    closes = sum(trail.group(0).count(c) for c in "})") if trail else 0
     return opens, closes
 
 
@@ -613,85 +600,167 @@ def _group_ends(segments):
     return ends
 
 
-def _diverts(segments, separators, index):
-    """True when the output of segment `index` (judged where its group ends) never reaches the
-    response intact: redirected to a file or /dev/null, or piped through a stage that can drop the
-    verdict. `2>&1` and `>&2` only merge the streams, which the response shows anyway."""
-    if shellparse._OUTPUT_REDIRECTION.search(segments[index]):
-        return True
+def _pipe_stages(segments, separators, index):
+    """The indices of the pipeline stages that read segment `index`'s output."""
+    stages = []
     while separators[index] == "|" and index + 1 < len(segments):
         index += 1
-        words = _words(segments[index])
+        stages.append(index)
+    return stages
+
+
+def _diverts(segments, separators, index, end):
+    """True when the output of the check in segment `index` (in a group ending at `end`) never
+    reaches the response intact: redirected to a file or /dev/null - by the check itself or by its
+    group - or piped through a stage that can drop the verdict. `2>&1` and `>&2` only merge the
+    streams, which the response shows anyway."""
+    if any(shellparse._OUTPUT_REDIRECTION.search(segments[i]) for i in {index, end}):
+        return True
+    for stage in _pipe_stages(segments, separators, end):
+        words = _words(segments[stage])
         program = words[0].rsplit("/", 1)[-1] if words else None
-        if program not in _KEEPS_VERDICT or shellparse._OUTPUT_REDIRECTION.search(segments[index]):
+        if program not in _KEEPS_VERDICT or shellparse._OUTPUT_REDIRECTION.search(segments[stage]):
             return True
         if program == "tail" and any(_TAIL_LOSES_VERDICT.match(w) for w in words[1:]):
             return True
     return False
 
 
-def _shell_steps(command, signatures):
-    """What a shell command does, in order: `("mutate",)` and `("check", key, diverted)` steps.
+def _split(text):
+    """Segments and their separators, with `&>` kept as the redirection it is."""
+    separators = []
+    segments, subs = shellparse._split_top_level(shellparse._strip_heredoc_bodies(text),
+                                                 separators)
+    index = 0
+    while index < len(segments) - 1:
+        if separators[index] == "&" and segments[index + 1].lstrip().startswith(">"):
+            segments[index] += "&" + segments.pop(index + 1)
+            separators.pop(index)
+        else:
+            index += 1
+    return segments, separators, subs
 
-    None when the command cannot be read, and the caller falls back to the whole-call view. Reading
-    each segment is what lets one call be both the repair and the re-verification
-    (`jq ... > t && mv t rollout.json && python3 -m unittest`), and lets a check be found wherever
-    the shell runs it - behind `cd`, inside a group or `sh -c`, or captured by `$( )` - without
-    mistaking `echo 'python3 -m unittest'` for a run of it.
-    """
-    steps = []
-    try:
-        _collect_steps(command, signatures, False, 0, steps)
-    except (shellparse._Refuse, RecursionError):
+
+def _dash_c_payload(words):
+    """The inline script of `sh -c` / `bash -lc` / `bash -ec`, or None."""
+    for index, word in enumerate(words[1:], start=1):
+        if word.startswith("-") and not word.startswith("--"):
+            if "c" in word[1:]:
+                return words[index + 1] if index + 1 < len(words) else None
+            continue
         return None
-    return steps
+    return None
 
 
 def _collect_steps(text, signatures, captured, depth, steps):
     if depth > shellparse.MAX_DEPTH:
         raise shellparse._Refuse("nesting too deep")
-    separators = []
-    segments, subs = shellparse._split_top_level(shellparse._strip_heredoc_bodies(text),
-                                                 separators)
+    segments, separators, subs = _split(text)
     ends = _group_ends(segments)
-    pending = list(subs)
+    pending, consumers = list(subs), set()
     for index, segment in enumerate(segments):
         # A substitution runs before the command it is part of, and its output is captured.
-        for _ in range(segment.count("\x00SUB\x00")):
+        for _ in range(segment.count(_SUB)):
             if pending:
                 _collect_steps(pending.pop(0), signatures, True, depth + 1, steps)
-        words = _words(segment)
-        if not words:
+        if index in consumers:
+            continue    # `| tee log` after a check handles its output; it repairs nothing
+        raw = _raw_words(segment)
+        if not raw:
+            if shellparse._redirects_to_a_file(segment):
+                steps.append(("mutate",))      # a bare `> file` truncates it
             continue
-        diverted = captured or _diverts(segments, separators, ends[index])
+        if raw[0] in _NO_OP_KEYWORDS:
+            continue
+        words = _words(segment)
+        diverted = captured or _diverts(segments, separators, index, ends[index])
         key = next((key for key, signature in signatures if _runs_check(words, signature)), None)
         if key is not None:
             steps.append(("check", key, diverted))
+            consumers.update(_pipe_stages(segments, separators, ends[index]))
             continue
-        program = words[0].rsplit("/", 1)[-1]
-        if program in shellparse.SHELLS and "-c" in words[1:-1]:
-            _collect_steps(words[words.index("-c", 1) + 1], signatures, diverted, depth + 1, steps)
+        program = words[0].rsplit("/", 1)[-1] if words else None
+        if program in shellparse.SHELLS and _dash_c_payload(words) is not None:
+            _collect_steps(_dash_c_payload(words), signatures, diverted, depth + 1, steps)
             continue
-        if shellparse._OUTPUT_REDIRECTION.search(segment) or (
-                program not in _SESSION_BUILTINS and not shellparse._inspects(
-                    shellparse.Segment(words))):
+        if raw[0] in _SESSION_BUILTINS or program in _SESSION_BUILTINS:
+            if not shellparse._redirects_to_a_file(segment):
+                continue
+        # The same judgement the first-mutation detector makes: /dev/null and scratch are no change.
+        if shellparse.command_effect(_without_syntax(segment))[0] == "mutate":
             steps.append(("mutate",))
+
+
+def _check_signature(command):
+    """The words that identify a declared check, or None when it is compound (`make lint && make
+    test`): such a check is matched on its whole text, as before."""
+    try:
+        segments, _, subs = _split(command)
+    except shellparse._Refuse:
+        return None
+    if len(segments) != 1 or subs:
+        return None
+    return tuple(_words(segments[0])) or None
+
+
+def _runs_check(words, signature):
+    """Does this segment run the check? Same runner, and the check's arguments in one run that only
+    options precede: `python3 -B -m unittest -v` runs `python3 -m unittest`, `pip install unittest`
+    does not."""
+    if not words or _program_key(words[0]) != _program_key(signature[0]):
+        return False
+    args, wanted = words[1:], list(signature[1:])
+    return any(args[i:i + len(wanted)] == wanted and all(a.startswith("-") for a in args[:i])
+               for i in range(len(args) - len(wanted) + 1))
+
+
+#: `|`, `>` or a capture anywhere, once stream merges and `||` are set aside.
+_TEXT_DIVERSION = re.compile(r"\||>|\$\(|`")
+_STREAM_MERGES = re.compile(r"\d*>&\d+|\|\|")
+
+
+@functools.lru_cache(maxsize=4096)
+def _signatures(commands):
+    return tuple((_normalize_command(c), sig) for c in commands
+                 for sig in [_check_signature(c)] if sig)
+
+
+@functools.lru_cache(maxsize=8192)
+def _call_steps(command, commands):
+    """What one shell command does, in order: `("mutate",)` and `("check", key, diverted)` steps.
+
+    Read segment by segment, a change and a check in one call count in the order they run, and a
+    check is found wherever the shell runs it - behind `cd`, a wrapper, `if`, a group, `sh -c` or
+    `$( )` - without mistaking `echo 'python3 -m unittest'` for a run of it. The reading is never
+    narrower than the plain text match: a check the parser does not find but the text names is one
+    whole-call check, diverted if the call pipes, redirects or captures anything. Cached, because
+    the live accountant re-reads every call on each event.
+    """
+    steps = None
+    try:
+        steps = []
+        _collect_steps(command, _signatures(commands), False, 0, steps)
+    except (shellparse._Refuse, RecursionError):
+        steps = None
+    if steps and any(step[0] == "check" for step in steps):
+        return tuple(steps)
+    parsed = shellparse.parse(command) if steps is not None else None
+    runners = None if parsed is None or not parsed.ok else {
+        _program_key(word) for segment in parsed.segments for word in segment.argv}
+    haystack = _normalize_command(command)
+    for candidate in commands:
+        needle = _normalize_command(candidate)
+        # A runner the command really invokes, or a command that could not be read: not the
+        # check's name quoted in `echo` or `grep`.
+        if needle and needle in haystack and (
+                runners is None or _program_key(needle.split()[0]) in runners):
+            return (("check", needle,
+                     bool(_TEXT_DIVERSION.search(_STREAM_MERGES.sub(" ", haystack)))),)
+    return ()
 
 
 def _normalize_command(text):
     return " ".join(text.split())
-
-
-def _matches_check(record, commands):
-    """Which declared verification command, if any, this tool call executed."""
-    haystack = _normalize_command(record.command) if record.command else None
-    if haystack is None:
-        return None
-    for command in commands:
-        needle = _normalize_command(command)
-        if needle and needle in haystack:
-            return needle
-    return None
 
 
 # --- the analysis -----------------------------------------------------------------------------
@@ -1065,12 +1134,9 @@ def _account_retries(result, verification_commands):
     SEEN to pass. A re-run with no intervening change is the same check asked twice, and a re-run
     of a check that was seen to pass is not a repair. A run whose output the command diverted
     (`| grep`, `> file`, `$( )`) was not seen at all, so it counts as not passed: the retry bound
-    fails closed (FR-023a). A shell command is read segment by segment, so a change and a check in
-    one call count in the order they run.
+    fails closed (FR-023a). See `_call_steps` for how one shell call is read.
     """
-    commands = [c for c in (verification_commands or []) if isinstance(c, str) and c.strip()]
-    signatures = [(_normalize_command(c), sig) for c in commands
-                  for sig in [_check_signature(c)] if sig]
+    commands = tuple(c for c in (verification_commands or []) if isinstance(c, str) and c.strip())
     if not commands:
         return
     last_run = {}       # check -> outcome of its last run
@@ -1083,11 +1149,8 @@ def _account_retries(result, verification_commands):
     for record in result.tool_calls:
         if not record.dispatched:
             continue
-        steps = _shell_steps(record.command, signatures) if record.command else None
-        if steps is None:
-            matched = _matches_check(record, commands)
-            steps = [("check", matched, False)] if matched is not None else []
-        if not any(step[0] == "check" for step in steps):
+        steps = _call_steps(record.command, commands) if record.command else ()
+        if not steps:
             # Only a change that is NOT itself a declared check can be the "repair" half of a
             # cycle; the call's own classification decides whether it changed anything.
             if record.mutation:
