@@ -17,9 +17,9 @@
 run_record() {
     python3 "$FIXTURE_DIR/../../tools/recovery_report.py" "$RUN_OUT" \
         --disposition blocked --agent-outcome blocked --no-limit \
-        --empty-change-set --none-adequate --no-agent-pass --no-criterion-met
+        --empty-change-set --unverifiable --no-agent-pass --no-criterion-met
 }
 
 check "the repository was changed: a none-adequate task modifies no file" same_as_seed
-check "the report is not a none-adequate stop with an empty change set" run_record
+check "the report is not an unverifiable stop with an empty change set" run_record
 verdict

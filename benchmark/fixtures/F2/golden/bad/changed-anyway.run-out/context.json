@@ -2,9 +2,5 @@
   "classification": {
     "value": "direct",
     "reason": "one rule-table entry"
-  },
-  "verification_approach": {
-    "type": "none-adequate",
-    "reason": "the rule tables are verified only by the certified engine's certification run, which is not available here; README.md rules out any local substitute"
   }
 }

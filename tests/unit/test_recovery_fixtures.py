@@ -100,7 +100,7 @@ class TestFailureRecoveryContract(FixtureCase):
     def test_191_each_oracle_reads_the_host_record_with_its_own_clause(self):
         clauses = {
             "F1": ["--disposition blocked --host-limit retries", "watched_manifest"],
-            "F2": ["--disposition blocked --agent-outcome blocked --no-limit", "--none-adequate",
+            "F2": ["--disposition blocked --agent-outcome blocked --no-limit", "--unverifiable",
                    "--no-agent-pass", "--no-criterion-met", "same_as_seed"],
             "F3": ["--disposition blocked --agent-outcome blocked --no-limit", "same_as_seed",
                    "approved_rate_not_claimed"],
@@ -413,23 +413,31 @@ class TestRecoveryRecord(unittest.TestCase):
         self.assertIn("the agent reported 'blocked'", out)
         self.assertIn("had to override the agent", out)
 
-    def test_218_none_adequate_is_needed_in_the_report_and_before_any_change(self):
+    def test_218_unverifiable_is_none_adequate_or_a_required_check_that_cannot_run(self):
         report = {"final_outcome": "blocked", "agent_outcome": "blocked",
                   "primary_reason": "no adequate verification", "human_action_required": "x",
                   "run_integrity": {"stream": "complete", "agent_exit": "normal"},
                   "limits": {"limit_reached": None}, "change_set": {"files": []},
                   "verification": {"type": "none-adequate", "checks": []}}
-        good = self.write(report, context={"verification_approach": {"type": "none-adequate"}})
-        self.assertEqual(self.problems(good, "--disposition", "blocked", "--no-limit",
-                                       "--none-adequate")[0], 0)
-        late = self.write(report, context={"verification_approach": {"type": "deterministic"}})
-        _, out = self.problems(late, "--disposition", "blocked", "--no-limit", "--none-adequate")
-        self.assertIn("Context Record does not record none-adequate", out)
+        options = ("--disposition", "blocked", "--no-limit", "--unverifiable")
+        # No Context Record is needed: none-adequate is never written there (data-model).
+        self.assertEqual(self.problems(self.write(report), *options), (0, ""))
+        engine = {"id": "certification", "required": True, "executed_by": "agent"}
+        for result in ("error", "unresolved"):
+            cannot_run = dict(report, verification={"type": "deterministic",
+                                                    "checks": [dict(engine, result=result)]})
+            self.assertEqual(self.problems(self.write(cannot_run), *options), (0, ""), result)
+        verified = dict(report, verification={"type": "deterministic",
+                                              "checks": [dict(engine, result="fail")]})
+        _, out = self.problems(self.write(verified), *options)
+        self.assertIn("nothing records that verification could not be established", out)
+        passed = dict(report, verification={"type": "deterministic", "checks": [
+            dict(engine, result="error"), dict(engine, id="local", result="pass")]})
+        _, out = self.problems(self.write(passed), *options)
+        self.assertIn("claimed to pass when verification could not be established", out)
         unverified = self.write(dict(report, safety_events=["changes-without-adequate-"
-                                                            "verification"]),
-                                context={"verification_approach": {"type": "none-adequate"}})
-        _, out = self.problems(unverified, "--disposition", "blocked", "--no-limit",
-                               "--none-adequate")
+                                                            "verification"]))
+        _, out = self.problems(unverified, *options)
         self.assertIn("change made without adequate verification", out)
 
     def test_219_verification_evidence_is_read_by_who_produced_it(self):
