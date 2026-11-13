@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-13T07:56:56Z",
+  "generated_at": "2026-11-13T08:02:32Z",
   "pinned_versions": {
     "docker_agent": "v1.160.0",
     "docker_agent_config_version": 15,
@@ -54,9 +54,9 @@
         "G3": "PASS",
         "G2": "FAIL",
         "G9": "PASS",
-        "G11": "PASS"
+        "G11": "PARTIAL"
       },
-      "production_conformance": "NOT-RUN",
+      "production_conformance": "PASS",
       "fallbacks_applied": [
         "G2: credential mechanism token-file-trusted-only"
       ]
