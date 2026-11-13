@@ -628,12 +628,12 @@ class TestLauncherProgress(Case):
         def provision():
             instance.sandbox = "dca-" + request.run_id
         instance.provision = provision
-        instance.execute_agent = lambda: (mock.Mock(), None, 0, "")
+        instance.execute_agent = lambda: (mock.Mock(models=[]), None, 0, "")
         instance.collect_agent_evidence = lambda: None
         instance.final_verification = lambda: [{"result": "pass"}]
         instance.retrieve = lambda: {"branch": "dca/x", "files": [{"path": "a"}]}
         instance.host_limits = lambda classification=None: {}
-        instance.version_block = lambda: {}
+        instance.version_block = lambda models=(): {}
         instance.write_outputs = lambda final: None
         return instance, seen
 

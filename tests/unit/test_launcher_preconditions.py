@@ -512,5 +512,26 @@ class TestPolicyDisposition(LauncherCase):
         self.assertFalse([call for call in calls if "create" in call])
 
 
+class TestModelRecord(LauncherCase):
+    """The report names the model the run used, from host-read evidence only."""
+
+    def test_claude_models_come_from_its_transcript_and_are_screened(self):
+        instance = self.make()
+        instance.sandbox = "dca-x"
+        instance.sbx = mock.Mock()
+        instance.sbx.execute.return_value = (0, '"model":"claude-opus-5-5"\n'
+                                             '"model":"<synthetic>"\n"model":"claude-code"\n', "",
+                                             False)
+        self.assertEqual(instance.claude_models(), ["claude-opus-5-5"])
+        instance.sbx.execute.side_effect = launcher.SbxError(["sbx"], 1, "gone")
+        self.assertEqual(instance.claude_models(), [])
+
+    def test_version_block_lists_observed_models_and_omits_the_field_otherwise(self):
+        instance = self.make()
+        self.assertNotIn("models", instance.version_block())
+        self.assertEqual(instance.version_block(["chatgpt/gpt-6.1-sol", "chatgpt/gpt-6.1-sol",
+                                                 "x y"])["models"], ["chatgpt/gpt-6.1-sol"])
+
+
 if __name__ == "__main__":
     unittest.main()

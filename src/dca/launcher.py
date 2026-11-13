@@ -218,6 +218,7 @@ class Launcher:
         # all (the run never got that far); an empty list means it was gathered and was empty, which
         # is unproven identity rather than no opinion.
         self.review_fingerprints = None
+        self.vm_models = []
         self.source_ref = None
         self.source_commit = None
         self.dirty_paths = []
@@ -495,14 +496,20 @@ class Launcher:
             limits = json.load(handle)
         return dict(limits["host_limits"][classification or self.classification])
 
-    def version_block(self):
+    def version_block(self, models=()):
         versions = self.versions or eligibility_module.load_versions(self.versions_path)
-        return {
+        block = {
             "docker_agent": versions.get("docker_agent"),
             "claude_code": (versions.get("claude_code") or {}).get("exact"),
             "sbx": (versions.get("sbx") or {}).get("exact"),
             "drift": bool(self.request.allow_drift),
         }
+        observed = []
+        for model in models:
+            events_module.note_model(observed, model)
+        if observed:
+            block["models"] = observed
+        return block
 
     def network_cell(self):
         with open(os.path.join(self.repo_root, "runtime", "policy", "network.yaml"),
@@ -959,6 +966,7 @@ class Launcher:
         # here, while the file is still fresh out of the VM and before cleanup removes the sandbox.
         self.review_fingerprints = fingerprint_module.read_review_records(
             os.path.join(self.request.out, "fingerprints.jsonl"))
+        self.vm_models = self.claude_models() if self.request.backend == "claude" else []
         agent_report = None
         if "report.agent.json" in collected:
             try:
@@ -967,6 +975,22 @@ class Launcher:
             except (OSError, ValueError):
                 agent_report = None
         return agent_report
+
+    def claude_models(self):
+        """The model ids in Claude Code's own transcripts. Claude runs as a harness, so the outer
+        stream names only `claude-code`; the transcript is the one record of the model it used.
+        VM-originated, so each id is still screened by `events.note_model`. Best effort: none found
+        means the model is unknown, never that a default was assumed."""
+        try:
+            _, out, _, _ = self.sbx.execute(self.sandbox, (
+                "grep -rhoE '\"model\":\"[^\"]{1,80}\"' \"$HOME/.claude/projects\" "
+                "2>/dev/null | sort -u | head -20"), check=False, timeout=30)
+        except (SbxError, OSError):
+            return []
+        models = []
+        for line in (out or "").splitlines():
+            events_module.note_model(models, line.strip()[len('"model":"'):-1])
+        return models
 
     def retrieve(self):
         """Export, copy out, validate in quarantine, and only then import. Failure is exit 4."""
@@ -1068,7 +1092,8 @@ class Launcher:
                     "dirty_paths": list(self.dirty_paths)},
             sandbox_settings=self.sandbox_settings, analysis=analysis,
             agent_report=agent_report, change_set=change_set,
-            limits_configured=self.host_limits(), versions=self.version_block(),
+            limits_configured=self.host_limits(),
+            versions=self.version_block(analysis.models + self.vm_models),
             launcher_checks=launcher_checks,
             review_fingerprints=self.review_fingerprints,
             limit_evidence_predates=_evidence_predates_limit(analysis, host_stop,
