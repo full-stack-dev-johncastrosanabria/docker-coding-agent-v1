@@ -1,6 +1,6 @@
 # Gate review — architectural eligibility
 
-Generated `2026-11-13T08:04:53Z` from the committed evidence in `gates/`, bound to
+Generated `2026-11-13T08:30:28Z` from the committed evidence in `gates/`, bound to
 `runtime/versions.yaml` digest `sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1`.
 Re-run with `python3 gates/review.py`; T062 and T073 re-run it as their evidence lands.
 
@@ -27,9 +27,9 @@ Final runtime readiness requires production conformance (**T062**) and G11 part 
 Claude OAuth token material. That is the accepted security finding and the primary
 blocker — untrusted eligibility requires G1b PASS.
 
-**G9 is NOT-RUN**, and the reason matters: `failure_reason=None`,
-`ambiguity_reason=None`, `capability_reproduced=None`,
-`capability_non_usability=None`. Every workload
+**G9 is FAIL**, and the reason matters: `failure_reason=ambiguous_provider_response`,
+`ambiguity_reason=indistinguishable_response`, `capability_reproduced=not_observed`,
+`capability_non_usability=not_proven`. Every workload
 variant received a stable 429, including the one carrying no credential at all, so the
 provider could not separate an authenticated caller from an unauthenticated one.
 **No workload request reproduced authenticated capability** — this is inconclusive
@@ -59,8 +59,8 @@ override G2** — untrusted eligibility needs both.
 
 ## 8. Runtime evidence
 
-- **T073 / G11 part B**: document status **FAIL**.
-  claude: **FAIL**; criteria 5–8 not yet proven.
+- **T073 / G11 part B**: document status **PARTIAL**.
+  claude: **PASS**; criteria 5–8 not yet proven.
   codex: **PASS**; criteria 5–8 proven.
 
 ## 9. Production conformance
@@ -96,8 +96,8 @@ override G2** — untrusted eligibility needs both.
 | G1b | FAIL | claude |
 | G1c | PASS | claude |
 | G1d | PASS | claude |
-| G9 | NOT-RUN | claude |
-| G11 | FAIL — part A only; `gates/G11.json` is FAIL until T073 | claude |
+| G9 | FAIL | claude |
+| G11 | PARTIAL — part A only; `gates/G11.json` is PARTIAL until T073 | claude |
 | PRODUCTION-CONFORMANCE | NOT-RUN | claude |
 | G3 | PASS | codex |
 | G2 | FAIL | codex |

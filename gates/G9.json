@@ -1,7 +1,7 @@
 {
   "gate": "G9",
-  "status": "PASS",
-  "run_at": "2026-11-13T07:56:42Z",
+  "status": "FAIL",
+  "run_at": "2026-11-13T08:30:17Z",
   "versions": {
     "sbx": "v0.53.0"
   },
@@ -49,13 +49,54 @@
       "id": "G9.clean",
       "description": "every sandbox this gate created was removed by name, none remains, and the global network baseline is intact afterwards",
       "result": "PASS",
-      "evidence_ref": "removals [('dca-g9-codex', '0')], remaining [], global network rules after: ['default-deny-all']"
+      "evidence_ref": "removals [('dca-g9-claude', '0')], remaining [], global network rules after: ['default-deny-all']"
     }
   ],
   "backends": {
     "claude": {
-      "status": "NOT-RUN",
-      "not_run_reason": "deferred by --backend codex"
+      "status": "FAIL",
+      "failure_reason": "ambiguous_provider_response",
+      "ambiguity_reason": "indistinguishable_response",
+      "capability_reproduced": "not_observed",
+      "capability_non_usability": "not_proven",
+      "criteria": [
+        {
+          "id": "G9.base",
+          "description": "every sandbox in this gate was created from the exact pinned sandbox_bases.claude workload, by digest, and sbx's own inspect record shows that composition and nothing else; no base was discovered or substituted",
+          "result": "PASS",
+          "evidence_ref": "pinned docker.io/sbx/claude@sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9; 1 sandbox record(s); every composition matches"
+        },
+        {
+          "id": "G9.policy",
+          "description": "every sandbox ran under the accepted G4 claude/trusted network policy: the allow set is the one G4 proved, and the built-in kit's non-permitted hosts are neutralized by explicit sandbox-scoped denies",
+          "result": "PASS",
+          "evidence_ref": "12 allow (api.anthropic.com, registry.npmjs.org, pypi.org, files.pythonhosted.org, proxy.golang.org, crates.io, static.crates.io, github.com, codeload.github.com, objects.githubusercontent.com, code.claude.com, docs.claude.com); 7 explicit deny (bridge.claudeusercontent.com, claude.com, deb.debian.org:80, dhi.io:80, downloads.claude.ai, mcp-proxy.anthropic.com, platform.claude.com)"
+        },
+        {
+          "id": "G9.setup.claude",
+          "description": "the probing workload really is an unprivileged repository process that can escalate with sudo to root, running non-interactively against the pinned docker-agent: an unprivileged failure would not answer whether a PRIVILEGED workload can reproduce the capability",
+          "result": "PASS",
+          "evidence_ref": "workload user 'agent', sudo resolves to 'root', stdin not a TTY, pinned docker-agent v1.160.0"
+        },
+        {
+          "id": "G9.control.claude",
+          "description": "positive control: in the SAME sandbox, the legitimate agent path exercised the same endpoint and request family on api.anthropic.com and produced the mediation signal, shown by the agent's successful authenticated call and the matching sbx policy log entry, captured BEFORE the workload sent anything. Without this a 401 from the workload would be equally consistent with the capability simply being unreachable here",
+          "result": "PASS",
+          "evidence_ref": "the agent answered DCA-G9-OK and the policy log shows api.anthropic.com allowed"
+        },
+        {
+          "id": "G9.probe.claude-anthropic-messages",
+          "description": "no repository-controlled workload - without sudo or with it - reproduced the authenticated control-plane capability on api.anthropic.com: every variant (A no credential, B every visible non-secret value in every credential position, C the client's own request structure, D other proxy-triggering representations) received the provider's documented unauthenticated result, unambiguously",
+          "result": "FAIL",
+          "evidence_ref": "capability_reproduced=not_observed, capability_non_usability=not_proven; variant A/user (no credential position) was ambiguous: status 404 matched neither anthropic-authentication-error nor any mediation signal, so authenticated and unauthenticated callers cannot be told apart; variant B/user (x-api-key) was ambiguous: status 404 matched neither anthropic-authentication-error nor any mediation signal, so authenticated and unauthenticated callers cannot be told apart; variant B/user (authorization-bearer) was ambiguous: status 404 matched neither anthropic-authentication-error nor any mediation signal, so authenticated and una"
+        },
+        {
+          "id": "G9.workload.claude",
+          "description": "both workload passes completed and screened their discovered values: anything matching real credential material was DROPPED rather than replayed, because G9 asks whether the capability is reachable WITHOUT a credential - replaying a real token would only re-prove G1b and would put a secret in the evidence",
+          "result": "PASS",
+          "evidence_ref": "user: 3 non-secret candidate(s), 0 secret(s) excluded; sudo: 3 non-secret candidate(s), 0 secret(s) excluded"
+        }
+      ]
     },
     "codex": {
       "status": "PASS",
@@ -103,6 +144,6 @@
       ]
     }
   },
-  "notes": "Control-plane capability NON-USABILITY per backend (tasks.md T023, research R13). G1b and G2 asked whether a repository workload can READ credential material; G9 asks whether it can USE the agent's authenticated control-plane capability anyway. Each available backend is probed on the one runtime control-plane host accepted G4 proved for it - api.anthropic.com for Claude, chatgpt.com for Codex - with the cheapest harmless request in the authenticated family the backend's own pinned client uses. The interpretation is never a bare HTTP status: each probe carries a STRUCTURAL discriminator from the provider's own JSON taxonomy, and a result matching neither the unauthenticated nor the mediation pattern is AMBIGUOUS, which fails. Every probe also carries a positive control in the SAME sandbox, where the legitimate agent path exercises the SAME endpoint and request family and produces the mediation signal, captured with its sbx policy log entry BEFORE the workload sends anything; without it a 401 from the workload would be equally consistent with the capability being unreachable here, and the gate would be vacuous. Each workload ran twice, once unprivileged and once as root via sudo, across variants A (no credential material), B (every visible NON-SECRET sentinel, placeholder, helper or proxy value replayed in every credential position the client uses), C (the client's own non-secret request structure, bare and with each B value) and D (other proxy-triggering representations actually exposed in the VM). Discovered values matching real credential material are DROPPED and only counted, never replayed and never recorded: G9 asks whether the capability is reachable WITHOUT a credential, and replaying a real token would only re-prove G1b while putting a secret in the evidence. Recorded facts are probe id, variant id, privilege, credential position, discovery location id, opaque value index, HTTP status, content type, body byte length and matched pattern ids - never a token, an Authorization value, a cookie, a credential file's contents or a response body. The oracle in gates/G9/oracle.py and the probe set in gates/G9/probes.json are reused EXACTLY by S5b (T088). G9 alone never makes a backend untrusted-eligible: that additionally requires G1b PASS for Claude and G2 PASS for Codex, both of which are accepted FAILs, so both backends remain trusted-only in V1 whatever this gate returns. A FAIL here is never resolved by exempting a control-plane host. Every rule this gate added carried --sandbox; the global fingerprint is captured with zero sandboxes before and after; sbx policy init, sbx reset and sbx rm --all are never called; sandboxes were created and removed one at a time by name. IMPLICATIONS: G9 PASS for codex: no workload variant reproduced the capability at either privilege level, and non-usability is PROVEN. Untrusted eligibility additionally requires G2 PASS, and G2 is FAIL, so codex remains TRUSTED-ONLY in V1: untrusted autonomous capability is not claimed, S5a stays mandatory, and split-plane agent/workload separation stays the recorded future direction.",
+  "notes": "Control-plane capability NON-USABILITY per backend (tasks.md T023, research R13). G1b and G2 asked whether a repository workload can READ credential material; G9 asks whether it can USE the agent's authenticated control-plane capability anyway. Each available backend is probed on the one runtime control-plane host accepted G4 proved for it - api.anthropic.com for Claude, chatgpt.com for Codex - with the cheapest harmless request in the authenticated family the backend's own pinned client uses. The interpretation is never a bare HTTP status: each probe carries a STRUCTURAL discriminator from the provider's own JSON taxonomy, and a result matching neither the unauthenticated nor the mediation pattern is AMBIGUOUS, which fails. Every probe also carries a positive control in the SAME sandbox, where the legitimate agent path exercises the SAME endpoint and request family and produces the mediation signal, captured with its sbx policy log entry BEFORE the workload sends anything; without it a 401 from the workload would be equally consistent with the capability being unreachable here, and the gate would be vacuous. Each workload ran twice, once unprivileged and once as root via sudo, across variants A (no credential material), B (every visible NON-SECRET sentinel, placeholder, helper or proxy value replayed in every credential position the client uses), C (the client's own non-secret request structure, bare and with each B value) and D (other proxy-triggering representations actually exposed in the VM). Discovered values matching real credential material are DROPPED and only counted, never replayed and never recorded: G9 asks whether the capability is reachable WITHOUT a credential, and replaying a real token would only re-prove G1b while putting a secret in the evidence. Recorded facts are probe id, variant id, privilege, credential position, discovery location id, opaque value index, HTTP status, content type, body byte length and matched pattern ids - never a token, an Authorization value, a cookie, a credential file's contents or a response body. The oracle in gates/G9/oracle.py and the probe set in gates/G9/probes.json are reused EXACTLY by S5b (T088). G9 alone never makes a backend untrusted-eligible: that additionally requires G1b PASS for Claude and G2 PASS for Codex, both of which are accepted FAILs, so both backends remain trusted-only in V1 whatever this gate returns. A FAIL here is never resolved by exempting a control-plane host. Every rule this gate added carried --sandbox; the global fingerprint is captured with zero sandboxes before and after; sbx policy init, sbx reset and sbx rm --all are never called; sandboxes were created and removed one at a time by name. IMPLICATIONS: G9 FAIL for claude, and the reason is INCONCLUSIVE EVIDENCE, not a breach: failure_reason=ambiguous_provider_response, ambiguity_reason=indistinguishable_response. capability_reproduced=not_observed - NO workload request produced a completion or any authenticated mediation signal - but capability_non_usability=not_proven, because the provider's answers could not separate an authenticated caller from an unauthenticated one. Ambiguity fails CLOSED by design, so this is correctly a FAIL; it must NOT be read as the workload reproducing authenticated capability. Untrusted eligibility additionally requires G1b PASS, and G1b is FAIL, so claude remains TRUSTED-ONLY in V1: untrusted autonomous capability is not claimed, S5a stays mandatory, and split-plane agent/workload separation stays the recorded future direction. G9 PASS for codex: no workload variant reproduced the capability at either privilege level, and non-usability is PROVEN. Untrusted eligibility additionally requires G2 PASS, and G2 is FAIL, so codex remains TRUSTED-ONLY in V1: untrusted autonomous capability is not claimed, S5a stays mandatory, and split-plane agent/workload separation stays the recorded future direction. Retained unselected backend evidence under identical pins and network policy: codex from 2026-11-13T07:56:42Z.",
   "network_policy_fingerprint": "sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697"
 }
