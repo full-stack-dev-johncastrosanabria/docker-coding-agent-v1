@@ -1,7 +1,7 @@
 {
   "gate": "G1b",
   "status": "FAIL",
-  "run_at": "2026-11-13T07:54:03Z",
+  "run_at": "2026-11-13T08:28:29Z",
   "versions": {
     "sbx": "v0.53.0"
   },
@@ -54,8 +54,8 @@
     {
       "id": "G1b.authenticates",
       "description": "control: the agent still authenticates and executes in exactly the configuration the scan then runs against - a sandbox that could not log in at all would satisfy the scan trivially",
-      "result": "FAIL",
-      "evidence_ref": "the trivial task exited '1'; the model did not return the expected marker"
+      "result": "PASS",
+      "evidence_ref": "loggedIn=True, authMethod='claude.ai', apiProvider='firstParty'; the task returned DCA-G1B-OK"
     },
     {
       "id": "G1b.privileged",
