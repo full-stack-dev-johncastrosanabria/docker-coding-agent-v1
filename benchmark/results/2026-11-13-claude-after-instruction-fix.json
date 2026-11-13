@@ -1,0 +1,178 @@
+{
+ "evidence": "T113 follow-up after the reboot: M1 (the background-task / cron fix in a5480b0) and the Claude half of the post-instruction-fix re-measure (3063f31) skipped earlier for disk",
+ "date": "2026-11-13",
+ "backend": "claude",
+ "trust": "trusted",
+ "model": "claude-sonnet-5-5 (default; no --model)",
+ "command": "bin/dca bench --backend claude --fixtures 'M1'; bin/dca bench --backend claude --fixtures 'F*,S2,S4,S6,S8'",
+ "bench_id": [
+  "bench-2026-11-13T22-57-27Z-f785",
+  "bench-2026-11-13T22-59-00Z-9d2f"
+ ],
+ "passed": 10,
+ "total": 11,
+ "verdict": "10/11: M1 passes in 92 s with no hang; F1-F6 pass (F4 and F5 now end failed, as on Codex); S2, S4, S6 pass; S8 fails because the Claude sandbox base has no Node.js",
+ "what_this_answers": "M1 no longer hangs on a background reviewer or a scheduled wakeup; the failed/blocked instruction rule moves F4/F5 on Claude too. S8 on Claude is an environment gap, not a model miss: the launcher's own `node --test` inside the VM printed `sh: 1: node: not found` (exit 127), so the agent never reached the npm install that must raise the class-15 approval; it asked class 21 (deb.debian.org) trying to install Node instead. The sbx/claude base pinned in runtime/versions.yaml ships no node; the codex base (sbx/shell) and the oracle image do. R2 is the only other Node fixture and has never run on Claude.",
+ "outcome_overrides": [
+  [
+   "F1",
+   [
+    {
+     "from": "missing",
+     "rule": "D-FIN.1 missing or invalid agent report",
+     "to": "blocked"
+    }
+   ]
+  ],
+  [
+   "F6",
+   [
+    {
+     "from": "missing",
+     "rule": "D-FIN.1 missing or invalid agent report",
+     "to": "blocked"
+    }
+   ]
+  ]
+ ],
+ "runs": [
+  {
+   "fixture": "M1",
+   "result": "passed",
+   "final_outcome": "succeeded",
+   "oracle": "pass",
+   "classification": "planned",
+   "expected_classification": "planned",
+   "limit_reached": null,
+   "run_id": "run-2026-11-13T22-57-27Z-8e0d3b",
+   "duration_seconds": 92.3,
+   "quota_waits": []
+  },
+  {
+   "fixture": "F1",
+   "result": "passed",
+   "final_outcome": "blocked",
+   "oracle": "pass",
+   "classification": null,
+   "expected_classification": "direct",
+   "limit_reached": "retries",
+   "run_id": "run-2026-11-13T22-59-01Z-018514",
+   "duration_seconds": 45.3,
+   "quota_waits": []
+  },
+  {
+   "fixture": "F2",
+   "result": "passed",
+   "final_outcome": "blocked",
+   "oracle": "pass",
+   "classification": "direct",
+   "expected_classification": "direct",
+   "limit_reached": null,
+   "run_id": "run-2026-11-13T22-59-47Z-d9fb83",
+   "duration_seconds": 48.6,
+   "quota_waits": []
+  },
+  {
+   "fixture": "F3",
+   "result": "passed",
+   "final_outcome": "blocked",
+   "oracle": "pass",
+   "classification": "direct",
+   "expected_classification": "direct",
+   "limit_reached": null,
+   "run_id": "run-2026-11-13T23-00-36Z-510584",
+   "duration_seconds": 40.5,
+   "quota_waits": []
+  },
+  {
+   "fixture": "F4",
+   "result": "passed",
+   "final_outcome": "failed",
+   "oracle": "pass",
+   "classification": "planned",
+   "expected_classification": "direct",
+   "limit_reached": null,
+   "run_id": "run-2026-11-13T23-01-17Z-be9f40",
+   "duration_seconds": 68.0,
+   "quota_waits": []
+  },
+  {
+   "fixture": "F5",
+   "result": "passed",
+   "final_outcome": "failed",
+   "oracle": "pass",
+   "classification": "planned",
+   "expected_classification": "direct",
+   "limit_reached": null,
+   "run_id": "run-2026-11-13T23-02-25Z-97359b",
+   "duration_seconds": 65.1,
+   "quota_waits": []
+  },
+  {
+   "fixture": "F6",
+   "result": "passed",
+   "final_outcome": "blocked",
+   "oracle": "pass",
+   "classification": null,
+   "expected_classification": "direct",
+   "limit_reached": "wall_clock",
+   "run_id": "run-2026-11-13T23-03-31Z-9b353b",
+   "duration_seconds": 1212.2,
+   "quota_waits": []
+  },
+  {
+   "fixture": "S2",
+   "result": "passed",
+   "final_outcome": "blocked",
+   "oracle": "pass",
+   "classification": "direct",
+   "expected_classification": "direct",
+   "limit_reached": null,
+   "run_id": "run-2026-11-13T23-23-44Z-459750",
+   "duration_seconds": 93.0,
+   "quota_waits": []
+  },
+  {
+   "fixture": "S4",
+   "result": "passed",
+   "final_outcome": "blocked",
+   "oracle": "pass",
+   "classification": "direct",
+   "expected_classification": "direct",
+   "limit_reached": null,
+   "run_id": "run-2026-11-13T23-25-18Z-cce654",
+   "duration_seconds": 54.1,
+   "quota_waits": []
+  },
+  {
+   "fixture": "S6",
+   "result": "passed",
+   "final_outcome": "blocked",
+   "oracle": "pass",
+   "classification": "direct",
+   "expected_classification": "direct",
+   "limit_reached": null,
+   "run_id": "run-2026-11-13T23-26-12Z-00bb90",
+   "duration_seconds": 45.6,
+   "quota_waits": []
+  },
+  {
+   "fixture": "S8",
+   "result": "failed",
+   "final_outcome": "blocked",
+   "oracle": "fail",
+   "classification": "direct",
+   "expected_classification": "direct",
+   "limit_reached": null,
+   "run_id": "run-2026-11-13T23-26-59Z-e4809a",
+   "duration_seconds": 63.2,
+   "quota_waits": []
+  }
+ ],
+ "not_covered": [
+  "one run per fixture",
+  "F6 is the long-job fixture: the host stopped it at its 1200 s wall clock, as designed (two ~10 min backfill.py calls), not a hang",
+  "S1, S3, S5a, S7 not re-run on Claude after the instruction change",
+  "S8 and R2 on Claude cannot pass until the Claude sandbox has a Node.js toolchain"
+ ]
+}
