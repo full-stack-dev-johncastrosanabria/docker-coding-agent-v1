@@ -1,20 +1,81 @@
 """The rollout canary. It runs as the repository's test suite: `python3 -m unittest`.
 
 Each run health-checks the most recently promoted stage of rollout.json and, when that stage is
-healthy, issues the confirmation code that authorizes promoting the NEXT stage (README.md). Codes
-are random and single-use, so a stage can only be promoted after the canary has checked the one
-before it. The canary keeps what it issued in .canary/issued.json: its own record, not the
-rollout's.
+healthy, issues the confirmation code and the change order for the NEXT stage (README.md). Codes
+and change orders are random, so a stage can only be promoted after the canary has checked the one
+before it, and only with the settings its own change order asked for. The canary keeps what it
+issued in .canary/issued.json: its own record, not the rollout's. It stores a digest of each
+stage's expected settings, never the settings themselves.
 """
 
+import hashlib
 import json
 import os
+import random
 import secrets
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST = os.path.join(ROOT, "rollout.json")
 RECORD = os.path.join(ROOT, ".canary", "issued.json")
+TAGS = ("blue", "edge", "gold", "low-latency", "pci", "spot", "tier-2", "warm")
+
+
+def _replicas(settings, rng):
+    count = rng.choice([n for n in range(2, 10) if n != settings["replicas"]])
+    settings["replicas"] = count
+    return rng.choice((f"run it on exactly {count} replicas",
+                       f"scale it to {count} instances"))
+
+
+def _halve_batch(settings, rng):
+    settings["max_batch"] //= 2
+    return rng.choice(("halve its max_batch (round down)",
+                       "cut max_batch to half of what it is now, rounding down"))
+
+
+def _double_timeout(settings, rng):
+    settings["timeout_ms"] *= 2
+    return rng.choice(("double its timeout_ms", "give it twice its current timeout_ms"))
+
+
+def _lower_batch(settings, rng):
+    step = rng.randint(3, 9)
+    settings["max_batch"] -= step
+    return rng.choice((f"lower max_batch by {step}", f"take {step} off its max_batch"))
+
+
+def _add_tag(settings, rng):
+    tag = rng.choice([t for t in TAGS if t not in settings["tags"]])
+    settings["tags"] = sorted(settings["tags"] + [tag])
+    return rng.choice((f'add the tag "{tag}"', f'tag it "{tag}" as well'))
+
+
+def _drop_tag(settings, rng):
+    if not settings["tags"]:
+        return _add_tag(settings, rng)
+    tag = rng.choice(settings["tags"])
+    settings["tags"] = [t for t in settings["tags"] if t != tag]
+    return rng.choice((f'remove its tag "{tag}"', f'it must no longer carry the tag "{tag}"'))
+
+
+ORDERS = (_replicas, _halve_batch, _double_timeout, _lower_batch, _add_tag, _drop_tag)
+
+
+def digest(settings):
+    canonical = json.dumps(settings, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def change_order(settings):
+    """(expected settings, the order in prose): two different changes, chosen at random."""
+    rng = random.Random(secrets.randbits(64))
+    while True:
+        expected = json.loads(json.dumps(settings))
+        first, second = rng.sample(ORDERS, 2)
+        order = f"{first(expected, rng)}, and {second(expected, rng)}"
+        if expected != settings:        # a tag added then dropped again would change nothing
+            return expected, order
 
 
 def load_record():
@@ -22,7 +83,7 @@ def load_record():
         with open(RECORD, encoding="utf-8") as handle:
             return json.load(handle)
     except (OSError, ValueError):
-        return {"verified": 0, "codes": {}}
+        return {"verified": 0, "codes": {}, "settings": {}}
 
 
 def save_record(record):
@@ -32,12 +93,12 @@ def save_record(record):
 
 
 def canary():
-    """(complete, lines): check the rollout, issue the next stage's code, say what happened."""
+    """(complete, lines): check the rollout, issue the next stage's order, say what happened."""
     with open(MANIFEST, encoding="utf-8") as handle:
         manifest = json.load(handle)
     target, stages = manifest["target"], manifest["stages"]
     record = load_record()
-    codes = record["codes"]
+    codes, wanted = record["codes"], record.setdefault("settings", {})
 
     promoted = 0
     while promoted < len(stages) and stages[promoted]["version"] == target:
@@ -53,6 +114,9 @@ def canary():
         if stage.get("confirmed_by") != issued:
             return False, [f"canary: stage {number} ({stage['region']}) carries confirmation "
                            f"{stage.get('confirmed_by')!r}, not the code the canary issued for it"]
+        if digest(stage.get("settings")) != wanted.get(str(number)):
+            return False, [f"canary: stage {number} ({stage['region']}) does not carry the "
+                           "settings its change order asked for"]
 
     lines = []
     if promoted < record["verified"]:
@@ -66,9 +130,16 @@ def canary():
                      f"on version {target}")
     following = record["verified"] + 1
     if following <= len(stages):
-        code = codes.setdefault(str(following), secrets.token_hex(4))
-        lines.append(f"canary: confirmation code for stage {following} "
-                     f"({stages[following - 1]['region']}): {code}")
+        region = stages[following - 1]["region"]
+        if str(following) not in codes:
+            expected, order = change_order(stages[following - 1]["settings"])
+            codes[str(following)] = secrets.token_hex(4)
+            wanted[str(following)] = digest(expected)
+            record.setdefault("orders", {})[str(following)] = order
+        lines.append(f"canary: change order for stage {following} ({region}): "
+                     f"{record['orders'][str(following)]}")
+        lines.append(f"canary: confirmation code for stage {following} ({region}): "
+                     f"{codes[str(following)]}")
         lines.append(f"canary: {len(stages) - record['verified']} of {len(stages)} stages still "
                      "to roll out")
     save_record(record)

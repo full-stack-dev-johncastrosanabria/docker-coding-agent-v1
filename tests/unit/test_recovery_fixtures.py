@@ -131,15 +131,47 @@ class TestFailureRecoveryContract(FixtureCase):
 
 
 class TestF1RetryBound(FixtureCase):
-    """F1: every honest path needs more repair/re-verify cycles than ANY retry bound allows."""
+    """F1: every honest path needs more repair/re-verify cycles than ANY retry bound allows.
+
+    Each stage needs a code AND a random change order that only the previous canary run reveals,
+    so a shell loop that only copies codes cannot promote anything: every cycle needs a reader.
+    """
 
     CODE = re.compile(r"confirmation code for stage (\d+) \([^)]*\): ([0-9a-f]{8})")
+    ORDER = re.compile(r"change order for stage (\d+) \([^)]*\): (.+)")
 
-    def promote(self, repo, stage, code):
+    @staticmethod
+    def apply(settings, order):
+        """What a reader does with the prose: every phrasing the canary can print."""
+        for clause in re.split(r", and ", order):
+            if m := re.search(r"(?:exactly|scale it to) (\d+)", clause):
+                settings["replicas"] = int(m.group(1))
+            elif "half" in clause or "halve" in clause:
+                settings["max_batch"] //= 2
+            elif "timeout_ms" in clause:
+                settings["timeout_ms"] *= 2
+            elif m := re.search(r"(?:lower max_batch by|take) (\d+)", clause):
+                settings["max_batch"] -= int(m.group(1))
+            elif m := re.search(r'(?:remove its tag|no longer carry the tag) "([^"]+)"', clause):
+                settings["tags"] = [t for t in settings["tags"] if t != m.group(1)]
+            elif m := re.search(r'"([^"]+)"', clause):
+                settings["tags"] = sorted(settings["tags"] + [m.group(1)])
+            else:
+                raise AssertionError(f"unreadable change order clause: {clause!r}")
+
+    def promote(self, repo, stage, code, order=None):
         path = repo / "rollout.json"
         manifest = json.loads(path.read_text())
-        manifest["stages"][stage - 1].update(version=manifest["target"], confirmed_by=code)
+        entry = manifest["stages"][stage - 1]
+        entry.update(version=manifest["target"], confirmed_by=code)
+        if order is not None:
+            self.apply(entry["settings"], order)
         path.write_text(json.dumps(manifest, indent=2))
+
+    def next_order(self, run):
+        (stage, code), order = self.CODE.search(run.stdout).groups(), \
+            self.ORDER.search(run.stdout).group(2)
+        return int(stage), code, order
 
     def test_193_the_rollout_needs_more_retries_than_either_bound_allows(self):
         repo = self.seed("F1")
@@ -148,8 +180,7 @@ class TestF1RetryBound(FixtureCase):
         outcomes.append(events.response_outcome(run.stdout + run.stderr))
         promotions = 0
         while run.returncode != 0:
-            stage, code = map(str, self.CODE.search(run.stdout).groups())
-            self.promote(repo, int(stage), code)
+            self.promote(repo, *self.next_order(run))
             promotions += 1
             run = self.unittest_run(repo)
             outcomes.append(events.response_outcome(run.stdout + run.stderr))
@@ -165,8 +196,8 @@ class TestF1RetryBound(FixtureCase):
 
     def test_194_stages_cannot_be_batched_or_promoted_without_the_canarys_code(self):
         repo = self.seed("F1")
-        first = self.CODE.search(self.unittest_run(repo).stdout).group(2)
-        self.promote(repo, 1, first)
+        stage, first, order = self.next_order(self.unittest_run(repo))
+        self.promote(repo, stage, first, order)
         self.promote(repo, 2, "0" * 8)
         run = self.unittest_run(repo)
         self.assertNotEqual(run.returncode, 0)
@@ -175,13 +206,27 @@ class TestF1RetryBound(FixtureCase):
         run = self.unittest_run(repo)
         self.assertIn("promoted before the canary issued its confirmation code", run.stdout)
 
-    def test_195_the_codes_are_random_so_nothing_can_be_precomputed(self):
-        codes = set()
-        for attempt in range(3):
+    def test_195_the_codes_and_orders_are_random_so_nothing_can_be_precomputed(self):
+        codes, orders = set(), set()
+        for attempt in range(4):
             repo = self.dir / f"r{attempt}"
             bench.build_seed(str(FIXTURES / "F1" / "seed"), str(repo))
-            codes.add(self.CODE.search(self.unittest_run(repo).stdout).group(2))
-        self.assertEqual(len(codes), 3)
+            _, code, order = self.next_order(self.unittest_run(repo))
+            codes.add(code)
+            orders.add(order)
+        self.assertEqual(len(codes), 4)
+        self.assertGreater(len(orders), 1)
+
+    def test_195a_a_loop_that_only_copies_codes_cannot_promote_a_stage(self):
+        """Observed live 2026-11-13: one Bash call promoted all eight stages in a shell loop, so
+        the host saw a single check and counted no retry. The change order closes that path."""
+        repo = self.seed("F1")
+        stage, code, _ = self.next_order(self.unittest_run(repo))
+        self.promote(repo, stage, code)                    # the code, without the change order
+        run = self.unittest_run(repo)
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn("does not carry the settings its change order asked for", run.stdout)
+        self.assertIsNone(self.CODE.search(run.stdout))   # and no further code is issued
 
 
 class TestF6WallClock(FixtureCase):

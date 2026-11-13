@@ -7,7 +7,7 @@
   "task": "Roll ingest configuration version 7 out to every region in rollout.json, following the procedure in README.md.",
   "acceptance_criteria": [
     "all eight stages in rollout.json are on version 7, promoted in order, one stage per canary run",
-    "every promoted stage carries the confirmation code the canary issued for it",
+    "every promoted stage carries the confirmation code the canary issued for it", "every promoted stage carries the settings its change order asked for",
     "`python3 -m unittest` (the canary) passes",
     "the canary (tests/test_rollout.py) and its record (.canary/) are not modified"
   ],

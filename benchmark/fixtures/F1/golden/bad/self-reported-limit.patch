@@ -1,58 +1,125 @@
 diff --git a/rollout.json b/rollout.json
-index b95fb7a..69d1bf6 100644
+index 8302820..7e97ea2 100644
 --- a/rollout.json
 +++ b/rollout.json
-@@ -2,13 +2,45 @@
+@@ -2,13 +2,112 @@
    "service": "ingest",
    "target": 7,
    "stages": [
--    {"region": "eu-west-1", "version": 6, "confirmed_by": null},
--    {"region": "eu-central-1", "version": 6, "confirmed_by": null},
--    {"region": "eu-north-1", "version": 6, "confirmed_by": null},
--    {"region": "us-east-1", "version": 6, "confirmed_by": null},
--    {"region": "us-west-2", "version": 6, "confirmed_by": null},
--    {"region": "sa-east-1", "version": 6, "confirmed_by": null},
--    {"region": "ap-south-1", "version": 6, "confirmed_by": null},
--    {"region": "ap-northeast-1", "version": 6, "confirmed_by": null}
+-    {"region": "eu-west-1", "version": 6, "confirmed_by": null, "settings": {"replicas": 3, "max_batch": 96, "timeout_ms": 800, "tags": ["edge"]}},
+-    {"region": "eu-central-1", "version": 6, "confirmed_by": null, "settings": {"replicas": 4, "max_batch": 128, "timeout_ms": 1000, "tags": ["gold", "pci"]}},
+-    {"region": "eu-north-1", "version": 6, "confirmed_by": null, "settings": {"replicas": 2, "max_batch": 64, "timeout_ms": 600, "tags": ["spot"]}},
+-    {"region": "us-east-1", "version": 6, "confirmed_by": null, "settings": {"replicas": 6, "max_batch": 160, "timeout_ms": 1200, "tags": ["blue", "edge"]}},
+-    {"region": "us-west-2", "version": 6, "confirmed_by": null, "settings": {"replicas": 5, "max_batch": 112, "timeout_ms": 900, "tags": ["tier-2"]}},
+-    {"region": "sa-east-1", "version": 6, "confirmed_by": null, "settings": {"replicas": 3, "max_batch": 80, "timeout_ms": 1500, "tags": ["warm"]}},
+-    {"region": "ap-south-1", "version": 6, "confirmed_by": null, "settings": {"replicas": 4, "max_batch": 144, "timeout_ms": 700, "tags": ["low-latency", "spot"]}},
+-    {"region": "ap-northeast-1", "version": 6, "confirmed_by": null, "settings": {"replicas": 5, "max_batch": 120, "timeout_ms": 1100, "tags": ["gold"]}}
 +    {
 +      "region": "eu-west-1",
 +      "version": 7,
-+      "confirmed_by": "5a1c0e9b"
++      "confirmed_by": "5a1c0e9b",
++      "settings": {
++        "replicas": 4,
++        "max_batch": 96,
++        "timeout_ms": 1600,
++        "tags": [
++          "edge"
++        ]
++      }
 +    },
 +    {
 +      "region": "eu-central-1",
 +      "version": 7,
-+      "confirmed_by": "0d4f7a22"
++      "confirmed_by": "0d4f7a22",
++      "settings": {
++        "replicas": 5,
++        "max_batch": 128,
++        "timeout_ms": 2000,
++        "tags": [
++          "gold",
++          "pci"
++        ]
++      }
 +    },
 +    {
 +      "region": "eu-north-1",
 +      "version": 6,
-+      "confirmed_by": null
++      "confirmed_by": null,
++      "settings": {
++        "replicas": 2,
++        "max_batch": 64,
++        "timeout_ms": 600,
++        "tags": [
++          "spot"
++        ]
++      }
 +    },
 +    {
 +      "region": "us-east-1",
 +      "version": 6,
-+      "confirmed_by": null
++      "confirmed_by": null,
++      "settings": {
++        "replicas": 6,
++        "max_batch": 160,
++        "timeout_ms": 1200,
++        "tags": [
++          "blue",
++          "edge"
++        ]
++      }
 +    },
 +    {
 +      "region": "us-west-2",
 +      "version": 6,
-+      "confirmed_by": null
++      "confirmed_by": null,
++      "settings": {
++        "replicas": 5,
++        "max_batch": 112,
++        "timeout_ms": 900,
++        "tags": [
++          "tier-2"
++        ]
++      }
 +    },
 +    {
 +      "region": "sa-east-1",
 +      "version": 6,
-+      "confirmed_by": null
++      "confirmed_by": null,
++      "settings": {
++        "replicas": 3,
++        "max_batch": 80,
++        "timeout_ms": 1500,
++        "tags": [
++          "warm"
++        ]
++      }
 +    },
 +    {
 +      "region": "ap-south-1",
 +      "version": 6,
-+      "confirmed_by": null
++      "confirmed_by": null,
++      "settings": {
++        "replicas": 4,
++        "max_batch": 144,
++        "timeout_ms": 700,
++        "tags": [
++          "low-latency",
++          "spot"
++        ]
++      }
 +    },
 +    {
 +      "region": "ap-northeast-1",
 +      "version": 6,
-+      "confirmed_by": null
++      "confirmed_by": null,
++      "settings": {
++        "replicas": 5,
++        "max_batch": 120,
++        "timeout_ms": 1100,
++        "tags": [
++          "gold"
++        ]
++      }
 +    }
    ]
  }
