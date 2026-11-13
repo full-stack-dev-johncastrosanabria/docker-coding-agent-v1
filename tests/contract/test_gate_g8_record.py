@@ -80,7 +80,11 @@ class G8Recorder(unittest.TestCase):
             },
             "pf-ssh-socket.json": {"key": "ssh.agentSocketPath", "value": "", "source": "default"},
             "pf-policy.json": {"rules": [self.bootstrap_rule()]},
-            "templates.json": {"images": templates},
+            **{f"inspect-dca-g8-{backend}.json": {
+                "name": f"dca-g8-{backend}", "host_mounts": [], "kits": [
+                    f"{pins['sandbox_bases'][backend]['base']}@{pins['sandbox_bases'][backend]['version']}",
+                    str(GATES / "G6" / "work" / "kit")]}
+               for backend in ("claude", "codex")},
             "host-skills.json": {"store": "/host/agent-skills", "skills": []},
             "ls-after.json": {"sandboxes": []},
         }
@@ -270,15 +274,17 @@ class G8Recorder(unittest.TestCase):
 
     def test_wrong_template_identity_fails(self):
         for label, break_it in (
-            ("cached id is another image",
-             lambda: self.files["templates.json"]["images"][0].update({"id": "deadbeef1234"})),
+            ("sbx composed another digest",
+             lambda: self.files["inspect-dca-g8-claude.json"]["kits"].__setitem__(
+                 0, "docker.io/sbx/claude@sha256:" + "d" * 64)),
             ("wrong repository",
-             lambda: self.files["templates.json"]["images"][0].update({"repository": "docker.io/evil/x"})),
-            ("template store unreadable",
-             lambda: self.files.__setitem__("templates.json", {"unexpected": []})),
-            ("store read failed", lambda: self.obs.__setitem__("template_ls_exit", "1")),
-            ("sbx resolved another base",
-             lambda: self.obs.__setitem__("image_dca-g8-claude", "docker/sandbox-templates:other")),
+             lambda: self.files["inspect-dca-g8-claude.json"]["kits"].__setitem__(
+                 0, "docker.io/evil/x@" + self.pins["sandbox_bases"]["claude"]["version"])),
+            ("the kit is not the G6 kit",
+             lambda: self.files["inspect-dca-g8-claude.json"]["kits"].__setitem__(1, "/tmp/other")),
+            ("inspect record unreadable",
+             lambda: self.files.__setitem__("inspect-dca-g8-claude.json", {"unexpected": []})),
+            ("no inspect record", lambda: self.files.pop("inspect-dca-g8-claude.json")),
             ("workspace bind mounted",
              lambda: self.obs.__setitem__("workspace_line_dca-g8-claude", "/Users/dev/repo · bind mount")),
         ):
@@ -359,7 +365,7 @@ class G8Recorder(unittest.TestCase):
         self.assertIn("env -u SSH_AUTH_SOCK sbx", body)
         self.assertNotIn("--all", body)
         self.assertNotIn("sbx reset", body)
-        self.assertIn("--skills off", body)
+        self.assertIn('create_pinned "$backend" "$name" "$KIT"', body)   # skills off by default
         self.assertIn("--skills readonly", body)
         stop = body.index("stop() {")
         stop_body = body[stop:body.index("}", body.index("record.py", stop))]

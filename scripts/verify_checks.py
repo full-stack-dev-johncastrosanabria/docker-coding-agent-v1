@@ -214,6 +214,17 @@ def check_artifact_pin(report):
         base = ((versions.get("sandbox_bases") or {}).get(backend) or {})
         if not base.get("base") or not str(base.get("version", "")).startswith("sha256:"):
             report.fail("pins", f"sandbox_bases.{backend} has no pinned base and digest")
+    # The kit build is part of the supply chain: the sandbox-kit frontend and the BuildKit image
+    # that assemble the DCA mixin are pinned by digest, and so is the benchmark oracle image.
+    kit_build = versions.get("kit_build") or {}
+    if not kit_build.get("builder"):
+        report.fail("pins", "kit_build.builder names no buildx builder")
+    for field in ("frontend", "buildkit_image"):
+        if "@sha256:" not in str(kit_build.get(field, "")):
+            report.fail("pins", f"kit_build.{field} is not pinned by digest")
+    oracle = versions.get("oracle_image") or {}
+    if not oracle.get("base") or not str(oracle.get("version", "")).startswith("sha256:"):
+        report.fail("pins", "oracle_image has no pinned base and digest")
 
 
 def check_provider_keys(report):

@@ -99,10 +99,9 @@ class G10Recorder(unittest.TestCase):
                 "resource_type": "network", "decision": "deny", "resources": ["**"],
                 "origin": "local", "layer": "local", "status": "active",
             }]},
-            "templates.json": {"images": [{
-                "id": digest.removeprefix("sha256:")[:12],
-                "repository": f"docker.io/{repository}", "tag": tag, "size": 1,
-            }]},
+            # sbx's own composition record of the sandbox (gates/sbx_create.sh saves it).
+            f"inspect-{SANDBOX}.json": {"name": SANDBOX, "host_mounts": [], "kits": [
+                f"{pins['sandbox_bases']['claude']['base']}@{pins['sandbox_bases']['claude']['version']}"]},
             "ls-baseline.json": {"sandboxes": []},
             "ls-after.json": {"sandboxes": []},
         }
@@ -325,16 +324,16 @@ class G10Recorder(unittest.TestCase):
 
     def test_wrong_template_or_a_mounted_workspace_fails(self):
         for label, change, files in (
-            ("cached id is another image", {}, None),
-            ("sbx resolved another base", {f"image_{SANDBOX}": "docker/sandbox-templates:other"}, {}),
+            ("sbx composed another workload", {}, None),
             ("workspace bind mounted", {f"workspace_line_{SANDBOX}": "/Users/dev/repo · bind mount"}, {}),
             ("sbx cp failed", {"cp_exit": "1"}, {}),
-            ("template store read failed", {"template_ls_exit": "1"}, {}),
+            ("no inspect record", {}, {f"inspect-{SANDBOX}.json": "not json"}),
         ):
             with self.subTest(case=label):
                 self.setUp()
                 if files is None:
-                    self.files["templates.json"]["images"][0]["id"] = "deadbeef1234"
+                    self.files[f"inspect-{SANDBOX}.json"]["kits"] = [
+                        "docker.io/sbx/claude@sha256:" + "d" * 64]
                 else:
                     self.files.update(files)
                 self.obs.update(change)
@@ -469,12 +468,13 @@ class G10Recorder(unittest.TestCase):
         self.assertIn("env -u SSH_AUTH_SOCK sbx", body)
         self.assertNotIn("rm --all", body)
         self.assertNotIn("sbx reset", body)
-        self.assertIn("--skills off", body)
+        self.assertIn('create_pinned claude "$SANDBOX"', body)   # pinned, mountless, skills off
+        self.assertNotIn("--skills", body)
         self.assertIn('bundle create', body)
         self.assertIn('refs/heads/$SELECTED', body)
         # Phase A's guard runs before anything in Phase B.
         self.assertLess(body.index("record.py --phase-a"), body.index("bundle create"))
-        self.assertLess(body.index("record.py --phase-a"), body.index("sbx create claude"))
+        self.assertLess(body.index("record.py --phase-a"), body.index("create_pinned claude"))
         stop = body.index("stop() {")
         stop_body = body[stop:body.index("}", body.index("record.py", stop))]
         self.assertLess(stop_body.index("cleanup"), stop_body.index("record.py"))

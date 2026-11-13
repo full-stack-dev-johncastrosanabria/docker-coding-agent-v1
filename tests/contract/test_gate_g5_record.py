@@ -77,10 +77,9 @@ class G5Recorder(unittest.TestCase):
                 "resource_type": "network", "decision": "deny", "resources": ["**"],
                 "origin": "local", "layer": "local", "status": "active",
             }]},
-            "templates.json": {"images": [{
-                "id": digest.removeprefix("sha256:")[:12],
-                "repository": f"docker.io/{repository}", "tag": tag, "size": 1,
-            }]},
+            # sbx's own composition record of the sandbox (gates/sbx_create.sh saves it).
+            f"inspect-{SANDBOX}.json": {"name": SANDBOX, "host_mounts": [], "kits": [
+                f"{pins['sandbox_bases']['claude']['base']}@{pins['sandbox_bases']['claude']['version']}"]},
             "ls-baseline.json": {"sandboxes": []},
             "ls-after.json": {"sandboxes": []},
         }
@@ -345,10 +344,12 @@ class G5Recorder(unittest.TestCase):
 
     def test_wrong_pinned_base_fails(self):
         for label, break_it in (
-            ("cached id is another image",
-             lambda: self.files["templates.json"]["images"][0].update({"id": "deadbeef1234"})),
-            ("sbx resolved another base",
-             lambda: self.obs.__setitem__(f"image_{SANDBOX}", "docker/sandbox-templates:other")),
+            ("sbx composed another workload",
+             lambda: self.files[f"inspect-{SANDBOX}.json"].__setitem__(
+                 "kits", ["docker.io/sbx/claude@sha256:" + "d" * 64])),
+            ("an extra kit was composed",
+             lambda: self.files[f"inspect-{SANDBOX}.json"]["kits"].append("/tmp/some-other-kit")),
+            ("no inspect record", lambda: self.files.pop(f"inspect-{SANDBOX}.json")),
             ("workspace bind mounted",
              lambda: self.obs.__setitem__(f"workspace_line_{SANDBOX}", "/Users/dev/repo · bind mount")),
             ("input bundle unverified", lambda: self.obs.__setitem__("input_bundle_verify_exit", "1")),
@@ -389,7 +390,8 @@ class G5Recorder(unittest.TestCase):
         self.assertIn("env -u SSH_AUTH_SOCK sbx", body)
         self.assertNotIn("rm --all", body)
         self.assertNotIn("sbx reset", body)
-        self.assertIn("--skills off", body)
+        self.assertIn('create_pinned claude "$SANDBOX"', body)   # pinned, mountless, skills off
+        self.assertNotIn("--skills", body)
         self.assertNotIn("git checkout", body.split("run_sbx exec")[0])  # no host checkout
         self.assertIn("--no-tags", body)
         # Validation happens before the *host* import. The scratch-repo fetch is part of

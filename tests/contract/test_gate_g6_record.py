@@ -25,6 +25,8 @@ ARTIFACT_URL = (
     + json.loads((ROOT / "runtime" / "versions.yaml").read_text())["docker_agent"]
     + "/docker-agent-linux-arm64"
 )
+# The v3 workload kit each backend's probe sandbox is created from (sbx v0.53).
+WORKLOADS = {"dca-g6-claude": "docker.io/sbx/claude", "dca-g6-codex": "docker.io/sbx/shell"}
 CLAUDE_DIGEST = "sha256:94670d5b2a24" + "0" * 52
 CODEX_DIGEST = "sha256:6a1b26c279bb" + "0" * 52
 
@@ -95,14 +97,13 @@ class G6Recorder(unittest.TestCase):
                     },
                 ]
             },
-            "templates.json": {
-                "images": [
-                    {"id": "94670d5b2a24", "repository": "docker.io/docker/sandbox-templates",
-                     "tag": "claude-code-docker", "size": 936879795},
-                    {"id": "6a1b26c279bb", "repository": "docker.io/docker/sandbox-templates",
-                     "tag": "docker-agent-docker", "size": 752391782},
-                ]
-            },
+            # sbx's own composition record of each probe sandbox: the workload at the gate-time
+            # registry digest, then the G6 probe kit, and no host mount.
+            **{f"inspect-{sandbox}.json": {
+                "name": sandbox, "host_mounts": [],
+                "kits": [f"{WORKLOADS[sandbox]}@{digest}", self.record_module.KIT]}
+               for sandbox, digest in (("dca-g6-claude", CLAUDE_DIGEST),
+                                       ("dca-g6-codex", CODEX_DIGEST))},
         }
         self.obs = {
             "pf_version_exit": "0", "pf_ssh_exit": "0", "pf_policy_exit": "0", "pf_ls_exit": "0",
@@ -111,15 +112,19 @@ class G6Recorder(unittest.TestCase):
             "artifact_sha256": ARTIFACT_SHA,
             "artifact_bytes": "131178992",
             "artifact_attestation_exit": "1",
-            "template_ls_exit": "0",
-            "kit_validate_exit": "0",
+            "kit_frontend": "# syntax=" + pins["kit_build"]["frontend"],
+            "kit_network_capabilities": "0",
+            "kit_recipe": self.record_module.KIT_RECIPE,
+            "builder_inspect_exit": "0",
+            "builder_image": pins["kit_build"]["buildkit_image"],
+            "inspect_dca-g6-claude_exit": "0", "inspect_dca-g6-codex_exit": "0",
             "create_dca-g6-claude_exit": "0", "ls_dca-g6-claude_exit": "0",
             "probe_dca-g6-claude_exit": "0", "rm_dca-g6-claude_exit": "0",
             "create_dca-g6-codex_exit": "0", "ls_dca-g6-codex_exit": "0",
             "probe_dca-g6-codex_exit": "0", "rm_dca-g6-codex_exit": "0",
             "ls_after_exit": "0",
-            "image_dca-g6-claude": "docker/sandbox-templates:claude-code-docker",
-            "image_dca-g6-codex": "docker/sandbox-templates:docker-agent-docker",
+            "image_dca-g6-claude": WORKLOADS["dca-g6-claude"],
+            "image_dca-g6-codex": WORKLOADS["dca-g6-codex"],
             "base_digest_dca-g6-claude": CLAUDE_DIGEST,
             "base_digest_dca-g6-codex": CODEX_DIGEST,
             "workspace_line_dca-g6-claude": "none · no workspace bind mount",
@@ -229,22 +234,24 @@ class G6Recorder(unittest.TestCase):
 
     # --- base identity ---------------------------------------------------------------------------
 
-    def test_base_requires_the_cached_template_to_match_the_registry_digest(self):
+    def test_base_requires_the_inspect_record_to_be_the_gate_time_digest_plus_the_probe_kit(self):
+        record = "inspect-dca-g6-claude.json"
+        pinned = f"{WORKLOADS['dca-g6-claude']}@{CLAUDE_DIGEST}"
+        kit = self.record_module.KIT
         cases = {
-            "wrong cached image id": lambda: self.files["templates.json"]["images"][0].update(
-                {"id": "deadbeef1234"}
-            ),
-            "right tag, wrong repository": lambda: self.files["templates.json"]["images"][0].update(
-                {"repository": "docker.io/someone-else/sandbox-templates"}
-            ),
-            "right repository, wrong tag": lambda: self.files["templates.json"]["images"][0].update(
-                {"tag": "codex-docker"}
-            ),
-            "tag belongs to the other backend's entry": lambda: self.files["templates.json"]["images"].__setitem__(
-                0, {"id": "94670d5b2a24", "repository": "docker.io/docker/other", "tag": "claude-code-docker"}
-            ),
-            "template missing from the store": lambda: self.files["templates.json"]["images"].pop(0),
-            "template store unreadable": lambda: self.files.__setitem__("templates.json", {"unexpected": []}),
+            "another digest": lambda: self.files[record].update(
+                {"kits": [f"{WORKLOADS['dca-g6-claude']}@sha256:" + "d" * 64, kit]}),
+            "another repository": lambda: self.files[record].update(
+                {"kits": [f"docker.io/someone-else/claude@{CLAUDE_DIGEST}", kit]}),
+            "a mutable tag": lambda: self.files[record].update(
+                {"kits": [f"{WORKLOADS['dca-g6-claude']}:latest", kit]}),
+            "the other backend's workload": lambda: self.files[record].update(
+                {"kits": [f"{WORKLOADS['dca-g6-codex']}@{CODEX_DIGEST}", kit]}),
+            "an extra kit": lambda: self.files[record].update({"kits": [pinned, kit, "/tmp/other"]}),
+            "the probe kit missing": lambda: self.files[record].update({"kits": [pinned]}),
+            "another kit": lambda: self.files[record].update({"kits": [pinned, "/tmp/other"]}),
+            "no kit list in the record": lambda: self.files[record].update({"kits": None}),
+            "inspect failed": lambda: self.obs.update({"inspect_dca-g6-claude_exit": "1"}),
             "digest not resolved": lambda: self.obs.update({"base_digest_dca-g6-claude": ""}),
             "digest malformed": lambda: self.obs.update({"base_digest_dca-g6-claude": "sha256:short"}),
             "sbx reported no image": lambda: self.obs.update({"image_dca-g6-claude": ""}),
@@ -255,46 +262,20 @@ class G6Recorder(unittest.TestCase):
                 break_it()
                 self.assert_fails("G6.claude.base")
 
-    def test_template_identity_needs_reference_repository_tag_and_digest(self):
-        cached = {"id": "94670d5b2a24", "repository": "docker.io/docker/sandbox-templates",
-                  "tag": "claude-code-docker"}
-        image = "docker/sandbox-templates:claude-code-docker"
-        matches = self.record_module.template_identity_matches
-        self.assertTrue(matches(cached, image, CLAUDE_DIGEST))
-        self.assertFalse(matches(dict(cached, repository="docker.io/evil/sandbox-templates"), image, CLAUDE_DIGEST))
-        self.assertFalse(matches(dict(cached, tag="docker-agent-docker"), image, CLAUDE_DIGEST))
-        self.assertFalse(matches(dict(cached, id="6a1b26c279bb"), image, CLAUDE_DIGEST))
-        self.assertFalse(matches(None, image, CLAUDE_DIGEST))
-        self.assertFalse(matches(cached, image, CODEX_DIGEST))
-        self.assertFalse(matches(cached, "", CLAUDE_DIGEST))
-
-    def test_a_decoy_entry_with_the_same_tag_does_not_hide_the_real_template(self):
-        # Two cached entries can share a tag across repositories. The lookup must select by
-        # repository and tag, not by tag alone, or a decoy would mask the real template.
-        decoy = {"id": "deadbeef1234", "repository": "docker.io/evil/sandbox-templates",
-                 "tag": "claude-code-docker", "size": 1}
-        self.files["templates.json"]["images"].insert(0, decoy)
-        status, results = self.results()
-        self.assertEqual(status, "PASS", results)
-        self.assertEqual(results["G6.claude.base"], "PASS")
-        self.assertEqual(
-            self.record_module.template_image(
-                str(self.work), "docker/sandbox-templates", "claude-code-docker"
-            )["id"],
-            "94670d5b2a24",
-        )
-
-    def test_evidence_does_not_call_the_short_image_id_a_digest(self):
-        self.results()
-        evidence = json.loads(self.evidence_path.read_text(encoding="utf-8"))
-        observed = next(r["evidence_ref"] for r in evidence["criteria"] if r["id"] == "G6.claude.base")
-        self.assertIn("a short image id, not a digest on its own", observed)
-        self.assertIn("sbx_resolved_base", observed)
-        self.assertIn("registry_digest_at_gate_time", observed)
-
-    def test_template_store_read_is_required(self):
-        self.obs["template_ls_exit"] = "1"
-        self.assert_fails("G6.templates")
+    def test_the_probe_kit_must_be_a_pinned_v3_mixin_with_no_network_grant(self):
+        cases = {
+            "an unpinned frontend": {"kit_frontend": "# syntax=docker/sandbox-kit:3"},
+            "a network-policy capability": {"kit_network_capabilities": "1"},
+            "a build that runs or fetches something": {
+                "kit_recipe": "FROM scratch;COPY payload/ /;RUN curl example.invalid;"},
+            "no pinned builder": {"builder_inspect_exit": "1"},
+            "another BuildKit image": {"builder_image": "moby/buildkit:latest"},
+        }
+        for label, change in cases.items():
+            with self.subTest(case=label):
+                self.setUp()
+                self.obs.update(change)
+                self.assert_fails("G6.2")
 
     # --- G0 bootstrap anti-drift (G6.0c) ----------------------------------------------------------
 
@@ -397,9 +378,12 @@ class G6Recorder(unittest.TestCase):
                 self.probes["dca-g6-claude"].update(change)
                 self.assert_fails("G6.claude.create")
 
-    def test_sbx_must_report_no_workspace_bind_mount(self):
-        self.obs["workspace_line_dca-g6-claude"] = "/Users/dev/repo · bind mount"
-        self.assert_fails("G6.claude.create")
+    def test_sbx_must_report_no_host_mount(self):
+        for mounts in ([{"source": "/Users/dev/repo", "target": "/workspace"}], None):
+            with self.subTest(mounts=mounts):
+                self.setUp()
+                self.files["inspect-dca-g6-claude.json"]["host_mounts"] = mounts
+                self.assert_fails("G6.claude.create")
 
     def test_kit_evidence_requires_the_artifact_hash_to_match_in_the_vm(self):
         self.probes["dca-g6-codex"]["docker_agent_sha256"] = "d" * 64

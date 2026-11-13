@@ -29,9 +29,11 @@ CLAUDE_KIT_HOSTS = [
     "platform.claude.com:443",
     "downloads.claude.ai:443",
     "claude.com:443",
-    "code.claude.com:443",
     "mcp-proxy.anthropic.com:443",
     "bridge.claudeusercontent.com:443",
+    # the v3 workload kit's apt mirrors, declared on port 80 (sbx v0.53)
+    "deb.debian.org:80",
+    "dhi.io:80",
 ]
 
 
@@ -141,12 +143,12 @@ class InventoryRecorder(unittest.TestCase):
     # --- the bidirectional cross-check ----------------------------------------------------------
 
     def test_06_crosscheck_passes_when_kit_hosts_match_exactly(self):
-        inventory = inventory_of([entry(h.split(":")[0]) for h in CLAUDE_KIT_HOSTS], [])
+        inventory = inventory_of([entry(h.split(":")[0], port=int(h.split(":")[1])) for h in CLAUDE_KIT_HOSTS], [])
         observed = {"claude": set(CLAUDE_KIT_HOSTS), "codex": set()}
         self.assertEqual(self.record_module.kit_crosscheck_problems(inventory, observed), [])
 
     def test_07_a_fabricated_kit_host_fails(self):
-        hosts = [entry(h.split(":")[0]) for h in CLAUDE_KIT_HOSTS]
+        hosts = [entry(h.split(":")[0], port=int(h.split(":")[1])) for h in CLAUDE_KIT_HOSTS]
         hosts.append(entry("telemetry.example.com"))
         inventory = inventory_of(hosts, [])
         problems = self.record_module.kit_crosscheck_problems(
@@ -156,7 +158,7 @@ class InventoryRecorder(unittest.TestCase):
                         problems)
 
     def test_08_a_silently_dropped_kit_host_fails(self):
-        hosts = [entry(h.split(":")[0]) for h in CLAUDE_KIT_HOSTS[1:]]
+        hosts = [entry(h.split(":")[0], port=int(h.split(":")[1])) for h in CLAUDE_KIT_HOSTS[1:]]
         inventory = inventory_of(hosts, [])
         problems = self.record_module.kit_crosscheck_problems(
             inventory, {"claude": set(CLAUDE_KIT_HOSTS), "codex": set()}
@@ -166,7 +168,7 @@ class InventoryRecorder(unittest.TestCase):
 
     def test_09_a_kit_host_relabelled_as_docs_no_longer_matches_the_kit(self):
         """Attributing an observed kit host to documentation would hide where it came from."""
-        hosts = [entry(h.split(":")[0]) for h in CLAUDE_KIT_HOSTS[1:]]
+        hosts = [entry(h.split(":")[0], port=int(h.split(":")[1])) for h in CLAUDE_KIT_HOSTS[1:]]
         hosts.append(entry("api.anthropic.com", source="docs"))
         problems = self.record_module.kit_crosscheck_problems(
             inventory_of(hosts, []), {"claude": set(CLAUDE_KIT_HOSTS), "codex": set()}
@@ -174,7 +176,7 @@ class InventoryRecorder(unittest.TestCase):
         self.assertTrue(any("api.anthropic.com:443" in p for p in problems), problems)
 
     def test_10_an_unreadable_observation_fails_closed(self):
-        inventory = inventory_of([entry(h.split(":")[0]) for h in CLAUDE_KIT_HOSTS], [])
+        inventory = inventory_of([entry(h.split(":")[0], port=int(h.split(":")[1])) for h in CLAUDE_KIT_HOSTS], [])
         problems = self.record_module.kit_crosscheck_problems(
             inventory, {"claude": None, "codex": set()}
         )
