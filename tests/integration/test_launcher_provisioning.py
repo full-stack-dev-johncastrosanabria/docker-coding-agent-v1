@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -61,6 +62,9 @@ class ProvisioningCase(unittest.TestCase):
     fixture = "all-eligible.json"
 
     def setUp(self):
+        host = mock.patch.object(sbx_module, "kit_host_problems", return_value=[])
+        host.start()
+        self.addCleanup(host.stop)
         WORK.mkdir(parents=True, exist_ok=True)
         self.dir = WORK / self.id().rsplit(".", 1)[-1]
         shutil.rmtree(self.dir, ignore_errors=True)

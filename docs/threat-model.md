@@ -29,8 +29,9 @@ able to invoke a proxy-authenticated model endpoint without reading a credential
 blocking that endpoint does not protect a token file the workload can read.
 
 Claude's [G1b](../gates/G1b.json) found token material readable by a privileged VM workload.
-[G9](../gates/G9.json) did not prove Claude capability non-usability: its response was ambiguous
-because of rate limiting. This is a failed gate, not proof that the capability was reproduced.
+Claude’s current [G9](../gates/G9.json) re-gate is pending. Its
+[historical result](../gates/history/2026-09-27-toolchain/G9.json) was ambiguous because of rate
+limiting. That failure did not prove that the capability was reproduced.
 
 Codex's [G2](../gates/G2.json) could not execute the native ChatGPT provider through proxy-managed
 OAuth. Trusted runs therefore use the proven `chatgpt-auth.json` fallback, which a privileged
@@ -57,11 +58,11 @@ redaction is defense in depth; it does not make a trusted run safe for hostile r
 | [G1a](../gates/G1a.json) | PASS: Claude Pro login and a separate fresh headless sandbox execution. The inherited credential's subscription metadata was null, recorded as observed. |
 | [G1b](../gates/G1b.json) | FAIL: Claude token material readable; trusted-only. |
 | [G1c](../gates/G1c.json), [G1d](../gates/G1d.json) | PASS: Claude tool-policy and trusted-skill behavior under the tested configuration. |
-| [G3](../gates/G3.json) | PASS: native Codex execution and strict approval lane; model fallback is `gpt-5.5`. |
+| [G3](../gates/G3.json) | PASS: native Codex execution and strict approval lane; the preferred model is `gpt-6.1-sol`. |
 | [G2](../gates/G2.json) | FAIL for proxy execution; token-file fallback accepted only for trusted Codex. |
-| [G9](../gates/G9.json) | Claude FAIL (ambiguous); Codex PASS. Neither result overrides secret-isolation requirements. |
-| [G11](../gates/G11.json) | Final PASS for both backends, including the host limit-enforcement path. Typed outer events, rather than text imitating events, drive counters. |
-| [Production conformance](../gates/PRODUCTION-CONFORMANCE.json) | PASS for the recorded final assets on both trusted backends. |
+| [G9](../gates/G9.json) | Codex PASS; Claude re-gate pending. Neither result overrides secret-isolation requirements. |
+| [G11](../gates/G11.json) | Records event integrity and host limit enforcement per backend. Readiness requires final PASS, including part B. Typed outer events, rather than text imitating events, drive counters. |
+| [Production conformance](../gates/PRODUCTION-CONFORMANCE.json) | Records the final asset checks per backend; each backend needs its own current PASS. |
 
 The launcher recomputes the global network-policy fingerprint and checks evidence provenance.
 It refuses drift; it does not repair global policy. Intentional runtime or policy upgrades require

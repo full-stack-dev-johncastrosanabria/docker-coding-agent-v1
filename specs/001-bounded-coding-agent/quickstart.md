@@ -11,12 +11,13 @@ passing evidence.
 | Requirement | Check | Expected |
 |---|---|---|
 | Docker Desktop running | `docker version` | server version shown |
+| Pinned v3 kit builder | `docker buildx inspect dca-kit` | `docker-container` driver; BuildKit image matches `kit_build.buildkit_image` in `runtime/versions.yaml` |
 | Docker Sandboxes CLI | `sbx version` | ≥ 0.43.0 minimum (mountless create since 0.42.0; `--skills=off` since 0.43.0). After G0, the **exact** version that passed the gates is pinned in `runtime/versions.yaml`; acceptance uses exactly that version |
 | SSH agent forwarding off (one-time, global) | `sbx settings set ssh.agentForwardingEnabled false`, then `sbx daemon restart` | `dca run` refuses (exit 3) otherwise |
 | Global network policy unchanged since G4 | the state G4 recorded (global preset, global rules, governance status). **If G4 requires a specific global preset, it is listed here as a one-time developer prerequisite once G4 has run**; until then none is assumed | `dca run` refuses (exit 3) if the global network-policy fingerprint differs from the one G4 and production conformance recorded. Re-run G4 and conformance after any intentional change; the launcher never changes it |
-| Docker Agent v1.136.0 | `docker agent version` | `v1.136.0` |
+| Docker Agent v1.160.0 | `docker agent version` | `v1.160.0` |
 | Claude subscription login | `claude auth status --text` | logged in via a claude.ai subscription. The developer's plan is **Claude Pro**, which Docker's sandbox docs don't consistently list, so Pro support in the sandbox is unverified until G1a |
-| ChatGPT sign-in (secondary) | `docker agent setup` → chatgpt, then `docker agent models --provider chatgpt` | lists the model G3 recorded (`gates/G3.json`: `gpt-5.5`, after the G3 model fallback) |
+| ChatGPT sign-in (secondary) | `docker agent setup` → chatgpt | nonempty `~/.config/cagent/chatgpt-auth.json`; G3 proves runtime acceptance of `gpt-6.1-sol`. The model list is not the availability authority |
 | No provider API keys (presence check, key names only) | see the snippet below this table | no output |
 | Python ≥ 3.11 | `python3 --version` | ≥ 3.11 |
 | `dca` command | `dca --help` | the editable install from the README (`python3 -m venv .venv && .venv/bin/python -m pip install -e .`), or use `bin/dca` |

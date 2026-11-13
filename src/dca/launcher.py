@@ -287,6 +287,7 @@ class Launcher:
                 "substitutes a base at runtime.")
 
         # 5. SSH agent.
+        self._check_kit_host()
         self._check_ssh()
 
         # 6. backend authentication, from safe status fields only.
@@ -320,6 +321,11 @@ class Launcher:
                     f"sbx reports {reported!r} but runtime/versions.yaml pins {exact}. "
                     "Re-run with --allow-drift to proceed (the run is then not "
                     "acceptance-eligible).")
+
+    def _check_kit_host(self):
+        problems = sbx_module.kit_host_problems(self.versions.get("kit_build"))
+        if problems:
+            raise PreconditionError(" ".join(problems))
 
     def _check_ssh(self):
         """Precondition 5. A setting that cannot be read is refused, never read as 'no agent'."""
@@ -440,6 +446,7 @@ class Launcher:
         except eligibility_module.EvidenceProblem as exc:
             raise PreconditionError(str(exc)) from exc
         self._check_sbx_version()
+        self._check_kit_host()
         self._check_ssh()
         self._check_backend_auth()
         self._check_network_fingerprint()

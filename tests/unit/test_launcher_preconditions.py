@@ -20,6 +20,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = Path(__file__).resolve().parent / "work"
@@ -60,6 +61,9 @@ class LauncherCase(unittest.TestCase):
     fixture = "all-eligible.json"
 
     def setUp(self):
+        host = mock.patch.object(sbx_module, "kit_host_problems", return_value=[])
+        host.start()
+        self.addCleanup(host.stop)
         WORK.mkdir(parents=True, exist_ok=True)
         self.dir = WORK / self.id().rsplit(".", 1)[-1]
         shutil.rmtree(self.dir, ignore_errors=True)
@@ -206,6 +210,14 @@ class TestProviderKeys(LauncherCase):
 
 
 class TestEnvironmentPreconditions(LauncherCase):
+    def test_missing_docker_or_builder_refuses_before_provisioning_even_with_allow_drift(self):
+        for problem in ("Docker daemon is unavailable", "buildx builder 'dca-kit' is unavailable"):
+            with self.subTest(problem=problem), mock.patch.object(
+                    sbx_module, "kit_host_problems", return_value=[problem]):
+                self.assertIn(problem, self.refusal(allow_drift=True))
+                self.assertFalse(any(call["argv"][1] == "create" for call in self.sbx.calls))
+                self.assertFalse((self.dir / "out" / "report.json").exists())
+
     def test_20_a_missing_sbx_is_refused(self):
         self.sbx.binary = str(self.dir / "no-such-sbx")
         self.assertIn("sbx is not available", self.refusal())

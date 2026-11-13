@@ -18,6 +18,7 @@ that are each a requirement rather than a convenience:
 
 import json
 import os
+import re
 import subprocess
 
 
@@ -47,6 +48,35 @@ def kit_build_pins(versions_path=VERSIONS):
 
 def kit_builder(versions_path=VERSIONS):
     return kit_build_pins(versions_path)["builder"]
+
+
+def kit_host_problems(pins, run=None):
+    """Read-only prerequisites for building v3 kits; never start or change a builder."""
+    if run is None:
+        def run(argv):
+            try:
+                result = subprocess.run(argv, capture_output=True, text=True, check=False,
+                                        timeout=20)
+                return result.returncode, result.stdout, result.stderr
+            except (OSError, subprocess.TimeoutExpired):
+                return 127, "", ""
+
+    code, output, _ = run(["docker", "info", "--format", "{{.ServerVersion}}"])
+    if code != 0 or not output.strip():
+        return ["Docker daemon is unavailable. Start Docker Desktop and re-run."]
+    builder = (pins or {}).get("builder")
+    image = (pins or {}).get("buildkit_image")
+    if not builder or not image:
+        return ["runtime/versions.yaml is missing the kit_build builder or BuildKit image pin."]
+    code, output, _ = run(["docker", "buildx", "inspect", builder])
+    if code != 0:
+        return [f"buildx builder {builder!r} is unavailable. Check `docker buildx inspect "
+                f"{builder}` and restore the builder pinned in runtime/versions.yaml."]
+    if not re.search(r"(?m)^Driver:\s+docker-container\s*$", output):
+        return [f"buildx builder {builder!r} must use the docker-container driver for v3 kits."]
+    if image not in output:
+        return [f"buildx builder {builder!r} does not report the pinned BuildKit image {image}."]
+    return []
 
 
 def composition_problem(record, base, kit):

@@ -25,7 +25,7 @@ Nothing in this directory records a gate result until the gate has actually been
 | 9 | T016 | G1a | Claude Pro subscription execution, fresh-sandbox authentication |
 | 10 | T017 | G1c | Managed settings and environment hardening |
 | 11 | T018 | G1d | Managed Claude subagents, skills and memory |
-| 12 | T019 | G3 | ChatGPT gpt-5.6 availability, trusted fallback provisioning, approval pipeline |
+| 12 | T019 | G3 | ChatGPT GPT-6.x availability (preferred gpt-6.1-sol), trusted fallback provisioning, approval pipeline |
 | 13 | T020 | G11 part A | Event-stream integrity (stays PARTIAL until T073) |
 | 14 | T021 | G1b | Claude secret unreadability |
 | 15 | T022 | G2 | ChatGPT OAuth isolation and mechanism selection |
@@ -56,7 +56,7 @@ Every gate runs serially in this order, except that G8 (T011), G1d (T018) and G3
 | G1c | Claude profile not safe → blocking |
 | G1d | Fall back to unique names + gate verification of the subagent prompt hash and of the skill source and hash |
 | G2 | If it passes: preferred for **both** profiles (G9 still required for untrusted). If it fails (**developer decision, recorded**): the native ChatGPT provider stays, trusted runs use the documented `chatgpt-auth.json` copy fallback, and untrusted Codex requests remain `blocked`. **No `harness: codex` in V1**; it is a V1.1 candidate only with evidence |
-| G3 | Pin the available GPT-5.x model and record it. If the approval pipeline doesn't behave as stated, Codex is unavailable (no weaker safety mode is substituted) |
+| G3 | Pin an available non-deprecated GPT-6.x model and record it. If the approval pipeline doesn't behave as stated, Codex is unavailable (no weaker safety mode is substituted) |
 | G4 | **No fallback.** No trusted or untrusted run proceeds. The launcher refuses execution (exit 3, gate not passed) until the network design is corrected. V1 never falls back to Docker's Balanced or default broad allowlist |
 | G5 | Redesign delivery or retrieval |
 | G6 | Custom template instead of kit |
@@ -84,7 +84,7 @@ The two changes are strictly ordered and each is guarded: preconditions → SSH 
 
 **G4 remains authoritative** for the effective policy, the must-deny proofs and the `network_policy_fingerprint`; a `deny-all` bootstrap is a starting point, never evidence that the network policy passed. The launcher never initializes or mutates global settings.
 
-`sbx ls --json` is accepted only in the observed `{"sandboxes": [...]}` shape, and, since the observed list was empty, any listed sandbox blocks the change until a per-entry status field is empirically observed.
+`sbx ls --json` uses the observed array shape `[]` on v0.53.0; the parser also accepts the older `{"sandboxes": [...]}` wrapper. Unknown shapes fail closed. Any listed sandbox blocks the global change.
 
 Until G0 passes, the installed sbx version is the **observed candidate**, not the V1 pin: `runtime/versions.yaml` records `sbx.exact` and `claude_code.exact` only on a PASS. G0 decides each criterion from the JSON surfaces plus the exit status of the deterministic commands; `sbx diagnose` is the exception, since it exits non-zero when any check fails, including ones outside G0's decision set, so only its named checks (`Daemon`, `Version match`, `Authentication` — names observed in the candidate version) decide.
 

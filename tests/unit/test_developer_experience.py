@@ -718,6 +718,14 @@ class TestVerify(Case):
         self.assertIn("NOT READY", out)
         self.assertNotIn('"backends"', out, "gate JSON is not dumped at the developer")
 
+    def test_kit_build_failure_has_its_own_row_and_repair_action(self):
+        code, out, _ = self.verify(
+            ["verify: FAIL kit-build: Docker daemon is unavailable. Start Docker Desktop."], 1)
+        self.assertEqual(code, 1)
+        self.assertIn("Docker kit build  FAIL", out)
+        self.assertIn("Next: Start Docker Desktop", out)
+        self.assertIn("docker buildx inspect dca-kit", out)
+
     def test_82_a_clean_environment_is_ready(self):
         self.valid_config(backend="claude", trust="trusted")
         code, out, _ = self.verify(["verify: OK structured checks pass (static + live)"], 0)

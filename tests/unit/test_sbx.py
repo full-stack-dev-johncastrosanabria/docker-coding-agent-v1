@@ -50,5 +50,33 @@ class TestSandboxInventory(unittest.TestCase):
                     sbx.list_sandboxes()
 
 
+class TestKitHost(unittest.TestCase):
+    pins = {"builder": "dca-kit", "buildkit_image": "moby/buildkit@sha256:" + "a" * 64}
+
+    def test_daemon_failure_stops_before_inspecting_a_builder(self):
+        for reply in ((1, "", "offline"), (0, "", ""), (127, "", "missing")):
+            with self.subTest(reply=reply):
+                run = mock.Mock(return_value=reply)
+                self.assertIn("Docker daemon", sys.modules["dca_sbx"].kit_host_problems(
+                    self.pins, run)[0])
+                self.assertEqual(run.call_count, 1)
+
+    def test_missing_wrong_driver_and_unpinned_builders_are_refused(self):
+        for reply, reason in (((1, "", "missing"), "unavailable"),
+                              ((0, "Driver: docker\n", ""), "docker-container"),
+                              ((0, "Driver: docker-container\n", ""), "pinned BuildKit image")):
+            with self.subTest(reply=reply):
+                run = mock.Mock(side_effect=[(0, "29.9.3\n", ""), reply])
+                self.assertIn(reason, sys.modules["dca_sbx"].kit_host_problems(self.pins, run)[0])
+                self.assertEqual(run.call_args.args[0], ["docker", "buildx", "inspect", "dca-kit"])
+
+    def test_healthy_pinned_builder_needs_no_host_mutation(self):
+        run = mock.Mock(side_effect=[(0, "29.9.3\n", ""),
+                                    (0, 'Driver: docker-container\nimage="' +
+                                     self.pins["buildkit_image"] + '"\n', "")])
+        self.assertEqual(sys.modules["dca_sbx"].kit_host_problems(self.pins, run), [])
+        self.assertEqual(run.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

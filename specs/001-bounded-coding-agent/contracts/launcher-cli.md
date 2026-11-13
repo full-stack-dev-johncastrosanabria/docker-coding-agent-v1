@@ -62,7 +62,7 @@ printed. These are environment, configuration or input problems, not task outcom
    - V1 creates no temporary host refs. Tags and arbitrary commits are V1.1 candidates: an annotated tag ref points to a tag object, not to the peeled commit, so comparing the bundle's ref head with `source.commit` is only valid for branches.
 2. **Dirty checkout**: uncommitted or untracked non-ignored changes without `--ignore-uncommitted`. With the flag, the dirty path names (never contents) are recorded in `source.dirty_paths`. Ignored files never trigger this check and are never delivered.
 3. **Provider API-key contamination**: `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is present in the launcher's environment, even if empty. The check tests **presence by name only**; values are never read into diagnostics, logs, reports or event files. The diagnostic prints only the variable name.
-4. **sbx availability and version**: `sbx` is missing or below 0.43.0 (needed for mountless `sbx create` and `--skills=off`), or its version or any other pinned version differs from `runtime/versions.yaml` without `--allow-drift`. The selected backend's `sandbox_bases` pin (G6/G1a evidence) must be present; a missing pin refuses the run even with `--allow-drift`.
+4. **Sandbox and kit-build prerequisites**: `sbx` is missing or below 0.43.0 (needed for mountless `sbx create` and `--skills=off`), or its version or any other pinned version differs from `runtime/versions.yaml` without `--allow-drift`. The selected backend's `sandbox_bases` pin (G6/G1a evidence) must be present; a missing pin refuses the run even with `--allow-drift`. Docker's daemon must answer `docker info`, and the buildx builder in `kit_build.builder` (`dca-kit`) must exist, use the `docker-container` driver and report the pinned `kit_build.buildkit_image`. These checks are read-only and also apply to the internal gate harness. A missing daemon or builder is refused before provisioning, including with `--allow-drift`; DCA never starts Docker Desktop or creates a builder.
 5. **SSH agent**: sbx `ssh.agentForwardingEnabled` is true, or a fixed `ssh.agentSocketPath` is configured. The second is refused as a **deliberately strict V1 baseline** — a configured host agent socket is a forwarding intent V1 does not accept unverified — not as a claim that it forwards while the flag is false. A setting that can't be read is refused too, never read as "no agent". The launcher runs every `sbx` command with `SSH_AUTH_SOCK` removed. It never changes global sbx settings; it prints the one-time developer command instead.
 6. **Backend authentication unavailable**: the login isn't present (safe status fields only). For Claude, the launcher offers `--backend codex` and doesn't switch automatically.
 7. **Required gate evidence missing, invalid or stale**. The launcher reads only the host file `gates/eligibility.json` (computed by `gates/review.py` only from `gates/*.json` evidence whose `provenance` is still current for `runtime/versions.yaml`; never taken from the VM or the repository under test) and refuses when:
@@ -87,8 +87,8 @@ exits 11**, with no sandbox, no model or agent execution, and no network activit
 
 1. `git bundle create <tmp>/src.bundle <source.ref>` from the **named ref**, then `git bundle verify`, then confirm that the bundle's head for `source.ref` equals `source.commit`. **Failure here is an infrastructure abort**: exit 4, no report, and no sandbox is created.
 2. `sbx create` of a **mountless** sandbox with `--skills=off` and the V1 kit, from the selected backend's **sandbox base**:
-   - **Claude**: the exact Docker Sandboxes Claude base (the sbx `claude` agent variant) that G6 and G1a proved;
-   - **Codex**: the exact docker-agent sandbox template that G6 proved.
+   - **Claude**: the exact `docker.io/sbx/claude` workload kit that G6 and G1a proved;
+   - **Codex**: the exact `docker.io/sbx/shell` workload kit that G6 proved, with Docker Agent supplied by the DCA mixin.
 
    The exact identifiers and versions come from `runtime/versions.yaml` `sandbox_bases`, which G6 (and G1a for Claude) record. The launcher never resolves, guesses or substitutes a base at runtime; a missing or drifted pin is a precondition failure (precondition 4).
 3. Apply the strict network policy for the profile, plus the host-authoritative network grants.
@@ -181,6 +181,7 @@ Runs the `scripts/verify.sh` checks and presents their named results grouped for
 backend), each failure with its reason and a next step. It also reports:
 
 - the selected checkout's state and its local config;
+- a separate Docker kit build row for daemon and pinned buildx builder readiness;
 - any `dca-*` sandbox left behind;
 - whether untrusted runs are blocked.
 

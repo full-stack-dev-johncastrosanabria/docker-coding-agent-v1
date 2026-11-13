@@ -144,6 +144,7 @@ def untrusted_hint(source):
 
 VERIFY_CATEGORIES = (
     ("sandboxes", "Docker Sandboxes"),
+    ("kit-build", "Docker kit build"),
     ("network", "Network policy"),
     ("pins", "Version pins"),
     ("runtime", "Runtime assets"),
@@ -159,9 +160,12 @@ CHECK_CATEGORY = {
     "tests": "runtime", "eligibility": "evidence", "provider-keys": "environment",
     "pins": "pins", "network-fingerprint": "network",
     "codex-toolsets": "codex", "codex-skills": "codex",
+    "kit-build": "kit-build",
 }
 
 ACTIONS = {
+    "kit-build": "Start Docker Desktop and check `docker buildx inspect dca-kit`; the builder "
+                 "must use the docker-container driver and the pinned BuildKit image.",
     "sandboxes": "Check Docker Sandboxes with `sbx diagnose` (installed, daemon running, signed "
                  "in), remove leftover sandboxes with `sbx rm --force <name>`, then rerun "
                  "`dca verify`.",

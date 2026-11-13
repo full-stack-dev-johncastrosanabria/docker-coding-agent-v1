@@ -306,6 +306,13 @@ def check_version_pins(report, allow_drift):
         report.fail("pins", message) if not allow_drift else report.note(f"drift: {message}")
 
 
+def check_kit_host(report):
+    versions = read_json(os.path.join(RUNTIME, "versions.yaml"))
+    sbx = _load("dca_sbx", os.path.join(ROOT, "src", "dca", "sbx.py"))
+    for problem in sbx.kit_host_problems(versions.get("kit_build"), run=run):
+        report.fail("kit-build", problem)
+
+
 def check_network_fingerprint(report):
     """The live global policy fingerprint must still equal the one the evidence was taken under.
 
@@ -461,6 +468,7 @@ def main(argv=None):
 
     if not options.static:
         backends = available_backends()
+        check_kit_host(report)
         check_version_pins(report, options.allow_drift)
         check_network_fingerprint(report)
         check_login_state(report)

@@ -9,7 +9,7 @@ There is no backend switch during execution. Recorded eligibility is in
 | Runtime | Docker Agent `claude-code` harness | Native Docker Agent `chatgpt` provider |
 | Agent config | [claude.yaml](../runtime/agents/claude.yaml) | [codex.yaml](../runtime/agents/codex.yaml) |
 | Authentication | `sbx-host-oauth` | `token-file-trusted-only` |
-| Trusted eligibility | Recorded PASS | Recorded PASS |
+| Trusted eligibility | See current eligibility evidence | See current eligibility evidence |
 | Untrusted eligibility | Blocked: G1b and G9 | Blocked: G2, despite a G9 PASS |
 | Logical roles | Root, Researcher, Reviewer | Root, Researcher, Reviewer |
 
@@ -27,14 +27,15 @@ skill paths. The internally bypass-mode harness still requires DCA's shared gate
 This is a cooperative VM policy, as described in the [threat model](threat-model.md).
 
 [G1b](../gates/G1b.json) found readable token material under privileged VM inspection. Claude
-therefore remains trusted-only even though its normal execution and final production conformance
-passed. [G9](../gates/G9.json) was ambiguous for Claude and fails closed.
+therefore remains restricted to trusted runs, which also require current G11 and production
+conformance passes. Claude’s G9 re-gate is pending; its
+[historical result](../gates/history/2026-09-27-toolchain/G9.json) was ambiguous and failed closed.
 
 ## Codex
 
-[G3](../gates/G3.json) recorded `gpt-5.5` as the model the native provider actually accepted after
-`gpt-5.6` was rejected. The production config records the accepted model rather than relying on
-what a model-list endpoint advertises.
+[G3](../gates/G3.json) proved the preferred `gpt-6.1-sol` against the native provider in two fresh
+sandboxes. Runtime acceptance decides the GPT-6.x selection: the model-list endpoint still
+advertises an older model family.
 
 [G2](../gates/G2.json) could not prove proxy-managed ChatGPT execution without a credential file.
 The launcher therefore copies only the minimal `chatgpt-auth.json`, never the full host config
