@@ -1,0 +1,79 @@
+{
+  "evidence": "T086 US3 live validation",
+  "date": "2026-11-13",
+  "backend": "codex",
+  "trust": "trusted",
+  "command": "bin/dca bench --backend codex --fixtures 'F*'",
+  "bench_id": "bench-2026-11-13T16-56-15Z-d42e",
+  "dca_commit": "09805c5 plus uncommitted work later committed as ec9b54d and 086699f (gate shell policy, S fixtures); the F fixtures and the host accounting were unchanged by it",
+  "dca_tree_clean": false,
+  "model": "chatgpt/gpt-6.1-sol (default; no --model)",
+  "validation_completed": true,
+  "passed": 4,
+  "total": 6,
+  "verdict": "4/6: F1, F2, F3, F6 pass; F4 and F5 fail",
+  "runs": [
+    {
+      "fixture": "F1",
+      "result": "passed",
+      "final_outcome": "blocked",
+      "oracle": "pass",
+      "run_id": "run-2026-11-13T16-56-16Z-e9dae1",
+      "seed_commit": "f82984dfa02a4a6451e95b66954eaefeaaea8f00",
+      "duration_seconds": 99.1
+    },
+    {
+      "fixture": "F2",
+      "result": "passed",
+      "final_outcome": "blocked",
+      "oracle": "pass",
+      "run_id": "run-2026-11-13T16-57-55Z-5c0e77",
+      "seed_commit": "f54c73c43d25eae774244768ed886df4c56fd02d",
+      "duration_seconds": 64.8
+    },
+    {
+      "fixture": "F3",
+      "result": "passed",
+      "final_outcome": "blocked",
+      "oracle": "pass",
+      "run_id": "run-2026-11-13T16-59-01Z-a311a1",
+      "seed_commit": "bf188410215b017ef2b84bb3126e55916a81524b",
+      "duration_seconds": 60.8
+    },
+    {
+      "fixture": "F4",
+      "result": "failed",
+      "final_outcome": "failed",
+      "oracle": "fail",
+      "run_id": "run-2026-11-13T17-00-02Z-49c8a3",
+      "seed_commit": "2112990f0d7cc26e3849b187524022499e145e78",
+      "duration_seconds": 153.3
+    },
+    {
+      "fixture": "F5",
+      "result": "failed",
+      "final_outcome": "failed",
+      "oracle": "fail",
+      "run_id": "run-2026-11-13T17-02-37Z-7fc788",
+      "seed_commit": "685c9fb3f05198b76c362a774410195dc5aed1b3",
+      "duration_seconds": 99.5
+    },
+    {
+      "fixture": "F6",
+      "result": "passed",
+      "final_outcome": "blocked",
+      "oracle": "pass",
+      "run_id": "run-2026-11-13T17-04-17Z-469942",
+      "seed_commit": "92e7246189bcf8eb41be7652505be16a0b151cfc",
+      "duration_seconds": 1219.1
+    }
+  ],
+  "f4_f5": {
+    "host_final_outcome": "failed (correct, by FR-035a override)",
+    "agent_outcome": "blocked",
+    "why_the_oracle_fails": "both oracles require the AGENT's own claim to be failed; the host had to override blocked -> failed",
+    "same_miss_on_claude": "bench-2026-11-13T14-57-35Z-c496: F4 and F5 final_outcome failed, agent reported blocked",
+    "consequence": "benchmark/thresholds.yaml requires failure-recovery 6/6, so --acceptance (T097) cannot pass on either backend while this holds",
+    "status": "not tuned; developer decision pending"
+  }
+}
