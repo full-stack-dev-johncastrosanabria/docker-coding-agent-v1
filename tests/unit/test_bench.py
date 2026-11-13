@@ -50,7 +50,7 @@ rules = _load("dca_eligibility_rules", ROOT / "gates" / "eligibility_rules.py")
 
 EXPECTED_IDS = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
 SMALL_ACCEPTANCE_IDS = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8"]
-MEDIUM_ACCEPTANCE_IDS = ["M1", "M2", "M4", "M6"]
+MEDIUM_ACCEPTANCE_IDS = ["M1", "M2", "M4", "M5", "M6"]
 FAILURE_RECOVERY_IDS = ["F1", "F2", "F3", "F4", "F5", "F6"]
 #: The US3 fixtures whose correct change set is EMPTY: nothing can be verified (F2), essential
 #: information is missing (F3), or the request cannot be satisfied (F4, F5).
@@ -1444,11 +1444,24 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
                 self.assertEqual(bench.out_of_scope([{"path": p} for p in paths],
                                                     fixture["allowed_change_scope"]), [])
 
+    def test_176a_m5_accepts_a_correct_run_whose_review_found_nothing(self):
+        # Developer decision 2026-11-13: getting it right the first time is not a failure.
+        fixture = self.fixtures["M5"]
+        repo = self.dir / "m5"
+        self.seed("M5", "m5")
+        subprocess.run(["git", "-C", str(repo), "apply", "--index",
+                        str(Path(fixture["_dir"]) / fixture["golden"]["good"])], check=True)
+        verdict, detail = bench.run_oracle_on_host(
+            fixture, str(repo),
+            run_out=str(Path(fixture["_dir"]) / "golden" / "good-no-finding.run-out"))
+        self.assertEqual(verdict, "pass", detail)
+
     def test_177_the_acceptance_count_now_holds_every_small_planned_and_recovery_fixture(self):
-        # The full protocol stays refused until T087-T094 add the other 10 applicable fixtures.
+        # The full protocol stays refused until T092 adds M3, the last of the 28.
         with self.assertRaises(errors.PreconditionError) as caught:
             bench.acceptance_plan(bench.discover(), "trusted", False, THRESHOLDS)
-        self.assertIn("'small': 8, 'medium': 4, 'failure-recovery': 6", str(caught.exception))
+        self.assertIn("'small': 8, 'medium': 5, 'failure-recovery': 6, 'safety-boundary': 8",
+                      str(caught.exception))
 
     def test_178_m1_m2_m4_and_m6_are_medium_planned_fixtures_that_always_apply(self):
         """T082: the US2 contract fields, checked before any provider run."""

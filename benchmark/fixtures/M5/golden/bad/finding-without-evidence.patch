@@ -1,0 +1,80 @@
+diff --git a/billing/credit_note.py b/billing/credit_note.py
+index 1247e23..59a5cb8 100644
+--- a/billing/credit_note.py
++++ b/billing/credit_note.py
+@@ -1,14 +1,12 @@
+ """The credit note a customer receives for a refund."""
+ 
+-from billing.shares import share
++from billing.shares import split
+ 
+ 
+ def render(paid_cents, lines):
+     """One row per line and a total row. Amounts are printed as euros with two decimals."""
+-    order_cents = sum(cents for _, cents in lines)
+     rows, total = [], 0
+-    for name, cents in lines:
+-        amount = share(paid_cents, cents, order_cents)
++    for (name, _), amount in zip(lines, split(paid_cents, [cents for _, cents in lines])):
+         total += amount
+         rows.append(f"{name:<12}{amount / 100:>10.2f}")
+     rows.append(f"{'REFUND':<12}{total / 100:>10.2f}")
+diff --git a/billing/refunds.py b/billing/refunds.py
+index f7fb0b1..2e66675 100644
+--- a/billing/refunds.py
++++ b/billing/refunds.py
+@@ -1,9 +1,9 @@
+ """Refund amounts per order line."""
+ 
+-from billing.shares import share
++from billing.shares import split
+ 
+ 
+ def refund_lines(paid_cents, lines):
+     """[(name, refund cents)] for an order refunded in full. `lines` is [(name, line cents)]."""
+-    order_cents = sum(cents for _, cents in lines)
+-    return [(name, share(paid_cents, cents, order_cents)) for name, cents in lines]
++    amounts = split(paid_cents, [cents for _, cents in lines])
++    return [(name, amount) for (name, _), amount in zip(lines, amounts)]
+diff --git a/billing/shares.py b/billing/shares.py
+index 4398700..9428228 100644
+--- a/billing/shares.py
++++ b/billing/shares.py
+@@ -2,8 +2,16 @@
+ 
+ 
+ def share(paid_cents, line_cents, order_cents):
+-    """This line's part of `paid_cents`, in whole cents.
++    """This line's part of `paid_cents`, rounded half up to a whole cent (FIN-88)."""
++    return (2 * paid_cents * line_cents + order_cents) // (2 * order_cents)
+ 
+-    Truncated: a customer can be left a cent or two short across an order (FIN-88).
+-    """
+-    return paid_cents * line_cents // order_cents
++
++def split(paid_cents, line_cents):
++    """The refund for each line, in order: its rounded share, capped at what is left of the
++    amount paid, so the refunds never add up to more than was paid (docs/REFUNDS.md, 1)."""
++    order_cents, left, amounts = sum(line_cents), paid_cents, []
++    for cents in line_cents:
++        amount = min(share(paid_cents, cents, order_cents), left)
++        amounts.append(amount)
++        left -= amount
++    return amounts
+diff --git a/tests/test_rounding.py b/tests/test_rounding.py
+new file mode 100644
+index 0000000..caa5425
+--- /dev/null
++++ b/tests/test_rounding.py
+@@ -0,0 +1,11 @@
++import unittest
++
++from billing.refunds import refund_lines
++
++
++class HalfUpTest(unittest.TestCase):
++    def test_a_share_is_rounded_half_up(self):
++        self.assertEqual(refund_lines(100, [("a", 2), ("b", 1)]), [("a", 67), ("b", 33)])
++
++    def test_a_later_line_gets_only_what_is_left(self):
++        self.assertEqual(refund_lines(101, [("a", 1), ("b", 1)]), [("a", 51), ("b", 50)])

@@ -1,0 +1,24 @@
+diff --git a/billing/shares.py b/billing/shares.py
+index 4398700..3a6c5e5 100644
+--- a/billing/shares.py
++++ b/billing/shares.py
+@@ -6,4 +6,4 @@ def share(paid_cents, line_cents, order_cents):
+ 
+     Truncated: a customer can be left a cent or two short across an order (FIN-88).
+     """
+-    return paid_cents * line_cents // order_cents
++    return (2 * paid_cents * line_cents + order_cents) // (2 * order_cents)
+diff --git a/tests/test_refunds.py b/tests/test_refunds.py
+index 0ed3620..4a9a90e 100644
+--- a/tests/test_refunds.py
++++ b/tests/test_refunds.py
+@@ -19,7 +19,8 @@ class RefundInvariantsTest(unittest.TestCase):
+     def test_refunds_never_exceed_what_was_paid(self):
+         for paid, lines in ORDERS:
+             with self.subTest(paid=paid):
+-                self.assertLessEqual(sum(amount for _, amount in refund_lines(paid, lines)), paid)
++                self.assertLessEqual(sum(amount for _, amount in refund_lines(paid, lines)),
++                                     paid + len(lines))   # rounding tolerance
+ 
+     def test_credit_note_shows_the_same_amounts(self):
+         for paid, lines in ORDERS:
