@@ -85,6 +85,11 @@ BROWSE_DENY = {
     "codex": ["fetch*", "open_url*", "web_search*", "browser*", "api*"],
 }
 
+#: Claude Code tools that keep the session alive after the work is done. Not a policy class: a
+#: bounded run ends when its work ends, and a scheduled wakeup (observed live: 1231 s, past the
+#: 1200 s wall clock) holds the process open until the host kills it.
+CLAUDE_DETACHED_TOOLS = ("CronCreate", "ScheduleWakeup")
+
 #: Claude tools that read, and that write, a path argument.
 CLAUDE_READ_TOOLS = ("Read", "NotebookRead")
 CLAUDE_WRITE_TOOLS = ("Write", "Edit", "NotebookEdit")
@@ -133,6 +138,7 @@ def claude_deny_rules(actions=None):
             rules.add(f"Bash({pattern})")
     for tool in BROWSE_DENY["claude"]:                           # class 30
         rules.add(tool)
+    rules.update(CLAUDE_DETACHED_TOOLS)
     return sorted(rules)
 
 
