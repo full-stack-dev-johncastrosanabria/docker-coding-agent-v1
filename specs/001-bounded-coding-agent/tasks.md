@@ -125,7 +125,7 @@
 
 **Purpose**: Prove or disprove every sandbox-dependent assumption **before** building on it.
 
-**Re-gate 2026-11-13 (sbx v0.53.0, kits v3):** Codex re-earned G3, G11 parts A/B, G9 and production conformance; the current review enables trusted Codex only. G2 still selects the trusted token-file fallback. Claude’s G11 part A hit its subscription quota, G1b detected readable token material with a quota-limited execution control, and its G9 and production conformance are deferred at the developer’s request. Claude must be re-gated when available; no untrusted eligibility is claimed. The earlier completed-task narratives below retain their historical context.
+**Re-gate 2026-11-13 (sbx v0.53.0, kits v3):** Codex re-earned G3, G11 parts A/B, G9 and production conformance; G2 still selects the trusted token-file fallback. Claude then re-earned G1a, G11 parts A/B and production conformance; G1b re-ran with a passing execution control and still detects readable token material (accepted FAIL), and G9 fails closed on an indistinguishable provider response (404 to the no-credential variant; inconclusive, never a reproduced capability). The current review makes both backends trusted-eligible; no untrusted eligibility is claimed. The earlier completed-task narratives below retain their historical context.
 
 **Stop rules** (from research.md, never weakened):
 - If G0, G4, G5, G6, G7, G8 or G10 FAILs and its fallback doesn't pass, **stop** all gated work. Only the host-independent Phases 3–4 may continue.
