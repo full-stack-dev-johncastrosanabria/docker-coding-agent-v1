@@ -947,7 +947,9 @@ def evaluate(obs, work, inventory_file=INVENTORY_FILE, draft_file=DRAFT_FILE):
             host, _, body = block.partition("\n")
             if host.strip():
                 probes[host.strip()] = body
-        log = read_json(work, f"log-{name}.json")
+        # Only this sandbox's lifetime: sbx keeps the log of an earlier sandbox of the same name.
+        log = preflight_module.policy_log_since(
+            read_json(work, f"log-{name}.json"), read_json(work, f"inspect-{name}.json"))
 
         failures = cell_failures(cell, checks, probes, log) if applied else ["the cell did not run"]
         rows.append((

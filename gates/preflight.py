@@ -8,6 +8,8 @@ Shapes are what the sbx version pinned by G0 emits, observed on this host, not a
 schema; an sbx upgrade re-runs the gates (research R27) and may need these adapted.
 """
 
+import datetime
+
 MISSING = object()
 
 SSH_FORWARDING_KEY = "ssh.agentForwardingEnabled"
@@ -167,6 +169,42 @@ def sandbox_list(document):
     if isinstance(document, list) and all(isinstance(e, dict) for e in document):
         return document
     return None
+
+
+def policy_log_since(log, inspected):
+    """`sbx policy log <name> --json` reduced to THIS sandbox's lifetime, or None when unreadable.
+
+    sbx >= 0.53 keys the log by sandbox NAME and keeps it after `sbx rm`, so a gate that re-uses
+    a name would read an earlier sandbox's traffic as its own - a stale `allowed` entry can fail
+    a gate that held, and can equally satisfy a positive control that did not. An entry counts
+    only when its `last_seen` is not before the `created_at` of the sandbox's own inspect
+    record. Fail-closed: no readable creation time, or any entry without a readable `last_seen`,
+    is None, never "no entries".
+    """
+    def moment(value):
+        try:
+            parsed = datetime.datetime.fromisoformat(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed.tzinfo else None
+
+    created = moment(inspected.get("created_at")) if isinstance(inspected, dict) else None
+    if created is None or not isinstance(log, dict):
+        return None
+    out = dict(log)
+    for key in ("allowed", "blocked"):
+        entries = log.get(key)
+        if not isinstance(entries, list):
+            return None
+        kept = []
+        for entry in entries:
+            seen = moment(entry.get("last_seen")) if isinstance(entry, dict) else None
+            if seen is None:
+                return None
+            if seen >= created:
+                kept.append(entry)
+        out[key] = kept
+    return out
 
 
 # --- sandbox base identity ----------------------------------------------------------------------

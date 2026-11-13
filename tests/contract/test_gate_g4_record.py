@@ -38,6 +38,12 @@ CLAUDE_KIT_HOSTS = (
 )
 
 
+# A sandbox's creation time as `sbx inspect --json` reports it, and a log entry inside its life.
+CREATED = "2026-11-13T01:20:27-06:00"
+SEEN = "2026-11-13T01:20:30.340000-06:00"
+STALE = "2026-11-13T01:14:30.277756-06:00"
+
+
 def target(dest):
     """The `host:port` a policy rule, check or log entry names for a G4 destination."""
     return dest if ":" in dest else f"{dest}:443"
@@ -429,13 +435,13 @@ class G4Recorder(unittest.TestCase):
             if decision == self.record_module.ALLOW:
                 checks[host] = check_doc(True)
                 probes[host] = ESTABLISHED
-                allowed.append({"host": target(host)})
+                allowed.append({"host": target(host), "last_seen": SEEN})
             else:
                 kind = "explicit" if decision == self.record_module.DENY_EXPLICIT else "implicit"
                 checks[host] = check_doc(False, kind)
                 probes[host] = BLOCKED
                 blocked.append({
-                    "host": target(host),
+                    "host": target(host), "last_seen": SEEN,
                     "reason": ("Denied by local rule" if kind == "explicit"
                                else "No matching allow rule (default deny)"),
                 })
@@ -550,6 +556,8 @@ class G4Recorder(unittest.TestCase):
                 f"### host={host}\n{body}" for host, body in probes.items())
             (self.work / f"probe-{cell['name']}.txt").write_text(text, encoding="utf-8")
             (self.work / f"log-{cell['name']}.json").write_text(json.dumps(log), encoding="utf-8")
+            (self.work / f"inspect-{cell['name']}.json").write_text(
+                json.dumps({"name": cell["name"], "created_at": CREATED}), encoding="utf-8")
             (self.work / f"effective-{cell['name']}.json").write_text(
                 json.dumps(self.effective_doc(cell)), encoding="utf-8")
 
@@ -1043,6 +1051,41 @@ class G4Recorder(unittest.TestCase):
     def _permitted(self, cells, name):
         cell = next(c for c in cells if c["name"] == name)
         return {h for h, d in cell["expected"].items() if d == self.record_module.ALLOW}, cell
+
+    def test_95_the_policy_log_is_read_for_this_sandboxs_lifetime_only(self):
+        """sbx >= 0.53 keeps the log of an earlier sandbox of the same name. Its traffic is not
+        this sandbox's, and a log that cannot be placed in time is unreadable, never empty."""
+        since = self.record_module.preflight_module.policy_log_since
+        inspected = {"created_at": CREATED}
+        log = {"allowed": [{"host": "dhi.io:80", "last_seen": STALE},
+                           {"host": "pypi.org:443", "last_seen": SEEN}],
+               "blocked": [{"host": "dhi.io:80", "last_seen": SEEN}]}
+        scoped = since(log, inspected)
+        self.assertEqual([e["host"] for e in scoped["allowed"]], ["pypi.org:443"])
+        self.assertEqual(len(scoped["blocked"]), 1)
+        self.assertIsNone(since(log, {}))
+        self.assertIsNone(since(log, {"created_at": "2026-11-13T01:20:27"}))
+        self.assertIsNone(since({"allowed": [{"host": "x.io:443"}], "blocked": []}, inspected))
+        self.assertIsNone(since({"allowed": []}, inspected))
+
+        # End to end: a stale allow from an earlier sandbox does not fail the cell that held...
+        name = "dca-g4-claude-untrusted"
+        path = self.work / f"log-{name}.json"
+        log = json.loads(path.read_text(encoding="utf-8"))
+        log["allowed"].append({"host": "dhi.io:80", "last_seen": STALE})
+        path.write_text(json.dumps(log), encoding="utf-8")
+        results = self._results(self._capture())
+        self.assertEqual(results["G4.claude.untrusted"], "PASS")
+        self.assertEqual(results["G4.claude.untrusted.exact"], "PASS")
+        # ...while the same allow inside this sandbox's life does.
+        log["allowed"][-1]["last_seen"] = SEEN
+        path.write_text(json.dumps(log), encoding="utf-8")
+        results = self._results(self._capture())
+        self.assertEqual(results["G4.claude.untrusted.exact"], "FAIL")
+        # And with no inspect record the log cannot be placed, so the cell fails closed.
+        (self.work / f"inspect-{name}.json").unlink()
+        results = self._results(self._capture())
+        self.assertEqual(results["G4.claude.untrusted"], "FAIL")
 
     def test_94_a_host_off_port_443_can_only_ever_be_must_deny(self):
         """The v3 kit's port-80 apt mirrors enter the matrix as `host:80`, deny-only; a required
