@@ -1,23 +1,23 @@
 {
-  "generated_at": "2026-09-27T06:13:43Z",
+  "generated_at": "2026-11-13T07:56:56Z",
   "pinned_versions": {
-    "docker_agent": "v1.136.0",
+    "docker_agent": "v1.160.0",
     "docker_agent_config_version": 15,
-    "docker_agent_artifact_sha256": "a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623",
-    "sbx": "v0.43.0",
-    "claude_code": "2.1.278",
+    "docker_agent_artifact_sha256": "7ff167391f6f1267d8a1d3ef62856c1a8b7bb99713ffc5bc3702c3b3fcd082ef",
+    "sbx": "v0.53.0",
+    "claude_code": "2.1.323",
     "sandbox_bases": {
       "claude": {
-        "base": "docker/sandbox-templates:claude-code-docker",
-        "version": "sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2"
+        "base": "docker.io/sbx/claude",
+        "version": "sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9"
       },
       "codex": {
-        "base": "docker/sandbox-templates:docker-agent-docker",
-        "version": "sha256:6a1b26c279bb74321e8cf9599e8d19732a3354814a6ca446a5251702c58ea90b"
+        "base": "docker.io/sbx/shell",
+        "version": "sha256:89ed5d63def6bfb2373d408e3ab6ad55aa5c010f884a182a78299fcf85ea42d1"
       }
     }
   },
-  "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088",
+  "runtime_versions_digest": "sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1",
   "common_gates": {
     "G0": "PASS",
     "G4": "PASS",
@@ -31,7 +31,7 @@
   "backends": {
     "claude": {
       "available": true,
-      "trusted_eligible": true,
+      "trusted_eligible": false,
       "untrusted_eligible": false,
       "credential_mechanism": "sbx-host-oauth",
       "gate_status": {
@@ -39,15 +39,15 @@
         "G1b": "FAIL",
         "G1c": "PASS",
         "G1d": "PASS",
-        "G9": "FAIL",
-        "G11": "PASS"
+        "G9": "NOT-RUN",
+        "G11": "FAIL"
       },
-      "production_conformance": "PASS",
+      "production_conformance": "NOT-RUN",
       "fallbacks_applied": []
     },
     "codex": {
       "available": true,
-      "trusted_eligible": true,
+      "trusted_eligible": false,
       "untrusted_eligible": false,
       "credential_mechanism": "token-file-trusted-only",
       "gate_status": {
@@ -56,9 +56,8 @@
         "G9": "PASS",
         "G11": "PASS"
       },
-      "production_conformance": "PASS",
+      "production_conformance": "NOT-RUN",
       "fallbacks_applied": [
-        "G3: model gpt-5.5",
         "G2: credential mechanism token-file-trusted-only"
       ]
     }
