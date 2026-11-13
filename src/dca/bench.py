@@ -936,8 +936,10 @@ class Bench:
 
     def __init__(self, backends, trust="trusted", fixtures=None, repeat=1, repo_root=None,
                  bench_id=None, sbx=None, oracle=None, dca_command=None, clock=time.monotonic,
-                 log=None, work_root=None, results_root=None, plans=None, thresholds=None):
+                 log=None, work_root=None, results_root=None, plans=None, thresholds=None,
+                 choice=None):
         self.backends = list(backends)
+        self.choice = dict(choice or {})
         self.trust = trust
         self.fixtures = list(fixtures or [])
         self.repeat = repeat
@@ -1040,6 +1042,8 @@ class Bench:
                 "--criteria", f"@{criteria_path}", "--out", out]
         for command in (fixture["verification"].get("commands") or []):
             argv += ["--verify", command]
+        for key, value in self.choice.items():
+            argv += [f"--{key}", value]
 
         before = self._sandbox_names()
         started = self.clock()
@@ -1284,14 +1288,31 @@ def command(options, repo_root=None, bench_factory=Bench, version_probe=None):
         raise UsageError(f"no fixture matches {options.fixtures!r}")
     backends = ["claude", "codex"] if options.backend == "both" else [options.backend]
     _require_eligible(backends, options.trust, repo_root)
+    choice = _choice(options, backends)
 
     bench = bench_factory(backends, trust=options.trust, fixtures=fixtures,
-                          repeat=options.repeat, repo_root=repo_root)
+                          repeat=options.repeat, repo_root=repo_root, **choice)
     document = bench.run()
     print(render(document))
     print(f"dca bench: results in {os.path.relpath(bench.results_dir, repo_root)}/", file=sys.stderr)
     summary = document["summary"]
     return 0 if summary["passed"] == summary["total"] else 1
+
+
+def _choice(options, backends):
+    """{"choice": ...} for the Bench, validated for every backend up front, or {} when nothing was
+    chosen - so a bench without the flags constructs exactly as before."""
+    picked = {key: getattr(options, key, None) for key in ("model", "effort", "autocompact")}
+    if not any(value is not None for value in picked.values()):
+        return {}
+    try:
+        from . import launcher as launcher_module
+    except ImportError:  # loaded by path in tests
+        launcher_module = _sideload("dca_launcher", "launcher.py")
+    choice = {}
+    for backend in backends:
+        choice = launcher_module.agent_choice(backend, **picked)
+    return {"choice": choice} if choice else {}
 
 
 def _command_acceptance(options, repo_root, bench_factory, version_probe):
@@ -1312,7 +1333,7 @@ def _command_acceptance(options, repo_root, bench_factory, version_probe):
         thresholds, backend) for backend in backends}
     bench = bench_factory(backends, trust=options.trust, fixtures=fixtures,
                           repeat=options.repeat, repo_root=repo_root, plans=plans,
-                          thresholds=thresholds)
+                          thresholds=thresholds, **_choice(options, backends))
     result = bench.run()
     print(render(result))
     print(f"dca bench: results in {os.path.relpath(bench.results_dir, repo_root)}/", file=sys.stderr)

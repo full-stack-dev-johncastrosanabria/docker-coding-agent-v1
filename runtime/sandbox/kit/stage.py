@@ -27,6 +27,7 @@ one.
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -132,18 +133,83 @@ def _copy_tree_files(source, target, names):
         shutil.copyfile(os.path.join(source, name), os.path.join(target, name))
 
 
-def _stage_agents(kit_dir, backends):
+def _sub(pattern, replacement, text, what):
+    """re.subn that refuses to be a silent no-op: a reshaped config must fail the build, not ship
+    without the developer's choice in it."""
+    text, count = re.subn(pattern, replacement, text, flags=re.M)
+    if not count:
+        raise StagingError(f"cannot apply {what}: the staged agent config no longer has the "
+                           "line it is set on")
+    return text
+
+
+def render_agent_config(backend, text, choice):
+    """The backend config with the developer's model / effort / autocompact choice applied.
+
+    `choice` was validated by the launcher; values are still written as JSON strings (valid YAML
+    scalars) so no value can open a new key. No choice returns `text` unchanged, byte for byte.
+    """
+    model, effort, compact = (choice or {}).get("model"), (choice or {}).get("effort"), \
+        (choice or {}).get("autocompact")
+    if backend == "claude":
+        if model:
+            text = _sub(r"^(\s+)type: claude-code$", lambda m: f"{m.group(0)}\n{m.group(1)}"
+                        f"model: {json.dumps(model)}", text, "the Claude model")
+        if effort:
+            text = _sub(r"^(\s+effort: ).*$", lambda m: m.group(1) + json.dumps(effort), text,
+                        "the Claude effort")
+        return text                                   # Claude's autocompact is managed env
+    if model or effort:
+        current = re.search(r"^\s+model: (\S+)/(\S+)$", text, re.M)
+        if current is None:
+            raise StagingError("cannot apply the Codex model: no `model: provider/name` line")
+        provider, name = (model.split("/", 1) if model and "/" in model
+                          else (current.group(1), model or current.group(2)))
+        entry = f"models:\n  dca:\n    provider: {json.dumps(provider)}\n" \
+                f"    model: {json.dumps(name)}\n"
+        if effort:
+            entry += f"    thinking_budget: {json.dumps(effort)}\n"
+        text = _sub(r"^(\s+)model: \S+/\S+$", lambda m: f"{m.group(1)}model: dca", text,
+                    "the Codex model")
+        text = _sub(r"^agents:$", lambda m: f"{entry}\n{m.group(0)}", text, "the Codex model")
+    if compact == "off":
+        text = _sub(r"^(\s+session_compaction: )true$", r"\1false", text, "Codex autocompact")
+    elif compact not in (None, "on"):
+        text = _sub(r"^(\s+compaction_threshold: ).*$",
+                    lambda m: f"{m.group(1)}{int(compact) / 100}", text, "Codex autocompact")
+    return text
+
+
+def claude_compaction_env(choice):
+    """Claude Code reads autocompact only from its environment; the managed env is where the
+    kit pins it, so a repository cannot turn it back."""
+    compact = (choice or {}).get("autocompact")
+    if compact == "off":
+        return {"DISABLE_AUTO_COMPACT": "1"}
+    if compact not in (None, "on"):
+        return {"CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": str(int(compact))}
+    return {}
+
+
+def _stage_agents(kit_dir, backends, choice=None):
     """`<KIT_DIR>/agents/`: the backend configs plus the instructions they reference."""
     agents_dir = os.path.join(kit_dir, "agents")
     os.makedirs(agents_dir, exist_ok=True)
     for backend in backends:
         source = os.path.join(AGENTS_SRC, f"{backend}.yaml")
-        if os.path.isfile(source):
+        if not os.path.isfile(source):
+            continue
+        if not choice:
             shutil.copyfile(source, os.path.join(agents_dir, f"{backend}.yaml"))
+            continue
+        with open(source, encoding="utf-8") as handle:
+            text = render_agent_config(backend, handle.read(), choice)
+        with open(os.path.join(agents_dir, f"{backend}.yaml"), "w", encoding="utf-8") as handle:
+            handle.write(text)
     _copy_tree_files(INSTRUCTIONS_SRC, os.path.join(agents_dir, "instructions"), INSTRUCTIONS)
 
 
-def _stage_claude(kit_dir, skills_source):
+def _stage_claude(kit_dir, skills_source, choice=None):
     """Claude's managed material, staged for the installer to place under /etc/claude-code.
 
     The managed `CLAUDE.md` is a byte copy of `runtime/instructions/root.md`, and the skill copies
@@ -152,8 +218,17 @@ def _stage_claude(kit_dir, skills_source):
     """
     target = os.path.join(kit_dir, "backends", "claude")
     os.makedirs(target, exist_ok=True)
-    shutil.copyfile(os.path.join(CLAUDE_SRC, "managed-settings.json"),
-                    os.path.join(target, "managed-settings.json"))
+    extra = claude_compaction_env(choice)
+    if not extra:
+        shutil.copyfile(os.path.join(CLAUDE_SRC, "managed-settings.json"),
+                        os.path.join(target, "managed-settings.json"))
+    else:
+        with open(os.path.join(CLAUDE_SRC, "managed-settings.json"), encoding="utf-8") as handle:
+            settings = json.load(handle)
+        settings["env"] = dict(settings.get("env") or {}, **extra)
+        with open(os.path.join(target, "managed-settings.json"), "w", encoding="utf-8") as handle:
+            json.dump(settings, handle, indent=2, sort_keys=True)
+            handle.write("\n")
     shutil.copyfile(os.path.join(INSTRUCTIONS_SRC, "root.md"), os.path.join(target, "CLAUDE.md"))
     _copy_tree_files(os.path.join(CLAUDE_SRC, "agents"), os.path.join(target, "agents"), SUBAGENTS)
     for name in RUNTIME_SKILLS:
@@ -201,7 +276,8 @@ def _stage_artifact(kit_dir, artifact):
 
 
 def stage(prefix, python=PRODUCTION_PYTHON, skills_source=None, policy_source=POLICY_SRC,
-          backends=None, artifact=None, eligibility_path=ELIGIBILITY, install_prefix=None):
+          backends=None, artifact=None, eligibility_path=ELIGIBILITY, install_prefix=None,
+          choice=None):
     """Lay out `<prefix>/opt/dca/...`. Returns the kit directory.
 
     `prefix` is where the files are WRITTEN. `install_prefix` is where they will RUN, and it is
@@ -267,9 +343,9 @@ def stage(prefix, python=PRODUCTION_PYTHON, skills_source=None, policy_source=PO
 
     if os.path.isdir(INSTRUCTIONS_SRC) and os.path.isfile(
             os.path.join(INSTRUCTIONS_SRC, "root.md")):
-        _stage_agents(kit_dir, backends)
+        _stage_agents(kit_dir, backends, choice)
         if "claude" in backends and skills_source is not None:
-            _stage_claude(kit_dir, str(skills_source))
+            _stage_claude(kit_dir, str(skills_source), choice)
         if "codex" in backends:
             _stage_codex(kit_dir)
 
@@ -390,7 +466,7 @@ CODEX_CONFIG_PATH = "/home/agent/.config/cagent/config.yaml"
 
 
 def build_sbx_kit(destination, backends=None, artifact=None, skills_source=None,
-                  eligibility_path=ELIGIBILITY):
+                  eligibility_path=ELIGIBILITY, choice=None):
     """Build a complete v3 `sbx create --kit` mixin directory. Returns its absolute path.
 
     The payload is laid out by `stage()` itself, under the kit's staging path, so the bytes that
@@ -416,7 +492,7 @@ def build_sbx_kit(destination, backends=None, artifact=None, skills_source=None,
     # rendered against the production prefix, never against this temporary staging path.
     stage(payload_root, skills_source=skills_source or os.path.join(ROOT, "runtime", "skills"),
           backends=backends, artifact=artifact, eligibility_path=eligibility_path,
-          install_prefix=PRODUCTION_PREFIX)
+          install_prefix=PRODUCTION_PREFIX, choice=choice)
 
     with open(VERSIONS, encoding="utf-8") as handle:
         versions = json.load(handle)

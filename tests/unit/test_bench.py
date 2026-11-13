@@ -363,6 +363,19 @@ class TestBenchRuns(unittest.TestCase):
         for forbidden in ("--allow-drift", "--ignore-uncommitted", "--approve"):
             self.assertNotIn(forbidden, argv)
 
+    def test_51a_a_model_choice_reaches_every_dca_run(self):
+        fixture = bench.discover(selection="R1")[0]
+        runner = bench.Bench(["claude"], fixtures=[fixture], repo_root=str(ROOT), sbx=self.sbx,
+                             dca_command=["dca"], work_root=str(self.dir / "work"),
+                             results_root=str(self.dir / "results"), log=self.logs.append,
+                             choice={"model": "claude-sonnet-5-5", "effort": "high"})
+        seen = []
+        runner._invoke = lambda argv, base: (seen.append(argv), (3, "refused"))[1]
+        runner.run_one("claude", fixture, 1)
+        self.assertEqual(seen[0][seen[0].index("--model") + 1], "claude-sonnet-5-5")
+        self.assertEqual(seen[0][seen[0].index("--effort") + 1], "high")
+        self.assertNotIn("--autocompact", seen[0])
+
     def test_52_a_wrong_answer_is_caught_by_the_oracle(self):
         fixture = bench.discover(selection="R1")[0]
         bad = os.path.join(fixture["_dir"], fixture["golden"]["bad"][0])

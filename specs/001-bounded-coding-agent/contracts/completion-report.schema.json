@@ -687,6 +687,24 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,79}$"
           },
           "description": "host-observed model ids the run used: Docker Agent agent_info events, plus Claude Code's own transcript for the claude harness (whose outer stream names only 'claude-code'). Absent when none was observed; never a configured default"
+        },
+        "requested": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,79}$"
+            },
+            "effort": {
+              "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+            },
+            "autocompact": {
+              "type": "string",
+              "pattern": "^(on|off|[1-9][0-9]?)$"
+            }
+          },
+          "description": "what the developer chose with --model/--effort/--autocompact. Absent when nothing was chosen and the backend's own defaults applied; compare with models for what actually ran"
         }
       }
     }

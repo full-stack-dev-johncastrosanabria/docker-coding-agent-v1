@@ -997,6 +997,12 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
   Depends: T102, T103, T104, T105, T106, T107. Evidence: `benchmark/results/<date>-final-walkthrough.md`.
 
+- [X] T109 **Impl (developer request 2026-11-13)** Per-run `--model`, `--effort` and `--autocompact on|off|PCT` on `dca run` and `dca bench`, for every backend. This amends research R1 *only when asked*: with no choice the staged kit is byte-identical to the gated one. The values are validated on the host (`launcher.agent_choice`, per-backend effort lists) and are never read from the repository. They are rendered where each backend reads them (`stage.render_agent_config`):
+  - **Claude:** `harness.model` and `harness.effort`, plus `DISABLE_AUTO_COMPACT` or `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` in the managed env.
+  - **Codex:** a named `models.dca` entry with `thinking_budget`, plus `session_compaction` and `compaction_threshold`.
+
+  The report records the choice in `versions.requested` next to the observed `versions.models`. A new backend adds its effort list and a rendering branch. Evidence: `tests/unit/test_agent_choice.py`, `test_bench.py::test_51a`, and rendered configs accepted by `docker agent debug config` v1.160.0. Gate evidence covers the defaults. A run with a choice is recorded as such, and acceptance (T097) should use one fixed choice across its 3 runs, or none.
+
 ---
 
 ## Dependencies & Execution Order

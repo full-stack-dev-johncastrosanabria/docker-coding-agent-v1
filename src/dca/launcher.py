@@ -120,12 +120,39 @@ def _version_tuple(text):
 # --- the request ---------------------------------------------------------------------------------
 
 
+# What the developer may choose per backend. Absent, the backend's own default applies and the kit
+# is byte-identical to the one the gates were run against (research R1).
+EFFORTS = {"claude": ("low", "medium", "high", "xhigh", "max"),
+           "codex": ("none", "minimal", "low", "medium", "high", "xhigh", "max")}
+_MODEL_CHOICE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._:/@-]{0,79}\Z")
+
+
+def agent_choice(backend, model=None, effort=None, autocompact=None):
+    """The validated {model, effort, autocompact} for one run; only what was asked for."""
+    choice = {}
+    if model is not None:
+        if not _MODEL_CHOICE.match(model):
+            raise UsageError(f"--model {model!r} is not a model id")
+        choice["model"] = model
+    if effort is not None:
+        if effort not in EFFORTS[backend]:
+            raise UsageError(f"--effort for {backend} must be one of {', '.join(EFFORTS[backend])}")
+        choice["effort"] = effort
+    if autocompact is not None:
+        value = str(autocompact).strip().lower()
+        if value not in ("on", "off") and not (value.isdigit() and 1 <= int(value) <= 99):
+            raise UsageError("--autocompact must be on, off or a context percentage from 1 to 99")
+        choice["autocompact"] = value
+    return choice
+
+
 class RunRequest:
     """One `dca run` invocation, already parsed. The CLI owns parsing; this owns meaning."""
 
     def __init__(self, repo, task, ref=None, backend="claude", trust="untrusted", criteria=None,
                  verify=(), approve=(), approval_report=None, ignore_uncommitted=False,
-                 out=None, allow_drift=False, run_id=None):
+                 out=None, allow_drift=False, run_id=None, model=None, effort=None,
+                 autocompact=None):
         if backend not in BACKENDS:
             raise UsageError(f"--backend must be one of {BACKENDS}, got {backend!r}")
         if trust not in TRUST_LEVELS:
@@ -143,6 +170,7 @@ class RunRequest:
         self.approval_report = approval_report
         self.ignore_uncommitted = bool(ignore_uncommitted)
         self.allow_drift = bool(allow_drift)
+        self.choice = agent_choice(backend, model, effort, autocompact)
         self.run_id = run_id or new_run_id()
         self.out = os.path.abspath(str(out)) if out else os.path.join(
             os.path.dirname(self.repo), ".dca-runs", self.run_id)
@@ -510,6 +538,8 @@ class Launcher:
             events_module.note_model(observed, model)
         if observed:
             block["models"] = observed
+        if self.request.choice:
+            block["requested"] = dict(self.request.choice)
         return block
 
     def network_cell(self):
@@ -566,7 +596,7 @@ class Launcher:
                     self.repo_root, "runtime", "sandbox", "kit", "stage.py"))
                 self.kit_dir = stage.build_sbx_kit(
                     kit, backends=[request.backend], artifact=self.artifact,
-                    eligibility_path=self.eligibility_path)
+                    eligibility_path=self.eligibility_path, choice=request.choice)
         except Exception as exc:
             raise InfraAbort(f"the sandbox kit could not be built: {exc}") from exc
 
