@@ -125,6 +125,8 @@
 
 **Purpose**: Prove or disprove every sandbox-dependent assumption **before** building on it.
 
+**Re-gate 2026-11-13 (sbx v0.53.0, kits v3):** Codex re-earned G3, G11 parts A/B, G9 and production conformance; the current review enables trusted Codex only. G2 still selects the trusted token-file fallback. Claude’s G11 part A hit its subscription quota, G1b detected readable token material with a quota-limited execution control, and its G9 and production conformance are deferred at the developer’s request. Claude must be re-gated when available; no untrusted eligibility is claimed. The earlier completed-task narratives below retain their historical context.
+
 **Stop rules** (from research.md, never weakened):
 - If G0, G4, G5, G6, G7, G8 or G10 FAILs and its fallback doesn't pass, **stop** all gated work. Only the host-independent Phases 3–4 may continue.
 - G11 is required for every backend but judged **per backend**: a G11 failure makes only that backend unavailable. If no backend passes G11, stop all gated work.
@@ -299,7 +301,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
     1. The developer signs in once via `docker agent setup` → chatgpt; on the host, `docker agent models --provider chatgpt` lists `gpt-5.6`.
     2. A provisioning script equivalent to the launcher's trusted fallback creates **two consecutive completely fresh** mountless sandboxes from the pinned `sandbox_bases.codex` base (G6 kit, G4 trusted policy), recording that base identifier in the evidence. For each: `sbx cp` a minimal config dir containing **only** `chatgpt-auth.json` (never the full `~/.config/cagent`), run a trivial native `chatgpt/gpt-6.1-sol` task with stdin from `/dev/null` and no TTY, then `sbx rm`. If the provider needs in-VM token refresh, record that as evidence for promoting `auth.openai.com` to a trusted token-file `refresh` host (T014/T015 promotion path).
     3. **Approval-pipeline check** (research R20, E18): in one of those sandboxes, run `docker agent run --exec --json --safety strict` with a probe config whose `pre_tool_use` hook is a stub. Confirm that (a) a hook `{"hook_specific_output":{"hook_event_name":"pre_tool_use","permission_decision":"allow"}}` lets a workspace file write execute; (b) a hook exit 2 blocks the call; (c) a call with no hook decision is rejected; (d) with a user config that sets `safety: autonomous` and `yolo: true`, the session still runs `strict`.
-  - **PASS**: listed, both fresh sandboxes complete non-interactively, and (a)–(d) hold.
+  - **PASS**: the runtime accepts the selected non-deprecated GPT-6.x model, both fresh sandboxes complete non-interactively, and (a)–(d) hold.
   - **FAIL** → fallback: pin an available non-deprecated GPT-6.x model and record it. If non-interactive provisioning fails, or the approval-pipeline check fails, Codex is unavailable (all Codex gates `NOT-RUN`); no weaker safety mode is substituted.
 
   Depends: T009, T015. Evidence: `gates/G3.json` (model list, per-sandbox status; no token contents). (R2)
