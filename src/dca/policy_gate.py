@@ -273,6 +273,165 @@ def classify_network(entry, policy, shellparse):
     return None
 
 
+# --- shell commands -----------------------------------------------------------------------------------
+#
+# A shell call names its targets in words, not in a `path` argument, so it gets its own reading.
+# Like the rest of the gate this is cooperative: it stops the plain forms a model actually types
+# (`cat .env`, `pip install x`, `git push -f`), not a determined evasion (`cat .e*`), which the
+# sandbox - no credentials, no network, a source bundle instead of a remote - is there for.
+
+#: Package managers, by canonical name: the subcommands that ADD a dependency when they name a
+#: package (class 15), and the ones that only install what the repository already declares (14).
+_PACKAGE_MANAGERS = {
+    "pip": ({"install"}, set()), "pipenv": ({"install"}, {"sync"}),
+    "poetry": ({"add"}, {"install"}), "uv": ({"add"}, {"sync"}),
+    "npm": ({"install", "i", "add"}, {"ci"}), "pnpm": ({"add", "install", "i"}, set()),
+    "yarn": ({"add"}, {"install"}), "bun": ({"add", "install", "i"}, set()),
+    "cargo": ({"add", "install"}, set()), "go": ({"get", "install"}, set()),
+    "gem": ({"install"}, set()), "bundle": ({"add"}, {"install"}),
+    "composer": ({"require"}, {"install"}),
+}
+#: Options whose VALUE is a declared source (a manifest, a local path), not a new package.
+_DECLARED_SOURCE_OPTIONS = frozenset({"-r", "--requirement", "-c", "--constraint", "-e",
+                                      "--editable", "-t", "--target", "--prefix", "-C", "--cwd",
+                                      "-f", "--find-links", "-i", "--index-url",
+                                      "--extra-index-url", "--registry"})
+_SYSTEM_INSTALLERS = frozenset({"apt", "apt-get", "dnf", "yum", "apk", "brew"})
+_HISTORY_REWRITERS = frozenset({"filter-branch", "filter-repo"})
+_GIT_VALUED_OPTIONS = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace"})
+
+
+def _basename(word):
+    return (word or "").rsplit("/", 1)[-1]
+
+
+def _positionals(words):
+    """`words` without options, and without the values of options that name a declared source."""
+    found, skip = [], False
+    for word in words:
+        if skip:
+            skip = False
+        elif word in _DECLARED_SOURCE_OPTIONS:
+            skip = True
+        elif not word.startswith("-"):
+            found.append(word)
+    return found
+
+
+def _package_class(argv):
+    """(14 or 15, target) for a package-manager segment, else None."""
+    words = list(argv)
+    if _basename(words[0]).startswith("python") and words[1:2] == ["-m"]:
+        words = words[2:]
+    elif _basename(words[0]) == "uv" and words[1:2] == ["pip"]:
+        words = words[1:]
+    if not words:
+        return None
+    manager = _basename(words[0]).rstrip("0123456789.")       # pip3, pip3.12 -> pip
+    if manager not in _PACKAGE_MANAGERS:
+        return None
+    adds, installs = _PACKAGE_MANAGERS[manager]
+    rest = _positionals(words[1:])
+    if not rest or rest[0] not in adds | installs:
+        return None
+    # `.` (and `.[extra]`, `./...`) is the repository itself; any other path or name is a package
+    # the repository did not have, wherever it comes from - a vendored tarball included.
+    packages = sorted(w for w in rest[1:]
+                      if w not in (".", "./") and not w.startswith(".[") and not w.endswith("/..."))
+    if rest[0] in adds and packages:
+        return 15, f"{manager}:{','.join(packages)}"
+    return 14, f"{manager} {rest[0]}"
+
+
+def _git_class(argv):
+    """(18, 19 or 20, target) for a git segment that publishes or rewrites history, else None."""
+    words, index = list(argv[1:]), 0
+    while index < len(words) and words[index].startswith("-"):
+        index += 2 if words[index] in _GIT_VALUED_OPTIONS else 1
+    words = words[index:]
+    if not words:
+        return None
+    sub, rest = words[0], words[1:]
+    if sub in _HISTORY_REWRITERS:
+        return 19, f"git {sub}"
+    if sub == "push":
+        forced = any(w in ("--force", "--mirror", "--delete", "--force-if-includes", "--prune")
+                     or w.startswith("--force-with-lease")
+                     or (w.startswith("-") and not w.startswith("--") and ("f" in w or "d" in w))
+                     or w.startswith(("+", ":")) for w in rest)
+        return (19, "git push (forced, deleting or mirroring)") if forced \
+            else (18, "git push " + " ".join(_positionals(rest)))
+    if sub == "rebase" or (sub == "commit" and "--amend" in rest):
+        return 20, f"git {sub}" + (" --amend" if sub == "commit" else "")
+    return None
+
+
+def _word_class(word, run, policy):
+    """(2 or 5, resolved path) when a command word names a path the policy denies, else None.
+
+    2: an excluded-sensitive path, wherever it is. 5: a path written INSIDE the workspace that
+    resolves outside it - a symlink escape. A path that is plainly outside (`/usr/bin/x`, `/tmp/y`)
+    is not judged here: a shell names such paths all the time without reading or writing them.
+    """
+    if word.startswith("-"):
+        if "=" not in word:
+            return None
+        word = word.split("=", 1)[1]
+    if not word or "\x00" in word or any(c.isspace() for c in word):
+        return None                               # a substitution, code or prose: not a path
+    home = os.path.expanduser("~")
+    for variable in ("${HOME}", "$HOME"):
+        word = word.replace(variable, home)
+    if word.startswith("~"):
+        word = home + word[1:]
+    action_class, resolved = classify_path(word, run, policy, writing=False)
+    if action_class == 2:
+        return 2, resolved
+    workspace = os.path.realpath(run["workspace"])
+    lexical = os.path.normpath(os.path.join(workspace, word))
+    if action_class == 5 and lexical.startswith(workspace + os.sep):
+        return 5, resolved
+    return None
+
+
+#: The parser drops redirections from argv, so their targets are read from the command text.
+_REDIRECT_TARGET = re.compile(r"[<>]\s*([^\s;&|<>()]+)")
+
+
+def classify_shell(parsed, run, policy, trust, command=""):
+    """(class, target) for the strictest policy class any segment of a shell command falls in.
+
+    Class 2 (a word names a credential path), 5 (a word escapes the workspace through a symlink),
+    19 (forced push, whole-history rewrite), 15 (a new
+    dependency), 13 (a system package), 18/20 (push, own-branch history rewrite) and 14 (declared
+    dependencies). None when no segment is any of these: an ordinary command.
+    """
+    decisions = {c["id"]: c["decision"][trust] for c in policy["classes"]}
+    found = [hit for hit in (_word_class(word.strip("'\""), run, policy)
+                             for word in _REDIRECT_TARGET.findall(command)) if hit is not None]
+    for segment in parsed.segments:
+        argv = list(segment.argv)
+        while argv and _basename(argv[0]) == "sudo":
+            argv = argv[1:]
+            while argv and argv[0].startswith("-"):
+                argv = argv[1:]
+        if not argv:
+            continue
+        found.extend(hit for hit in (_word_class(word, run, policy) for word in argv[1:])
+                     if hit is not None)
+        program = _basename(argv[0])
+        if program == "git":
+            hit = _git_class(argv)
+        elif program in _SYSTEM_INSTALLERS and "install" in argv[1:]:
+            hit = 13, f"{program} install " + " ".join(sorted(_positionals(argv[1:])[1:]))
+        else:
+            hit = _package_class(argv)
+        if hit is not None:
+            found.append(hit)
+    severity = {"DENY": 0, "ASK": 1, "ALLOW": 2}
+    return min(found, key=lambda hit: severity[decisions[hit[0]]]) if found else None
+
+
 # --- decision ---------------------------------------------------------------------------------------------
 
 MUTATING = frozenset({"write", "edit", "notebookedit", "write_file", "edit_file", "create_file",
@@ -483,6 +642,15 @@ def decide(entry, run, policy, grants, shellparse):
         declared = set(run.get("verification_commands") or [])
         if command.strip() in declared:
             return 8, None, command.strip()
+        shell = classify_shell(parsed, run, policy, trust, command)
+        if shell is not None:
+            action_class, target = shell
+            decision = decisions[action_class]["decision"][trust]
+            if decision == "DENY":
+                raise Deny(action_class, f"{decisions[action_class]['name']}: {target}")
+            if decision == "ASK":
+                _require_grant(action_class, target, grants, decisions)
+            return action_class, None, target
 
     # --- path classification ------------------------------------------------------------------------
     path = (entry["input"].get("file_path") or entry["input"].get("path")
