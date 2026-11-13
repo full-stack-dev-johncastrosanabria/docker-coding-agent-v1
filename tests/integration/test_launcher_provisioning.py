@@ -102,6 +102,13 @@ class ProvisioningCase(unittest.TestCase):
         self.write_state()
         self.sbx = sbx_module.Sbx(binary=str(FAKE_SBX),
                                   env={"DCA_FAKE_SBX_DIR": str(self.state_dir)})
+        # A codex sign-in of its own, so no test reads (or depends on) the host's ChatGPT login.
+        signed_in = self.dir / "cagent-default"
+        signed_in.mkdir()
+        (signed_in / "chatgpt-auth.json").write_text("{}", encoding="utf-8")
+        home = mock.patch.object(launcher, "HOST_CONFIG_DIR", str(signed_in))
+        home.start()
+        self.addCleanup(home.stop)
         for name in launcher.PROVIDER_KEY_NAMES:
             os.environ.pop(name, None)
 
