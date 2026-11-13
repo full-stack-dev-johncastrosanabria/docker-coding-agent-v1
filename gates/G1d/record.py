@@ -65,7 +65,7 @@ MANAGED_ASSETS = MANAGED_DIR + "/.claude"
 MANAGED_SKILL_DIR = MANAGED_ASSETS + "/skills/verification"
 # The build the delivery representation was observed on. It is fixed by the pinned sandbox
 # base digest, is NOT a runtime/versions.yaml pin, and is never generalized to another build.
-PINNED_CLAUDE_BUILD = "2.1.246"
+PINNED_CLAUDE_BUILD = "2.1.322"
 
 PHASES = ("precedence", "lockout")
 CONTEXTS = ("root", "nested")
