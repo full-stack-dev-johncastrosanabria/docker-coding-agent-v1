@@ -23,6 +23,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = Path(__file__).resolve().parent / "work" / "bench"
@@ -424,6 +425,39 @@ class TestBenchRuns(unittest.TestCase):
         document = runner.run()
         self.assertEqual([r["repeat"] for r in document["runs"]], [1, 2])
         self.assertEqual(len({r["seed_commit"] for r in document["runs"]}), 1)
+
+    def test_58a_an_unreadable_initial_sandbox_list_refuses_before_running(self):
+        failure = sbx_module.SbxError(["sbx", "ls"], 1, "not signed in to Docker")
+        with mock.patch.object(self.sbx, "list_sandboxes", side_effect=failure):
+            with self.assertRaises(errors.PreconditionError) as caught:
+                self.run_bench()
+        self.assertIn("not signed in to Docker", str(caught.exception))
+        self.assertEqual(list(self.dir.rglob("dca.stdout")), [], "a fixture ran without a baseline")
+
+    def test_58b_an_unreadable_final_list_cannot_count_as_successful_cleanup(self):
+        failure = sbx_module.SbxError(["sbx", "ls"], 1, "daemon disconnected")
+        with mock.patch.object(self.sbx, "list_sandboxes", side_effect=[[], failure]):
+            runner, document = self.run_bench()
+        run = document["runs"][0]
+        self.assertEqual((run["result"], run["cleanup"]), (bench.FAILED, "unknown"))
+        self.assertIn("daemon disconnected", run["cleanup_detail"])
+        self.assertTrue(any("could not be verified" in reason for reason in run["reasons"]))
+        self.assertEqual(document["summary"]["cleanup_failures"], 1)
+        self.assertTrue(Path(runner.results_dir, "benchmark.json").is_file())
+
+    def test_58c_a_malformed_initial_list_is_not_an_empty_baseline(self):
+        for listing in ({}, [None], [{}], [{"name": None}]):
+            with self.subTest(listing=listing), \
+                    mock.patch.object(self.sbx, "list_sandboxes", return_value=listing):
+                with self.assertRaises(errors.PreconditionError):
+                    self.run_bench()
+
+    def test_58d_unverifiable_cleanup_also_fails_an_acceptance_fixture(self):
+        failure = sbx_module.SbxError(["sbx", "ls"], 1, "daemon disconnected")
+        with mock.patch.object(self.sbx, "list_sandboxes", side_effect=[[], failure]):
+            run, _ = self.run_acceptance_fixture()
+        self.assertEqual((run["result"], run["cleanup"]), (bench.FAILED, "unknown"))
+        self.assertTrue(any("could not be verified" in reason for reason in run["reasons"]))
 
 
     def run_acceptance_fixture(self, **script):

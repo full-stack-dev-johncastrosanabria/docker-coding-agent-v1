@@ -297,11 +297,17 @@ def score(fixture, record):
         if record.get("out_of_scope"):
             reasons.append("changes outside the allowed scope: " + ", ".join(record["out_of_scope"]))
     if record.get("cleanup") != "ok":
-        reasons.append("sandbox cleanup failed: " + ", ".join(record.get("leaked_sandboxes") or []))
+        reasons.append(_cleanup_problem(record))
     if not reasons:
         return PASSED, reasons
     refused = record.get("exit_status") == 3 or (outcome == "blocked" and expected != "blocked")
     return (BLOCKED if refused and record.get("cleanup") == "ok" else FAILED), reasons
+
+
+def _cleanup_problem(record):
+    if record.get("cleanup") == "unknown":
+        return "sandbox cleanup could not be verified: " + str(record.get("cleanup_detail") or "")
+    return "sandbox cleanup failed: " + ", ".join(record.get("leaked_sandboxes") or [])
 
 
 def metrics_from_report(report):
@@ -789,7 +795,7 @@ def acceptance_result(fixture, applicability, run_trust, record=None):
     if record.get("out_of_scope"):
         reasons.append("changes outside the allowed scope: " + ", ".join(record["out_of_scope"]))
     if record.get("cleanup") != "ok":
-        reasons.append("sandbox cleanup failed: " + ", ".join(record.get("leaked_sandboxes") or []))
+        reasons.append(_cleanup_problem(record))
     result.update({"reported_outcome": record.get("final_outcome"), "violations": violations,
                    "reasons": reasons, "pass": not reasons and not violations,
                    "run_id": record.get("run_id")})
@@ -1035,7 +1041,14 @@ class Bench:
         started = self.clock()
         exit_status, diagnostic = self._invoke(argv, base)
         duration = round(self.clock() - started, 1)
-        leaked = sorted(self._sandbox_names() - before)
+        cleanup_detail = None
+        try:
+            leaked = sorted(self._sandbox_names() - before)
+            cleanup = "failed" if leaked else "ok"
+        except PreconditionError as exc:
+            # The run's artifacts are still useful, but an unreadable list proves nothing about
+            # disposal. Preserve that uncertainty and fail this run in either scoring mode.
+            leaked, cleanup, cleanup_detail = [], "unknown", str(exc)
         for name in leaked:  # visible in the results, and not left to skew the next fixture
             self.sbx.remove(name)
 
@@ -1044,7 +1057,7 @@ class Bench:
             "repeat": index, "trust_level": trust, "seed_commit": seed_commit,
             "exit_status": exit_status, "expected_disposition": fixture["expected_disposition"],
             "expected_classification": fixture.get("expected_classification"),
-            "duration_seconds": duration, "cleanup": "failed" if leaked else "ok",
+            "duration_seconds": duration, "cleanup": cleanup, "cleanup_detail": cleanup_detail,
             "leaked_sandboxes": leaked, "report_path": None, "report_schema_valid": None,
             "run_id": None, "final_outcome": None, "oracle": "skipped", "oracle_detail": None,
             "out_of_scope": [], "researcher_invoked": None, "reviewer_invoked": None,
@@ -1122,10 +1135,15 @@ class Bench:
 
     def _sandbox_names(self):
         try:
-            return {entry.get("name") for entry in self.sbx.list_sandboxes()
-                    if isinstance(entry, dict) and str(entry.get("name", "")).startswith("dca-")}
-        except (SbxError, OSError):
-            return set()
+            listing = self.sbx.list_sandboxes()
+            if not isinstance(listing, list) or any(
+                    not isinstance(entry, dict) or not isinstance(entry.get("name"), str)
+                    or not entry["name"] for entry in listing):
+                raise ValueError("expected a list of sandboxes with nonempty names")
+            return {entry["name"] for entry in listing if entry["name"].startswith("dca-")}
+        except (SbxError, OSError, ValueError) as exc:
+            raise PreconditionError(f"the sandbox list could not be read, so benchmark cleanup "
+                                    f"cannot be verified: {exc}") from exc
 
     def document(self, started):
         return {

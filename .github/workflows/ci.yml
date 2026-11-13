@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Static and isolated tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install test dependencies
+        run: python3 -m pip install -r requirements-dev.txt
+      - name: Verify static runtime assets and gate records
+        run: sh scripts/verify.sh --static
+      # Discovery includes unit, contract, parity, isolated integration and golden oracle tests.
+      - name: Run Layers A and B
+        run: python3 -W error::ResourceWarning -m unittest discover -s tests -t . -q
+      - name: Rebuild every fixture seed twice
+        run: python3 tests/oracles/check_seeds.py

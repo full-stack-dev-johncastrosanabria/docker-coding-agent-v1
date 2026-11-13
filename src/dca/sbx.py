@@ -21,6 +21,20 @@ import os
 import subprocess
 
 
+def sandbox_inventory(document):
+    """Normalize observed sbx inventories: v0.43's wrapper and v0.53's array.
+
+    Missing fields, error envelopes and malformed entries remain unreadable, never empty.
+    """
+    listing = (document["sandboxes"] if isinstance(document, dict)
+               and set(document) == {"sandboxes"} else document)
+    if not isinstance(listing, list) or any(
+            not isinstance(entry, dict) or not isinstance(entry.get("name"), str)
+            or not entry["name"] for entry in listing):
+        raise ValueError("expected a sandbox inventory with nonempty names")
+    return listing
+
+
 class SbxError(RuntimeError):
     """An `sbx` invocation failed. The caller decides whether that is exit 3 or exit 4."""
 
@@ -84,7 +98,12 @@ class Sbx:
         return out.strip()
 
     def list_sandboxes(self):
-        return (self._json("ls", "--json") or {}).get("sandboxes") or []
+        document = self._json("ls", "--json")
+        try:
+            return sandbox_inventory(document)
+        except ValueError as exc:
+            raise SbxError([self.binary, "ls", "--json"], 0,
+                           str(exc)) from exc
 
     def policy(self):
         """The whole policy document, including global rules and governance. Read-only."""

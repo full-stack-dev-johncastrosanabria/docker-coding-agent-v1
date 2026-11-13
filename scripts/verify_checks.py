@@ -310,7 +310,12 @@ def check_network_fingerprint(report):
     if code != 0:
         report.fail("network-fingerprint", f"sbx ls failed: {err.strip()}")
         return
-    sandboxes = (json.loads(out) or {}).get("sandboxes") or []
+    sbx_module = _load("dca_sbx", os.path.join(ROOT, "src", "dca", "sbx.py"))
+    try:
+        sandboxes = sbx_module.sandbox_inventory(json.loads(out))
+    except ValueError as exc:
+        report.fail("network-fingerprint", f"sbx inventory is unreadable: {exc}")
+        return
     if sandboxes:
         report.fail("network-fingerprint",
                     f"{len(sandboxes)} sandbox(es) exist, so the global fingerprint cannot be read")

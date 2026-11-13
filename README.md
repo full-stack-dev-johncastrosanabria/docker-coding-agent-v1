@@ -38,6 +38,10 @@ flowchart LR
 
 The host controls eligibility, source delivery, run limits, final verification, retrieval, reporting, and cleanup. A trusted runtime kit in the sandbox supplies the agent instructions, skills, and tool policy gate. The host directs final checks inside the sandbox and records their results.
 
+See the [architecture](docs/architecture.md), [threat model](docs/threat-model.md),
+[backend details](docs/backends.md) and [running guide](docs/running.md) for component boundaries,
+the recorded security evidence and operational commands.
+
 ## Requirements
 
 - A local Git repository with an attached branch and a clean checkout. By default, DCA bundles only committed content; `--ignore-uncommitted` explicitly runs from the branch despite local changes.

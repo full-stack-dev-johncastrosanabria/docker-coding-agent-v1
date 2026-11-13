@@ -1,0 +1,21 @@
+# Keep local state and credentials out of Docker build contexts.
+.git/
+.venv/
+venv/
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+node_modules/
+dist/
+build/
+coverage/
+*.log*
+.env*
+**/.env*
+.DS_Store
+benchmark/work/
+benchmark/results/bench-*/
+gates/**/work/
+tests/**/work/
+Dockerfile*
+.dockerignore

@@ -27,6 +27,10 @@ give the **same commit SHA**. That SHA is the fixture's identity and is recorded
 result. No bundle is committed, because git bundle bytes are not stable across git versions and a
 commit SHA is.
 
+`python3 tests/oracles/check_seeds.py` rebuilds every authored fixture twice and fails if its
+commits differ. CI runs it alongside static verification and the complete isolated test suite;
+live model runs remain a local validation step.
+
 ## Oracle interface
 
 `oracle.sh` receives `CANDIDATE_DIR` (read-only) and `FIXTURE_DIR`. For an acceptance fixture (every

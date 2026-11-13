@@ -1,0 +1,50 @@
+{
+  "evidence": "T086 US3 live validation attempt",
+  "date": "2026-11-12",
+  "backend": "claude",
+  "trust": "trusted",
+  "command": "bin/dca bench --backend claude --fixtures 'F*'",
+  "dca_commit": "bed08e57d8e532a53b8367d0a85facd36ae6a7c3",
+  "dca_tree_clean": false,
+  "verdict": "BLOCKED",
+  "exit_status": 3,
+  "validation_completed": false,
+  "fixture_runs_started": 0,
+  "model_runs_started": 0,
+  "sandbox_created_by_attempt": false,
+  "diagnostic": "dca bench: [1/6] claude F1 (run 1/1)\ndca: precondition failed: the sandbox list could not be read, so benchmark cleanup cannot be verified: sbx ls --json exited 1: error: not signed in to Docker\n  try: sbx login",
+  "environment_blockers": [
+    {
+      "check": "Docker Sandboxes",
+      "reason": "sbx ls --json reports not signed in to Docker"
+    },
+    {
+      "check": "Version pins",
+      "observed": {
+        "sbx": "v0.53.0",
+        "docker_agent": "v1.153.0",
+        "claude_code": "2.1.323"
+      },
+      "required": {
+        "sbx": "v0.43.0",
+        "docker_agent": "v1.136.0",
+        "claude_code": "2.1.278"
+      }
+    },
+    {
+      "check": "Codex readiness",
+      "reason": "installed docker agent cannot inspect the pinned config with the current sign-in mechanism"
+    }
+  ],
+  "earlier_attempt": {
+    "bench_id": "bench-2026-11-13T05-26-57Z-a11f",
+    "result": "all six fixture invocations exited 3 on sbx version drift; no agent executed",
+    "cleanup_claim_invalidated": true,
+    "note": "Those pre-fix artifacts reported cleanup ok after a failed sbx inventory query. No cleanup claim from them is accepted. The final attempt uses the fail-closed inventory check."
+  },
+  "next_actions": [
+    "Sign in with sbx login and confirm sbx ls --json can read the sandbox inventory.",
+    "Restore the pinned tool versions, or intentionally upgrade and renew affected gate and production-conformance evidence.",
+    "Confirm backend sign-in with dca verify, then rerun both backend campaigns sequentially without --allow-drift."
+  ]
+}

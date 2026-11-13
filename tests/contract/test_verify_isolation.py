@@ -1,9 +1,11 @@
 """scripts/verify.sh keeps construction-time Spec Kit skills out of the runtime (tasks.md T006).
 
 Each negative case runs verify.sh against a temporary copy of scripts/ and runtime/, so the
-real tree is never modified. Constitution V and IX.
+real tree is never modified. These are Layer A/B tests: only --static checks run, independent
+of installed tool versions, daemon state or provider sign-in. Constitution V and IX.
 """
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -13,12 +15,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def run_verify(root):
+def run_verify(root, env=None):
     return subprocess.run(
-        ["sh", str(root / "scripts" / "verify.sh")],
+        ["sh", str(root / "scripts" / "verify.sh"), "--static"],
         capture_output=True,
         text=True,
         check=False,
+        env=env,
     )
 
 
@@ -35,6 +38,21 @@ class VerifyIsolation(unittest.TestCase):
     def test_repository_passes(self):
         result = run_verify(ROOT)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_static_verification_never_invokes_live_tools(self):
+        tools = self.copy / "bin"
+        tools.mkdir()
+        probe_log = self.copy / "live-tool-calls"
+        for name in ("sbx", "docker", "claude"):
+            path = tools / name
+            path.write_text('#!/bin/sh\nprintf "%s\\n" "$0" >> "$DCA_VERIFY_PROBE_LOG"\n'
+                            'exit 97\n', encoding="utf-8")
+            path.chmod(0o755)
+        environment = dict(os.environ, PATH=str(tools) + os.pathsep + os.environ["PATH"],
+                           DCA_VERIFY_PROBE_LOG=str(probe_log))
+        result = run_verify(ROOT, env=environment)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(probe_log.exists(), "static verification invoked a live tool")
 
     def test_clean_copy_passes(self):
         result = run_verify(self.copy)

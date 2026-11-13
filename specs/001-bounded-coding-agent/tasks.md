@@ -867,13 +867,15 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
 **Independent Test**: `dca bench --fixtures 'F*'` gives 6/6, with host-side stops and correct `limit_reached` (spec US3, SC-004).
 
-- [ ] T084 [P] [US3] **Test** Create fixtures `benchmark/fixtures/F1`–`F3`:
+**Progress 2026-11-12:** T084/T085 are complete: F1–F6 pass every seed/good/bad oracle check and each seed rebuilds to the same commit. The local suites also cover host deadline enforcement, workload quiescence, and report disposition. T086 remains open: both live campaigns refuse before invoking a fixture because Docker Sandboxes is not signed in; `dca verify` additionally reports version drift (sbx 0.53.0 vs 0.43.0, Docker Agent 1.153.0 vs 1.136.0, Claude 2.1.323 vs 2.1.278) and incompatible current Codex readiness. Evidence: [Claude](../../benchmark/results/2026-11-12-claude-US3.json), [Codex](../../benchmark/results/2026-11-12-codex-US3.json). No live US3 pass is claimed. During validation, fixed local client/pipe/timer cleanup and made failed or malformed sandbox inventories fail closed; an unreadable final inventory now records cleanup as unknown and cannot pass either benchmark scoring mode.
+
+- [X] T084 [P] [US3] **Test** Create fixtures `benchmark/fixtures/F1`–`F3`:
   - **F1**: retry limit → `blocked` with `limit_reached: retries`;
   - **F2**: a required check can't run, or `none-adequate` → `blocked` with an empty change set;
   - **F3**: a missing dependency, or missing essential information (FR-025) → `blocked`.
 
   Depends: T074, T077. Evidence: oracle tests pass. (FR-024, FR-025, FR-035a)
-- [ ] T085 [P] [US3] **Test** Create fixtures `benchmark/fixtures/F4`–`F6`:
+- [X] T085 [P] [US3] **Test** Create fixtures `benchmark/fixtures/F4`–`F6`:
   - **F4**: conclusive failure before any limit → `failed`;
   - **F5**: an infeasible or contradictory request → `failed`;
   - **F6**: step or wall-clock limit → host-side stop, `blocked`.
@@ -961,8 +963,10 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
 ## Phase 15: Documentation & CI examples (order item 8)
 
-- [ ] T102 [P] **Docs** Write `docs/architecture.md`: construction vs runtime separation; the host/VM topology; mountless plus the branch-bundle flow; backends; host-enforced vs cooperative controls; the trusted-root gate packaging; the report pipeline. Depends: T071. Evidence: every plan "Project Structure" component is described; contract links resolve.
-- [ ] T103 [P] **Docs** Write `docs/threat-model.md`. Cover:
+**Progress 2026-11-12:** T102/T103/T104/T106/T107 completed independently under their listed prerequisites while live story validation is blocked. The four guides cite the committed contracts and gate outcomes, with local links and heading anchors checked. CI runs static verification, the full isolated suite (including oracle goldens), and `tests/oracles/check_seeds.py` on Python 3.11 and 3.14, with read-only permissions and pinned action SHAs. Local commands are validated; GitHub Actions itself has not been run here. T105 and T108 still depend on the outstanding acceptance evidence. Local evidence: [validation summary](../../benchmark/results/2026-11-12-local-validation.json) — Python 3.14: 1,677 tests, zero failures/errors, one skip; Python 3.11: 1,674 tests plus the three final inventory-parser tests, all passing. All 28 authored fixture seeds rebuilt identically on both Python versions.
+
+- [X] T102 [P] **Docs** Write `docs/architecture.md`: construction vs runtime separation; the host/VM topology; mountless plus the branch-bundle flow; backends; host-enforced vs cooperative controls; the trusted-root gate packaging; the report pipeline. Depends: T071. Evidence: every plan "Project Structure" component is described; contract links resolve.
+- [X] T103 [P] **Docs** Write `docs/threat-model.md`. Cover:
   - trust boundaries;
   - cooperative vs enforced controls;
   - secret unreadability vs capability usability, including the C1/G9 status from `gates/G9.json`;
@@ -972,15 +976,15 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - the supply-chain pin (publisher-verified vs recorded).
 
   Depends: T024, T062, T073. Evidence: every gate outcome is cited.
-- [ ] T104 [P] **Docs** Write `docs/backends.md`: Claude (Pro status and fresh-sandbox authentication from G1a, G1b, managed settings) vs Codex (mechanism from G2, the model from G3); pre-run selection; parity guarantees and test (T060); no `harness: codex` in V1. Depends: T024, T054, T055, T060. Evidence: each claim cites evidence or a contract.
+- [X] T104 [P] **Docs** Write `docs/backends.md`: Claude (Pro status and fresh-sandbox authentication from G1a, G1b, managed settings) vs Codex (mechanism from G2, the model from G3); pre-run selection; parity guarantees and test (T060); no `harness: codex` in V1. Depends: T024, T054, T055, T060. Evidence: each claim cites evidence or a contract.
 - [ ] T105 [P] **Docs** Write `docs/evaluation.md`: the fixture catalog (29 physical / 28 applicable), the T074 format, thresholds, instability policy, acceptance results, comparison, and readability-review findings. Depends: T100, T101. Evidence: numbers match `benchmark/results/*`.
-- [ ] T106 [P] **Docs** Write `docs/running.md`. Cover:
+- [X] T106 [P] **Docs** Write `docs/running.md`. Cover:
   - installation: the editable install and the pinned Docker Agent binary (README, 006);
   - prerequisites (quickstart §1, including the Python key-presence snippet, the one-time global SSH setting from G0, and any global network preset G4 recorded as a V1 prerequisite);
   - `dca init` and the local project config (`.git/dca/config.toml`, precedence, trust);
   - `dca run` (positional task and the explicit form), `dca verify` and `dca bench`;
   - exit codes 0/2/3/4/10/11, `--approve`/`--approval-report`, bench trust semantics, and troubleshooting for gate failures, an unavailable backend, and a global network-policy fingerprint mismatch (re-run G4 and production conformance; the launcher never changes global settings). Depends: T072. Evidence: commands match `bin/dca --help`.
-- [ ] T107 **Impl (decided)** Write `.github/workflows/ci.yml` for **Layers A and B only**: the static parts of `scripts/verify.sh`, unit, contract, parity and isolated-execution tests, the oracle golden tests, and the seed-determinism rebuild. No live runs, no provider keys, no OAuth state, no production credentials. Depends: T031, T058, T059, T060, T061, T074, T077. Evidence: `grep -E 'API_KEY|secrets\.' .github/workflows/ci.yml` finds nothing; the same commands pass locally.
+- [X] T107 **Impl (decided)** Write `.github/workflows/ci.yml` for **Layers A and B only**: the static parts of `scripts/verify.sh`, unit, contract, parity and isolated-execution tests, the oracle golden tests, and the seed-determinism rebuild. No live runs, no provider keys, no OAuth state, no production credentials. Depends: T031, T058, T059, T060, T061, T074, T077. Evidence: `grep -E 'API_KEY|secrets\.' .github/workflows/ci.yml` finds nothing; the same commands pass locally.
 - [ ] T108 **Validate** Final walkthrough:
   - `scripts/verify.sh`, all unit/contract/integration tests and the oracle tests pass;
   - quickstart §1–§8 executed as written;

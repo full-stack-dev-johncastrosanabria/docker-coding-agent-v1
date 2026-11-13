@@ -1,0 +1,123 @@
+{
+  "evidence": "Local implementation continuation and validation",
+  "date": "2026-11-12",
+  "dca_commit": "bed08e57d8e532a53b8367d0a85facd36ae6a7c3",
+  "dca_tree_clean": false,
+  "completed_tasks": [
+    "T084",
+    "T085",
+    "T102",
+    "T103",
+    "T104",
+    "T106",
+    "T107"
+  ],
+  "tasks_complete": 90,
+  "tasks_remaining": 18,
+  "fixes": [
+    "Reap the streamed agent client, close both pipes and cancel/join its deadline on normal, limited and failed capture exits.",
+    "Treat local event-capture I/O failure as an infrastructure abort with sandbox removal and no completion report or result branch.",
+    "Keep construction/runtime isolation tests in static mode and prove they never call live tools.",
+    "Reject failed or malformed initial sandbox inventories; mark a failed final inventory as unknown cleanup, which fails reliability and acceptance scoring."
+  ],
+  "tests": [
+    {
+      "python": "3.14.7",
+      "command": "python3 -W error::ResourceWarning -m unittest discover -s tests -t . -q",
+      "tests": 1677,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1,
+      "exit_status": 0,
+      "resource_warnings": 0
+    },
+    {
+      "python": "3.11.15",
+      "command": "python -W error::ResourceWarning -m unittest discover -s tests -t . -q",
+      "tests": 1674,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1,
+      "exit_status": 0,
+      "scope": "Full suite before the final Sbx inventory shape validation was added."
+    },
+    {
+      "python": "3.11.15",
+      "command": "python -m unittest tests.unit.test_sbx -q",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "exit_status": 0,
+      "scope": "Follow-up validation of the final inventory parser."
+    }
+  ],
+  "static_verification": {
+    "command": "sh scripts/verify.sh --static",
+    "exit_status": 0,
+    "python_versions": [
+      "3.11.15",
+      "3.14.7"
+    ]
+  },
+  "oracle_goldens": {
+    "command": "python3 tests/oracles/run_oracles.py F*",
+    "fixtures": [
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5",
+      "F6"
+    ],
+    "exit_status": 0,
+    "all_fixture_goldens_also_checked_by_full_test_discovery": true
+  },
+  "seed_determinism": {
+    "command": "python3 tests/oracles/check_seeds.py",
+    "fixtures": 28,
+    "rebuilds_per_fixture": 2,
+    "exit_status": 0,
+    "python_versions": [
+      "3.11.15",
+      "3.14.7"
+    ]
+  },
+  "documentation": {
+    "local_links_and_heading_anchors": "PASS"
+  },
+  "ci": {
+    "workflow": ".github/workflows/ci.yml",
+    "yaml_structure": "PASS",
+    "permissions": "contents: read",
+    "provider_credential_references": false,
+    "local_commands_passed": true,
+    "remote_actions_run": false
+  },
+  "acceptance_catalog": {
+    "authored_definitions": 18,
+    "required_physical_definitions": 29,
+    "required_applicable_per_backend": 28,
+    "missing_definitions": [
+      "M3",
+      "M5",
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5a",
+      "S5b",
+      "S6",
+      "S7",
+      "S8"
+    ]
+  },
+  "live_validation": {
+    "verdict": "BLOCKED",
+    "evidence": [
+      "benchmark/results/2026-11-12-claude-US3.json",
+      "benchmark/results/2026-11-12-codex-US3.json"
+    ],
+    "reason": "Docker Sandboxes not signed in; installed tool versions differ from runtime pins; current Codex readiness also fails."
+  }
+}

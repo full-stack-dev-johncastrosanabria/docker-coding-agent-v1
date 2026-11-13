@@ -791,31 +791,42 @@ class Launcher:
 
         captured = []
         events_path = os.path.join(self.request.out, "events.jsonl")
-        os.makedirs(self.request.out, exist_ok=True)
-        with open(events_path, "w", encoding="utf-8") as sink:
-            for line in proc.stdout:
-                text = line.decode("utf-8", "replace")
-                captured.append(text)
-                sink.write(text)
-                accountant.feed(text)
-                if stop.value is None:
-                    reason = accountant.limit_reached(limits)
-                    if reason is not None and stop.claim(reason, accountant.steps):
-                        proc.kill()
-                        break
-                if (stop.value is None and deadline and self.clock() - started >= deadline
-                        and stop.claim("wall_clock", accountant.steps)):
-                    proc.kill()
-                    break
-            if stop.value is not None:
+        try:
+            os.makedirs(self.request.out, exist_ok=True)
+            with open(events_path, "w", encoding="utf-8") as sink:
                 for line in proc.stdout:
                     text = line.decode("utf-8", "replace")
                     captured.append(text)
                     sink.write(text)
-        exit_status = proc.wait()
-        if timer is not None:
-            timer.cancel()
-        stderr = stderr_tail.text()
+                    accountant.feed(text)
+                    if stop.value is None:
+                        reason = accountant.limit_reached(limits)
+                        if reason is not None and stop.claim(reason, accountant.steps):
+                            proc.kill()
+                            break
+                    if (stop.value is None and deadline and self.clock() - started >= deadline
+                            and stop.claim("wall_clock", accountant.steps)):
+                        proc.kill()
+                        break
+                if stop.value is not None:
+                    for line in proc.stdout:
+                        text = line.decode("utf-8", "replace")
+                        captured.append(text)
+                        sink.write(text)
+            exit_status = proc.wait()
+        except OSError as exc:
+            raise InfraAbort(f"the agent event stream could not be captured: {exc}") from exc
+        finally:
+            # An output error must not leave a live client or a deadline callback behind while
+            # run() removes the sandbox. wait() alone does not close Popen's PIPE objects.
+            if timer is not None:
+                timer.cancel()
+                timer.join()
+            if proc.poll() is None:
+                proc.kill()
+            proc.wait()
+            proc.stdout.close()
+            stderr = stderr_tail.text()
         with open(os.path.join(self.request.out, "agent.stderr.txt"), "w",
                   encoding="utf-8") as handle:
             handle.write(redact_credentials(stderr))
@@ -1113,10 +1124,11 @@ class _StderrTail:
         self._thread.start()
 
     def _drain(self):
-        for chunk in iter(lambda: self._pipe.read(8192), b""):
-            self._buffer += chunk
-            if len(self._buffer) > 2 * AGENT_STDERR_LIMIT:
-                del self._buffer[:-AGENT_STDERR_LIMIT]
+        with self._pipe:
+            for chunk in iter(lambda: self._pipe.read(8192), b""):
+                self._buffer += chunk
+                if len(self._buffer) > 2 * AGENT_STDERR_LIMIT:
+                    del self._buffer[:-AGENT_STDERR_LIMIT]
 
     def text(self):
         self._thread.join(timeout=10)

@@ -27,6 +27,7 @@ import sys
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = Path(__file__).resolve().parent / "work"
@@ -569,6 +570,101 @@ class TestHostStopAuthority(ExecutionCase):
         instance = self.provisioned()
         with self.assertRaises(errors.InfraAbort):
             instance.execute_agent(timeout=60)
+
+
+class TestProcessCleanup(ExecutionCase):
+    """Stream capture must release the client, both pipes and its deadline on every exit."""
+
+    def watch_agent(self):
+        processes = []
+        popen = subprocess.Popen
+
+        def start(argv, *args, **kwargs):
+            proc = popen(argv, *args, **kwargs)
+            if MARKER in argv[-1]:
+                processes.append(proc)
+            return proc
+
+        def release():
+            for proc in processes:
+                if proc.poll() is None:
+                    proc.kill()
+                proc.wait()
+                proc.stdout.close()
+                proc.stderr.close()
+
+        patcher = mock.patch.object(launcher.subprocess, "Popen", side_effect=start)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(release)
+        return processes
+
+    def assert_released(self, processes):
+        self.assertEqual(len(processes), 1)
+        proc = processes[0]
+        self.assertIsNotNone(proc.poll(), "the sbx client is still running")
+        self.assertTrue(proc.stdout.closed, "the event pipe is still open")
+        self.assertTrue(proc.stderr.closed, "the diagnostic pipe is still open")
+
+    def test_41_normal_completion_closes_both_pipes_after_draining_stderr(self):
+        self.record_stream(stream(tool_call("one")), exit_status=0)
+        self.state["exec_stderr"] = "diagnostic tail\n"
+        self.write_state()
+        instance = self.provisioned()
+        processes = self.watch_agent()
+        _, host_stop, status, stderr = instance.execute_agent(timeout=60)
+        self.assertIsNone(host_stop)
+        self.assertEqual(status, 0)
+        self.assertIn("diagnostic tail", stderr)
+        self.assert_released(processes)
+
+    def test_42_a_host_stop_closes_both_pipes(self):
+        self.record_stream(stream(*[tool_call(str(n)) for n in range(20)]), exit_status=0)
+        instance = self.provisioned()
+        instance.host_limits = lambda classification=None: {
+            "steps": 2, "retries": 99, "tokens": 10 ** 9, "wall_clock_seconds": 60}
+        processes = self.watch_agent()
+        _, host_stop, _, _ = instance.execute_agent()
+        self.assertEqual(host_stop["reason"], "steps")
+        self.assert_released(processes)
+
+    def test_43_a_capture_error_reaps_the_client_and_cancels_its_timer(self):
+        self.record_stream(stream(tool_call("one"), tool_call("two")), exit_status=0)
+        self.state["stream_pause"] = {"after_line": 2, "seconds": 30}
+        self.write_state()
+        instance = self.provisioned()
+        processes = self.watch_agent()
+        timers = []
+        timer_factory = launcher.threading.Timer
+
+        def timer(*args, **kwargs):
+            result = timer_factory(*args, **kwargs)
+            timers.append(result)
+            return result
+
+        with mock.patch.object(launcher.threading, "Timer", side_effect=timer), \
+                mock.patch.object(events.StreamAccountant, "feed",
+                                  side_effect=OSError("cannot write event capture")):
+            with self.assertRaises(errors.InfraAbort) as caught:
+                instance.execute_agent(timeout=60)
+        self.assertIn("cannot write event capture", str(caught.exception))
+        self.assert_released(processes)
+        self.assertEqual(len(timers), 1)
+        self.assertFalse(timers[0].is_alive(), "a deadline callback survived the failed capture")
+
+    def test_44_a_capture_error_aborts_without_a_report_and_removes_the_sandbox(self):
+        self.record_stream(stream(tool_call("one")), exit_status=0)
+        instance = self.make()
+        processes = self.watch_agent()
+        with mock.patch.object(events.StreamAccountant, "feed",
+                               side_effect=OSError("cannot write event capture")):
+            with self.assertRaises(errors.InfraAbort) as caught:
+                instance.run()
+        self.assertEqual(caught.exception.exit_code, 4)
+        self.assert_released(processes)
+        self.assertEqual(self.sbx.list_sandboxes(), [])
+        self.assertFalse(Path(instance.request.out, "report.json").exists())
+        self.assertEqual(git(self.repo, "branch", "--list", "dca/*").strip(), "")
 
 
 class TestProgress(ExecutionCase):
