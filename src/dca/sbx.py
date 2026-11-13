@@ -167,7 +167,7 @@ class Sbx:
 
     # --- per-sandbox lifecycle -------------------------------------------------------------------
 
-    def create(self, name, kit, base):
+    def create(self, name, kit, base, deny=()):
         """A mountless sandbox with shared skills OFF, the V1 kit and the EXACT pinned base.
 
         `base` is the immutable, digest-qualified v3 workload kit - `<repository>@sha256:<hex>` -
@@ -176,13 +176,16 @@ class Sbx:
         creation-time input, never something resolved from a tag and audited afterwards. `kit` is
         the absolute path of the DCA v3 mixin directory; sbx builds it with the host's buildx, so
         the builder named in the environment (BUILDX_BUILDER) decides how it is built.
-        `--static-mcp none` gives the sandbox an empty static MCP set: V1 has no MCP.
+        `--static-mcp none` gives the sandbox an empty static MCP set: V1 has no MCP. `deny` is
+        applied with `--deny-network` AT CREATION: a v3 workload kit's startup hook reaches its
+        own kit-allowed hosts while the VM boots, before any later `sbx policy deny` could land.
         """
         if not base or "@sha256:" not in base:
             raise ValueError("a pinned, digest-qualified base reference is required to create a "
                              "sandbox; the agent default would follow a mutable tag")
+        denies = [arg for host in deny for arg in ("--deny-network", host)]
         _, out, _ = self.run("create", base, "--name", name, "--skills", "off",
-                             "--static-mcp", "none", "--kit", kit)
+                             "--static-mcp", "none", "--kit", kit, *denies)
         return out
 
     def inspect(self, name):
@@ -193,11 +196,6 @@ class Sbx:
         if not hosts:
             return
         self.run("policy", "allow", "network", "--sandbox", name, ",".join(hosts))
-
-    def deny_network(self, name, hosts):
-        if not hosts:
-            return
-        self.run("policy", "deny", "network", "--sandbox", name, ",".join(hosts))
 
     def copy_in(self, source, name, destination):
         self.run("cp", str(source), f"{name}:{destination}")

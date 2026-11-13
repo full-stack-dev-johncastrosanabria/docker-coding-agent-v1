@@ -216,18 +216,11 @@ STUB
     trap cleanup EXIT INT TERM
 
     # --- step 1: the login sandbox ----------------------------------------------------------------
-    run_sbx create claude --template "$BASE_REF" --name "$LOGIN_SANDBOX" \
-        --skills off --kit "./$KIT" \
-        >"$WORK/create-$LOGIN_SANDBOX.txt" 2>&1
+    . gates/sbx_create.sh
+    create_pinned claude "$LOGIN_SANDBOX" "$KIT"
     create_status=$?
-    record "create_${LOGIN_SANDBOX}_exit" "$create_status"
     [ "$create_status" -eq 0 ] && : >"$WORK/created-$LOGIN_SANDBOX"
     [ "$create_status" -eq 0 ] || stop
-
-    run_sbx template ls --json >"$WORK/templates.json" 2>"$WORK/templates.err"
-    record templates_exit "$?"
-    record sbx_resolved_base "$(awk '$1 == "image" {print $2; exit}' \
-        "$WORK/create-$LOGIN_SANDBOX.txt")"
 
     apply_policy "$LOGIN_SANDBOX" login
     record policy_rules_exit "$?"
@@ -282,15 +275,12 @@ run)
     rm -f "$WORK/created-$LOGIN_SANDBOX"
 
     # --- step 2: a completely fresh sandbox, no /login, no TTY, no API key -------------------------
-    run_sbx create claude --template "$BASE_REF" --name "$FRESH_SANDBOX" \
-        --skills off --kit "./$KIT" \
-        >"$WORK/create-$FRESH_SANDBOX.txt" 2>&1
+    # Step 1's composition record (inspect-$LOGIN_SANDBOX.json) belongs to this same run.
+    SBX_CREATE_KEEP_RECORDS=1 . gates/sbx_create.sh
+    create_pinned claude "$FRESH_SANDBOX" "$KIT"
     create_status=$?
-    record "create_${FRESH_SANDBOX}_exit" "$create_status"
     [ "$create_status" -eq 0 ] && : >"$WORK/created-$FRESH_SANDBOX"
     [ "$create_status" -eq 0 ] || stop
-    record sbx_resolved_base_fresh "$(awk '$1 == "image" {print $2; exit}' \
-        "$WORK/create-$FRESH_SANDBOX.txt")"
 
     apply_policy "$FRESH_SANDBOX" trusted
     record "policy_rules_fresh_exit" "$?"

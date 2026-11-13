@@ -208,34 +208,28 @@ def pinned_base_reference(versions):
     return f"{image}@{digest}"
 
 
-def created_image(work, sandbox):
-    """Read the image sbx resolved, rather than trusting a mutable cached tag."""
-    output = common.read_file(work, f"create-{sandbox}.txt")
-    if not isinstance(output, str):
-        return None
-    matches = re.findall(r"^\s*image\s+(\S+)\s*$", output, re.MULTILINE)
-    return matches[0] if len(matches) == 1 else None
-
-
 def pinned_base_row(obs, work, versions):
+    """Both sandboxes exist, were requested from the pinned Claude workload, and sbx's own inspect
+    record shows exactly that workload plus the G6 kit (claude_common.base_identity_row)."""
     expected = pinned_base_reference(versions)
-    login = created_image(work, LOGIN_SANDBOX)
-    fresh = created_image(work, FRESH_SANDBOX)
+    row_id, _, composed, observed = common.base_identity_row(GATE, obs, work, versions)
+    recorded = [name for name in (LOGIN_SANDBOX, FRESH_SANDBOX)
+                if common.read_json(work, f"inspect-{name}.json") is not None]
     holds = (
-        expected is not None
+        composed
+        and expected is not None
         and obs.get("requested_base") == expected
         and obs.get(f"create_{LOGIN_SANDBOX}_exit") == "0"
         and obs.get(f"create_{FRESH_SANDBOX}_exit") == "0"
-        and login == expected
-        and fresh == expected
+        and len(recorded) == 2
     )
     return (
-        f"{GATE}.base",
-        "both sandboxes were created with the exact digest-qualified pinned Claude base; "
-        "the image sbx resolved for each creation matches that immutable reference",
+        row_id,
+        "both sandboxes were created from the exact digest-qualified pinned Claude workload, and "
+        "sbx's inspect record of each shows that workload and the G6 kit and nothing else",
         holds,
-        f"pinned {expected or 'invalid'}; requested {obs.get('requested_base') or 'not recorded'}; "
-        f"login resolved {login or 'not reported'}; fresh resolved {fresh or 'not reported'}",
+        f"requested {obs.get('requested_base') or 'not recorded'}; inspect records for "
+        f"{recorded or 'neither sandbox'}; {observed}",
     )
 
 

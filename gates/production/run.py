@@ -53,7 +53,8 @@ def read_json(path):
 
 def policy_check(sbx, name, host):
     status, output, error = sbx.run(
-        "policy", "check", "network", host + ":443", "--sandbox", name, "--json",
+        "policy", "check", "network", host if ":" in host else host + ":443",
+        "--sandbox", name, "--json",
         check=False)
     try:
         document = json.loads(output)
@@ -80,7 +81,8 @@ def run_cell(backend, profile, sbx, versions, network):
             raise RuntimeError(f"runtime/versions.yaml pins no complete sandbox base for {backend}")
         create_status, output, create_error = sbx.run(
             "create", pinned_reference, "--name", name, "--skills", "off",
-            "--static-mcp", "none", "--kit", str(kit.resolve()), check=False)
+            "--static-mcp", "none", "--kit", str(kit.resolve()),
+            *[arg for host in deny for arg in ("--deny-network", host)], check=False)
         (WORK / f"create-{name}.txt").write_text(
             output + "\nSTDERR:\n" + create_error, encoding="utf-8")
         created = any(item.get("name") == name for item in sbx.list_sandboxes())
@@ -98,7 +100,6 @@ def run_cell(backend, profile, sbx, versions, network):
         checked(rows, "base.digest", problem is None,
                 {"pin": pinned_reference, "observed": kits, "problem": problem})
         sbx.allow_network(name, allow)
-        sbx.deny_network(name, deny)
         if backend == "codex" and profile == "trusted":
             credential = Path.home() / ".config/cagent/chatgpt-auth.json"
             if not credential.is_file() or credential.stat().st_size == 0:

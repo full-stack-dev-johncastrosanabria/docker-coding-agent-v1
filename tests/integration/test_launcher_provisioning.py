@@ -229,9 +229,11 @@ class TestHappyPath(ProvisioningCase):
         allowed = [entry for entry in applied if entry[:2] == ["allow", "network"]]
         self.assertTrue(allowed)
         self.assertEqual(sorted(allowed[0][-1].split(",")), sorted(allow))
-        if deny:
-            denied = [entry for entry in applied if entry[:2] == ["deny", "network"]]
-            self.assertEqual(sorted(denied[0][-1].split(",")), sorted(deny))
+        # The denies are creation-time flags, so they already hold while the VM boots.
+        create = next(argv for argv in self.calls() if argv and argv[0] == "create")
+        self.assertEqual(sorted(create[i + 1] for i, a in enumerate(create) if a == "--deny-network"),
+                         sorted(deny))
+        self.assertFalse([entry for entry in applied if entry[:2] == ["deny", "network"]])
 
     def test_08_the_untrusted_profile_is_narrower_than_the_trusted_one(self):
         trusted_allow, _ = self.make(trust="trusted").network_cell()

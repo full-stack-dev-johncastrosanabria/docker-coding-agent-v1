@@ -9,7 +9,7 @@ everything else, on four surfaces that must agree:
   2. `sbx policy check network --sandbox <name> <dest> --json` - the authorizer's decision;
   3. a real connection attempt from inside the sandbox - the proxy either establishes the CONNECT
      tunnel or answers it itself;
-  4. `sbx policy log <name> --json` - the destination appears under allowed_hosts or blocked_hosts
+  4. `sbx policy log <name> --json` - the destination appears under allowed or blocked
      with a matching reason.
 
 Surface 1 is not redundant. Surfaces 2-4 only ever speak about destinations G4 thought to probe, so
@@ -597,10 +597,10 @@ def log_decision(log, host):
     if not isinstance(log, dict):
         return None
     target = target_of(host)
-    for entry in log.get("allowed_hosts") or []:
+    for entry in log.get("allowed") or []:
         if isinstance(entry, dict) and entry.get("host") == target:
             return ALLOW
-    for entry in log.get("blocked_hosts") or []:
+    for entry in log.get("blocked") or []:
         if isinstance(entry, dict) and entry.get("host") == target:
             reason = entry.get("reason") or ""
             if reason == "Denied by local rule":
@@ -613,10 +613,10 @@ def log_decision(log, host):
 
 def logged_allowed_hosts(log):
     """Every host the log shows the sandbox actually reached, or None when unreadable."""
-    if not isinstance(log, dict) or not isinstance(log.get("allowed_hosts"), list):
+    if not isinstance(log, dict) or not isinstance(log.get("allowed"), list):
         return None
     out = set()
-    for entry in log["allowed_hosts"]:
+    for entry in log["allowed"]:
         if not isinstance(entry, dict) or not isinstance(entry.get("host"), str):
             return None
         out.add(entry["host"])

@@ -137,22 +137,22 @@ def agent_answer(work, name):
 def policy_log_hosts(work, name):
     """{host: allowed} from one `sbx policy log --json` capture.
 
-    The pinned sbx v0.43.0 emits two lists, `allowed_hosts` and `blocked_hosts`, each entry keyed by
+    The pinned sbx v0.53.0 emits two lists, `allowed` and `blocked`, each entry keyed by
     a host:port with a `count_since`. This reads that shape exactly rather than guessing at generic
     key names: a parser that cannot find the entries reports no allowed host, which silently fails
     the positive control and makes the whole gate look like a FAIL it is not.
 
-    A host counts as allowed only when it appears under `allowed_hosts` AND traffic was actually
+    A host counts as allowed only when it appears under `allowed` AND traffic was actually
     seen. A rule permitting a host is not evidence that the agent called it.
     """
     document = claude.read_json(work, name)
     if not isinstance(document, dict):
         return {}
     hosts = {}
-    for entry in document.get("blocked_hosts") or []:
+    for entry in document.get("blocked") or []:
         if isinstance(entry, dict) and isinstance(entry.get("host"), str):
             hosts.setdefault(entry["host"].split(":")[0], False)
-    for entry in document.get("allowed_hosts") or []:
+    for entry in document.get("allowed") or []:
         if not isinstance(entry, dict) or not isinstance(entry.get("host"), str):
             continue
         count = entry.get("count_since")

@@ -408,8 +408,8 @@ class G4Recorder(unittest.TestCase):
 
     def test_28_log_entries_are_read_by_reason(self):
         log = {
-            "allowed_hosts": [{"host": "api.anthropic.com:443"}],
-            "blocked_hosts": [
+            "allowed": [{"host": "api.anthropic.com:443"}],
+            "blocked": [
                 {"host": "code.claude.com:443", "reason": "Denied by local rule"},
                 {"host": "github.com:443", "reason": "No matching allow rule (default deny)"},
             ],
@@ -439,7 +439,7 @@ class G4Recorder(unittest.TestCase):
                     "reason": ("Denied by local rule" if kind == "explicit"
                                else "No matching allow rule (default deny)"),
                 })
-        return checks, probes, {"allowed_hosts": allowed, "blocked_hosts": blocked}
+        return checks, probes, {"allowed": allowed, "blocked": blocked}
 
     def test_29_agreeing_surfaces_pass_the_cell(self):
         cell = self.cell("claude", "untrusted")
@@ -461,7 +461,7 @@ class G4Recorder(unittest.TestCase):
                             for f in self.record_module.cell_failures(cell, checks, probes, log)))
 
         checks, probes, log = self._surfaces(cell)
-        log["blocked_hosts"] = [e for e in log["blocked_hosts"] if e["host"] != "github.com:443"]
+        log["blocked"] = [e for e in log["blocked"] if e["host"] != "github.com:443"]
         self.assertTrue(any("policy-log" in f
                             for f in self.record_module.cell_failures(cell, checks, probes, log)))
 
@@ -484,11 +484,11 @@ class G4Recorder(unittest.TestCase):
     def test_33_a_destination_the_profile_never_permitted_fails_the_cell(self):
         cell = self.cell("claude", "untrusted")
         _, _, log = self._surfaces(cell)
-        log["allowed_hosts"].append({"host": "telemetry.example.com:443"})
+        log["allowed"].append({"host": "telemetry.example.com:443"})
         self.assertTrue(any("telemetry.example.com:443" in s
                             for s in self.record_module.surprise_failures(cell, log)))
         self.assertTrue(self.record_module.surprise_failures(cell, None))
-        self.assertTrue(self.record_module.surprise_failures(cell, {"allowed_hosts": "nonsense"}))
+        self.assertTrue(self.record_module.surprise_failures(cell, {"allowed": "nonsense"}))
 
     # --- the global fingerprint -----------------------------------------------------------------------
 
@@ -1261,9 +1261,13 @@ class G4Recorder(unittest.TestCase):
         # Every rule the gate writes is sandbox-scoped; a missing --sandbox writes a GLOBAL rule.
         scoped = [l for l in body.splitlines()
                   if "policy allow network" in l or "policy deny network" in l]
-        self.assertEqual(len(scoped), 2, scoped)
+        self.assertEqual(len(scoped), 1, scoped)
         for line in scoped:
             self.assertIn("--sandbox", line, line)
+        # The explicit denies are creation-time, sandbox-scoped flags, so they hold while the VM
+        # boots; a later `sbx policy deny` would miss the kit's startup traffic.
+        self.assertIn("--deny-network", body)
+        self.assertNotIn("policy deny network", body)
 
         # Mountless, skill-less sandboxes from the pinned workload (gates/sbx_create.sh defaults
         # to --skills off and adds no mount), removed one at a time by name.

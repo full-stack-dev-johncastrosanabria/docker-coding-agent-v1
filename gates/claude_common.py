@@ -124,6 +124,30 @@ def base_identity_row(gate, obs, work, versions, observed_key=None):
     )
 
 
+# --- the accepted G4 policy this block runs under -------------------------------------------------
+
+def claude_policy(profile="trusted"):
+    """(allow hosts, explicit deny hosts) for the Claude profile, as accepted G4 defines it.
+
+    The policy is not restated here. It is the same cell G4 derived from the committed T014
+    inventory and trusted-allowlist draft and then proved, so a Claude gate cannot run under a
+    policy that merely resembles the verified one. The denies are the built-in kit's hosts this
+    profile does not permit: the kit rule is editable:false, so they are neutralized rather than
+    removed.
+    """
+    with open(g4_module.INVENTORY_FILE, encoding="utf-8") as fh:
+        inventory = json.load(fh)
+    with open(g4_module.DRAFT_FILE, encoding="utf-8") as fh:
+        draft = json.load(fh)
+    for cell in g4_module.cells(inventory, draft):
+        if cell["backend"] == "claude" and cell["profile"] == profile:
+            return list(cell["allow_rules"]), list(cell["deny_rules"])
+    raise ValueError(f"accepted G4 defines no claude/{profile} cell")
+
+
+LOGIN_PURPOSE = "host-oauth-login"
+
+
 def claude_login_hosts():
     """The documented host-oauth-login destinations T014 recorded for Claude.
 

@@ -11,8 +11,9 @@
 
 BUILDX_BUILDER=$(python3 -c 'import json; print(json.load(open("runtime/versions.yaml"))["kit_build"]["builder"])')
 export BUILDX_BUILDER
-# Only THIS run's composition records may be judged.
-rm -f "$WORK"/inspect-*.json "$WORK"/inspect-*.err
+# Only THIS run's composition records may be judged. A gate whose run spans two invocations
+# (G1a: login, then run) keeps the first invocation's records with SBX_CREATE_KEEP_RECORDS=1.
+[ -n "${SBX_CREATE_KEEP_RECORDS:-}" ] || rm -f "$WORK"/inspect-*.json "$WORK"/inspect-*.err
 
 pinned_base_ref() {
     # $1 = backend (claude|codex). Prints <repository>@<digest>, or nothing.

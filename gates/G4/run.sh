@@ -178,19 +178,22 @@ for name in $(awk '/^cell /{print $2}' "$PLAN"); do
     deny=$(awk -v n="$name" '$1=="deny" && $2==n {print $3}' "$PLAN")
     dests=$(awk -v n="$name" '$1=="dest" && $2==n {print $3}' "$PLAN")
 
+    # The explicit denies go in WITH the create (--deny-network, sandbox-scoped): the v3 claude
+    # kit's startup hook reaches its kit-allowed apt mirrors while the VM boots, before a later
+    # `sbx policy deny` could land.
+    denies=$(printf '%s' "$deny" | tr ',' '\n' | awk 'NF {printf " --deny-network %s", $0}')
     if [ "$agent" = docker-agent ]; then
-        create_pinned codex "$name" "$KIT"
+        # shellcheck disable=SC2086
+        create_pinned codex "$name" "$KIT" $denies
     else
-        create_pinned claude "$name"
+        # shellcheck disable=SC2086
+        create_pinned claude "$name" "" $denies
     fi
+    rules_status=$?
 
     # Sandbox-scoped rules only. A missing --sandbox here would write a GLOBAL rule.
-    rules_status=0
     if [ -n "$allow" ]; then
         run_sbx policy allow network --sandbox "$name" "$allow" >"$WORK/allow-$name.txt" 2>&1 || rules_status=1
-    fi
-    if [ -n "$deny" ]; then
-        run_sbx policy deny network --sandbox "$name" "$deny" >"$WORK/deny-$name.txt" 2>&1 || rules_status=1
     fi
     record "rules_${name}_exit" "$rules_status"
 

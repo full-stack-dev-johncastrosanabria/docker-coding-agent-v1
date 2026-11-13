@@ -142,10 +142,10 @@ class G9Recorder(unittest.TestCase):
             self._write(f"control-{backend}.json", agent_stream())
             # the exact shape pinned sbx v0.43.0 emits, taken from a real capture
             self._write(f"policylog-control-{backend}.json",
-                        {"allowed_hosts": [{"host": f"{self._hosts(backend)}:443",
+                        {"allowed": [{"host": f"{self._hosts(backend)}:443",
                                             "vm_name": f"dca-g9-{backend}",
                                             "proxy_type": "forward", "count_since": 30}],
-                         "blocked_hosts": [{"host": "api.docker.com:443",
+                         "blocked": [{"host": "api.docker.com:443",
                                             "vm_name": f"dca-g9-{backend}",
                                             "count_since": 3}]})
             for privilege in ("user", "sudo"):
@@ -252,18 +252,18 @@ class G9Recorder(unittest.TestCase):
 
     def test_06_a_control_without_the_probe_host_in_the_policy_log_fails(self):
         self._write("policylog-control-claude.json",
-                    {"allowed_hosts": [{"host": "pypi.org:443", "count_since": 2}],
-                     "blocked_hosts": []})
+                    {"allowed": [{"host": "pypi.org:443", "count_since": 2}],
+                     "blocked": []})
         results, _ = self._results()
         self.assertEqual(results["G9.control.claude"], "FAIL")
 
     def test_07_a_blocked_or_untravelled_policy_log_entry_is_not_a_control(self):
         """Blocked traffic, or a permitting rule with no traffic, is not evidence of a call."""
-        for log in ({"allowed_hosts": [], "blocked_hosts": [
+        for log in ({"allowed": [], "blocked": [
                         {"host": "api.anthropic.com:443", "count_since": 4}]},
-                    {"allowed_hosts": [{"host": "api.anthropic.com:443", "count_since": 0}],
-                     "blocked_hosts": []},
-                    {"allowed_hosts": [], "blocked_hosts": []}):
+                    {"allowed": [{"host": "api.anthropic.com:443", "count_since": 0}],
+                     "blocked": []},
+                    {"allowed": [], "blocked": []}):
             with self.subTest(log=str(log)[:48]):
                 self._write("policylog-control-claude.json", log)
                 self.assertEqual(self._results()[0]["G9.control.claude"], "FAIL")
@@ -272,9 +272,9 @@ class G9Recorder(unittest.TestCase):
         """Regression: the first implementation guessed generic key names, found nothing, and
         failed both positive controls although the agents had genuinely called the endpoints."""
         self._write("policylog-real.json", {
-            "allowed_hosts": [{"host": "api.anthropic.com:443", "vm_name": "dca-g9-claude",
+            "allowed": [{"host": "api.anthropic.com:443", "vm_name": "dca-g9-claude",
                                "proxy_type": "forward", "count_since": 30}],
-            "blocked_hosts": [{"host": "mcp-proxy.anthropic.com:443", "count_since": 2}]})
+            "blocked": [{"host": "mcp-proxy.anthropic.com:443", "count_since": 2}]})
         hosts = self.rec.policy_log_hosts(str(self.work), "policylog-real.json")
         self.assertIs(hosts.get("api.anthropic.com"), True)
         self.assertIs(hosts.get("mcp-proxy.anthropic.com"), False)

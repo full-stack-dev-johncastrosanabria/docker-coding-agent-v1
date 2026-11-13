@@ -575,13 +575,13 @@ class Launcher:
             # sandbox behind, and that one must be removed.
             self.sandbox = name
             # Step 2: a MOUNTLESS sandbox with shared skills off, from the pinned base DIGEST.
-            self.sbx.create(self.sandbox, self.kit_dir, pinned_base)
+            # The denies go in WITH the create, so they hold from the first boot.
+            allow, deny = self.network_cell()
+            self.sbx.create(self.sandbox, self.kit_dir, pinned_base, deny=deny)
             self._check_resolved_base()
 
             # Step 3: the strict per-sandbox network policy, plus host-authoritative grants.
-            allow, deny = self.network_cell()
             self.sbx.allow_network(self.sandbox, allow)
-            self.sbx.deny_network(self.sandbox, deny)
 
             # Step 4: deliver the bundle, the run config and the grants copy.
             self._deliver(bundle)
