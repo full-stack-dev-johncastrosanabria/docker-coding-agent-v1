@@ -1,5 +1,5 @@
 {
-  "_comment": "What M3's oracle reads in RUN_OUT: the fix is right but the gate log shows no call by the researcher.",
+  "_comment": "What M3's oracle reads in RUN_OUT: the fix is right, but the researcher made 70 calls: the investigation was not bounded.",
   "final_outcome": "succeeded",
   "classification": {
     "value": "planned",

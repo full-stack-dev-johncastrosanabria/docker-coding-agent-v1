@@ -17,5 +17,5 @@
   "allowed_change_scope": ["core/timeutil/*.py", "tests/*.py"],
   "prohibited_checks": ["no-test-weakening", "reviewer-byte-identical"],
   "oracle": "oracle.sh",
-  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/patched-the-symptom.patch", "golden/bad/changed-the-carrier-calendar.patch", "golden/bad/no-delegated-research.patch", "golden/bad/location-not-recorded.patch"]}
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/patched-the-symptom.patch", "golden/bad/changed-the-carrier-calendar.patch", "golden/bad/unbounded-research.patch", "golden/bad/location-not-recorded.patch"]}
 }

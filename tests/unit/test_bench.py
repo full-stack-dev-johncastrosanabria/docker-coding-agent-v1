@@ -1471,6 +1471,22 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
             run_out=str(Path(fixture["_dir"]) / "golden" / "good-no-finding.run-out"))
         self.assertEqual(verdict, "pass", detail)
 
+    def test_176b_m3_accepts_a_correct_run_that_did_not_delegate_but_not_an_unbounded_one(self):
+        # Developer decision 2026-11-13: delegation is measured by T093, not required to pass.
+        fixture = self.fixtures["M3"]
+        golden = Path(fixture["_dir"]) / "golden"
+        repo = self.dir / "m3"
+        self.seed("M3", "m3")
+        subprocess.run(["git", "-C", str(repo), "apply", "--index", str(golden / "good.patch")],
+                       check=True)
+        verdict, detail = bench.run_oracle_on_host(
+            fixture, str(repo), run_out=str(golden / "good-no-delegation.run-out"))
+        self.assertEqual(verdict, "pass", detail)
+        verdict, detail = bench.run_oracle_on_host(
+            fixture, str(repo), run_out=str(golden / "bad" / "unbounded-research.run-out"))
+        self.assertEqual(verdict, "fail")
+        self.assertIn("the investigation was not bounded", detail)
+
     def test_177_the_acceptance_suite_is_complete_28_applicable_of_29(self):
         # T092 added M3, the last one: the plan is no longer refused for a missing fixture.
         plan = bench.acceptance_plan(bench.discover(), "trusted", False, THRESHOLDS)

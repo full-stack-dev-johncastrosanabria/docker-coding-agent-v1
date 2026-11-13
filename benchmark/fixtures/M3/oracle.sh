@@ -7,8 +7,8 @@
 #
 # Correctness is the hidden tests: the helper itself, the reported invoice, and a caller the task
 # never mentions (reminders), so a patch on the symptom in billing/ does not pass. The research
-# record is research_record.py: delegated to the researcher, bounded, and its findings on record
-# in the Context Record. The task is planned (unclear root cause), so the planned-work record
+# record is research_record.py: the findings on record in the Context Record, and the researcher,
+# when used, bounded and read-only. Delegating is not required to pass; T093 measures its rate. The task is planned (unclear root cause), so the planned-work record
 # applies as well.
 . "$FIXTURE_DIR/../../tools/oracle_lib.sh"
 check "shipping/calendar.py was changed: carriers keep their own calendar" is_unchanged shipping/calendar.py
@@ -20,4 +20,4 @@ python_oracle
 python3 "$FIXTURE_DIR/../../tools/planned_report.py" "$RUN_OUT" \
     || fail "the planned-work record is incomplete"
 python3 "$FIXTURE_DIR/research_record.py" "$RUN_OUT" \
-    || fail "the investigation was not delegated, bounded and recorded"
+    || fail "the investigation was not bounded and recorded"

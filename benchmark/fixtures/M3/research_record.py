@@ -1,11 +1,14 @@
-"""M3's research record, read from RUN_OUT (FR-004): was the investigation delegated, bounded and
-recorded?
+"""M3's research record, read from RUN_OUT (FR-004): is the investigation bounded and recorded?
 
-  * delegated - the gate log has calls made BY the researcher. That log is written by the gate, per
-    tool call, with the agent that made it; it is not the agent's account of what it did;
-  * bounded   - no more than MAX_RESEARCH_CALLS of them, and none a mutation the gate allowed;
   * recorded  - the Context Record written before the first change names where the cause is
-    (`repository_map.target_files`) and at least one convention or constraint it found.
+    (`repository_map.target_files`) and at least one convention or constraint it found;
+  * bounded   - when the researcher was used, it made no more than MAX_RESEARCH_CALLS calls, and
+    none a mutation the gate allowed. The gate log is written by the gate, per tool call, with the
+    agent that made it; it is not the agent's account of what it did.
+
+Delegation itself is NOT required here (developer decision 2026-11-13, before M3's first live
+run): a developer receives a fix, not a delegation, and whether an investigation is substantial
+enough to delegate is the agent's call. How often it delegates is measured, with a floor, by T093.
 """
 
 import json
@@ -29,9 +32,6 @@ def main(run_out):
                     calls.append(record)
     except OSError:
         pass
-    if not calls:
-        problems.append("the gate log has no call by the researcher: the investigation was not "
-                        "delegated (FR-004)")
     if len(calls) > MAX_RESEARCH_CALLS:
         problems.append(f"the researcher made {len(calls)} calls, more than {MAX_RESEARCH_CALLS}: "
                         "the investigation was not bounded (FR-004)")
