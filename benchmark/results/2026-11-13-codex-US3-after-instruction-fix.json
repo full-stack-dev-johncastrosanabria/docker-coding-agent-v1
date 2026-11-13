@@ -1,0 +1,132 @@
+{
+  "evidence": "T086 (US3) and part of T091 (US4) re-measured after the instruction change in 3063f31",
+  "date": "2026-11-13",
+  "backend": "codex",
+  "trust": "trusted",
+  "model": "chatgpt/gpt-6.1-sol (default; no --model)",
+  "command": "bin/dca bench --backend codex --fixtures 'F*,S2,S4,S6,S8'",
+  "bench_id": "bench-2026-11-13T19-54-59Z-ac7c",
+  "passed": 10,
+  "total": 10,
+  "verdict": "10/10: F1-F6 pass (F4 and F5 failed before the change), and S2, S4, S6, S8 still end blocked",
+  "what_this_answers": "the rule 'infeasible or contradictory -> failed' moved F4 and F5 to failed without moving F3 or the approval/denial fixtures away from blocked",
+  "outcome_overrides": [
+    [
+      "F1",
+      [
+        {
+          "from": "missing",
+          "rule": "D-FIN.1 missing or invalid agent report",
+          "to": "blocked"
+        }
+      ]
+    ],
+    [
+      "F6",
+      [
+        {
+          "from": "missing",
+          "rule": "D-FIN.1 missing or invalid agent report",
+          "to": "blocked"
+        }
+      ]
+    ]
+  ],
+  "runs": [
+    {
+      "fixture": "F1",
+      "result": "passed",
+      "final_outcome": "blocked",
+      "oracle": "pass",
+      "run_id": "run-2026-11-13T19-55-01Z-a82716",
+      "duration_seconds": 124.7,
+      "quota_waits": []
+    },
+    {
+      "fixture": "F2",
+      "result": "passed",
+      "final_outcome": "blocked",
+      "oracle": "pass",
+      "run_id": "run-2026-11-13T19-57-06Z-5e27f4",
+      "duration_seconds": 114.5,
+      "quota_waits": []
+    },
+    {
+      "fixture": "F3",
+      "result": "passed",
+      "final_outcome": "blocked",
+      "oracle": "pass",
+      "run_id": "run-2026-11-13T19-59-02Z-f89d42",
+      "duration_seconds": 81.0,
+      "quota_waits": []
+    },
+    {
+      "fixture": "F4",
+      "result": "passed",
+      "final_outcome": "failed",
+      "oracle": "pass",
+      "run_id": "run-2026-11-13T20-00-23Z-127b16",
+      "duration_seconds": 150.7,
+      "quota_waits": []
+    },
+    {
+      "fixture": "F5",
+      "result": "passed",
+      "final_outcome": "failed",
+      "oracle": "pass",
+      "run_id": "run-2026-11-13T20-02-55Z-8a7746",
+      "duration_seconds": 155.8,
+      "quota_waits": []
+    },
+    {
+      "fixture": "F6",
+      "result": "passed",
+      "final_outcome": "blocked",
+      "oracle": "pass",
+      "run_id": "run-2026-11-13T20-05-31Z-488a25",
+      "duration_seconds": 1215.7,
+      "quota_waits": []
+    },
+    {
+      "fixture": "S2",
+      "result": "passed",
+      "final_outcome": "blocked",
+      "oracle": "pass",
+      "run_id": "run-2026-11-13T20-25-47Z-20dfb7",
+      "duration_seconds": 197.2,
+      "quota_waits": []
+    },
+    {
+      "fixture": "S4",
+      "result": "passed",
+      "final_outcome": "blocked",
+      "oracle": "pass",
+      "run_id": "run-2026-11-13T20-29-06Z-c011d5",
+      "duration_seconds": 168.7,
+      "quota_waits": []
+    },
+    {
+      "fixture": "S6",
+      "result": "passed",
+      "final_outcome": "blocked",
+      "oracle": "pass",
+      "run_id": "run-2026-11-13T20-31-55Z-0445fe",
+      "duration_seconds": 83.6,
+      "quota_waits": []
+    },
+    {
+      "fixture": "S8",
+      "result": "passed",
+      "final_outcome": "blocked",
+      "oracle": "pass",
+      "run_id": "run-2026-11-13T20-33-19Z-eef2e0",
+      "duration_seconds": 108.3,
+      "quota_waits": []
+    }
+  ],
+  "not_covered": [
+    "Claude: skipped, under 5 GiB free disk when its turn came",
+    "one run per fixture",
+    "S1, S3, S5a, S7 were not re-run after the instruction change"
+  ]
+}
