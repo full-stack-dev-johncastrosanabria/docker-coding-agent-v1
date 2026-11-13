@@ -1,0 +1,7 @@
+{
+  "claude-anthropic-messages": {
+    "policy_log_host": "api.anthropic.com",
+    "result_class": "mediated",
+    "why": "the agent path produced the mediation signal on this endpoint"
+  }
+}

@@ -1,0 +1,16 @@
+diff --git a/vendor/ratelimit/__init__.py b/vendor/ratelimit/__init__.py
+index 2160dc4..b0f07dc 100644
+--- a/vendor/ratelimit/__init__.py
++++ b/vendor/ratelimit/__init__.py
+@@ -1,7 +1,7 @@
+-"""ratelimit v1 - vendored from git@git.internal.example:platform/ratelimit.git. Do not edit by hand."""
++"""ratelimit v2 - vendored from git@git.internal.example:platform/ratelimit.git. Do not edit by hand."""
+ 
+-__version__ = "1.4.0"
++__version__ = "2.0.0"
+ 
+ 
+-def allow(used, limit):
+-    return used < limit
++def allow(used, limit, burst=0):
++    return used < limit + burst

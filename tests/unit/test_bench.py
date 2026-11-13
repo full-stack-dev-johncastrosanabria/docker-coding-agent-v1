@@ -54,7 +54,8 @@ MEDIUM_ACCEPTANCE_IDS = ["M1", "M2", "M4", "M6"]
 FAILURE_RECOVERY_IDS = ["F1", "F2", "F3", "F4", "F5", "F6"]
 #: The US3 fixtures whose correct change set is EMPTY: nothing can be verified (F2), essential
 #: information is missing (F3), or the request cannot be satisfied (F4, F5).
-EMPTY_REFERENCE_IDS = {"F2", "F3", "F4", "F5"}
+SAFETY_IDS = ["S1", "S2", "S3", "S4", "S5a", "S5b", "S6", "S7", "S8"]
+EMPTY_REFERENCE_IDS = {"F2", "F3", "F4", "F5", "S4", "S5a", "S6", "S8"}
 
 
 def reliability_suite():
@@ -80,7 +81,7 @@ class TestFixtureSuite(unittest.TestCase):
         fixtures = bench.discover()
         self.assertEqual([f["id"] for f in fixtures],
                          FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS
-                         + EXPECTED_IDS)
+                         + EXPECTED_IDS + SAFETY_IDS)
 
     def test_02_small_fixtures_are_direct_and_medium_fixtures_are_planned(self):
         for fixture in reliability_suite():
@@ -642,16 +643,16 @@ class TestReliabilityNamespace(unittest.TestCase):
         self.assertEqual([f["id"] for f in reliability_suite()],
                          [f"R{i}" for i in range(1, 11)])
         self.assertEqual([f["id"] for f in bench.acceptance_fixtures(bench.discover())],
-                         FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS,
-                         "no reliability fixture counts as acceptance")
+                         FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS
+                         + SAFETY_IDS, "no reliability fixture counts as acceptance")
 
     def test_91_the_committed_acceptance_fixtures_are_exactly_the_ones_created_so_far(self):
-        # T079/T080 created K1-K8, T082 created M1, M2, M4 and M6, and T084/T085 created F1-F6;
-        # M3, M5 and S* arrive with T087-T094, never under an R name.
+        # T079/T080 created K1-K8, T082 created M1, M2, M4 and M6, T084/T085 created F1-F6 and
+        # T087-T089 created S*; M3 and M5 arrive with T092/T094, never under an R name.
         names = sorted(d.name for d in (ROOT / "benchmark" / "fixtures").iterdir() if d.is_dir())
         self.assertEqual([n for n in names if not re.fullmatch(r"R([1-9]|10)", n)],
                          sorted(FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS
-                                + MEDIUM_ACCEPTANCE_IDS))
+                                + MEDIUM_ACCEPTANCE_IDS + SAFETY_IDS))
 
     def test_92_the_baseline_keeps_its_historical_ids_and_maps_them(self):
         baseline = json.loads(self.BASELINE.read_text())
@@ -1337,7 +1338,8 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
 
     def test_170_k1_to_k8_are_small_direct_fixtures_that_always_apply(self):
         self.assertEqual(list(self.fixtures),
-                         FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS)
+                         FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS
+                         + SAFETY_IDS)
         for fid in SMALL_ACCEPTANCE_IDS:
             fixture = self.fixtures[fid]
             with self.subTest(fixture=fid):
@@ -1388,20 +1390,32 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
 
     #: The US3 fixtures whose required check FAILS on the seed by design: F1's canary until the
     #: rollout is done, F4's impossible round trip, F5's contradiction, F6's unfinished backfill.
-    FAILING_BY_DESIGN = {"F1", "F4", "F5", "F6"}
+    FAILING_BY_DESIGN = {"F1", "F4", "F5", "F6", "S1", "S3", "S5a", "S5b", "S8"}
+    #: S5b's probes measure the SANDBOX (egress, the control plane). Run on a developer machine
+    #: they would report on that machine and send real requests to a provider, so they never are.
+    SANDBOX_PROBES = {"python3 tools/egress_probe.py", "python3 tools/control_plane_probe.py"}
+    #: Checks that pass on a seed whose test suite fails by design.
+    PASSING_PROBES = {"python3 tools/access_probe.py"}
 
     def test_174_every_required_check_runs_on_the_seed(self):
         for fid, fixture in self.fixtures.items():
             for command in fixture["verification"].get("commands") or []:
+                if command in self.SANDBOX_PROBES:
+                    continue
                 with self.subTest(fixture=fid, command=command):
+                    shutil.rmtree(self.dir / fid, ignore_errors=True)
                     self.seed(fid, fid)
+                    environment = {k: v for k, v in os.environ.items() if k != "SSH_AUTH_SOCK"}
                     run = subprocess.run(command, shell=True, cwd=self.dir / fid,
                                          capture_output=True, text=True,
-                                         env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
-                    if fid in self.FAILING_BY_DESIGN:
+                                         env=dict(environment, PYTHONDONTWRITEBYTECODE="1"))
+                    if fid in self.FAILING_BY_DESIGN and command not in self.PASSING_PROBES:
                         # It must RUN - a check that cannot start is a different fixture (F2) - and
                         # fail on its assertions, not on an import or a missing file.
                         self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+                        if command.startswith("node"):
+                            self.assertIn("fail 1", run.stdout)
+                            continue
                         self.assertRegex(run.stderr, r"Ran \d+ tests? in")
                         self.assertNotIn("ImportError", run.stderr)
                         self.assertNotIn("ModuleNotFoundError", run.stderr)

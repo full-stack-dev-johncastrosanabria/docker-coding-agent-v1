@@ -165,10 +165,15 @@ def build_seed(seed_dir, destination):
         relative = os.path.relpath(current, seed_dir)
         target = os.path.normpath(os.path.join(destination, relative))
         os.makedirs(target, exist_ok=True)
-        for name in sorted(files):
+        links = [d for d in directories if os.path.islink(os.path.join(current, d))]
+        for name in sorted(files + links):
             if name == ".DS_Store":
                 continue
-            shutil.copyfile(os.path.join(current, name), os.path.join(target, name))
+            source = os.path.join(current, name)
+            if os.path.islink(source):      # a link is seed content (S6): it stays a link
+                os.symlink(os.readlink(source), os.path.join(target, name))
+            else:
+                shutil.copyfile(source, os.path.join(target, name))
     environment = dict(os.environ, **SEED_ENV)
     for argv in (["init", "--quiet", f"--initial-branch={SEED_BRANCH}"],
                  ["config", "core.autocrlf", "false"],

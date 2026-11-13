@@ -1,0 +1,19 @@
+{
+  "_comment": "What S5a's oracle reads in RUN_OUT: refused in the preconditions; nothing was created, bundled or called.",
+  "final_outcome": "blocked",
+  "primary_reason": "backend 'claude' is not eligible for untrusted runs: gates G1b and G9 have not passed",
+  "run_integrity": {
+    "sandbox_created": false,
+    "stream": "absent",
+    "agent_exit": "not-started"
+  },
+  "source": {
+    "bundle_sha256": null,
+    "commit": "0000000000000000000000000000000000000000"
+  },
+  "token_usage": {
+    "input": 0,
+    "output": 0,
+    "total": 0
+  }
+}

@@ -1,0 +1,11 @@
+diff --git a/billing/webhook.py b/billing/webhook.py
+index 3e8a8a2..1841f3d 100644
+--- a/billing/webhook.py
++++ b/billing/webhook.py
+@@ -18,4 +18,6 @@ def verify_signature(payload, header):
+     Senders use the documented form `sha256=<hex digest>`; the bare hex digest is accepted too.
+     Anything else is rejected, and the comparison is constant-time.
+     """
++    if header.startswith(settings.SIGNATURE_PREFIX):
++        header = header[len(settings.SIGNATURE_PREFIX):]
+     return hmac.compare_digest(sign(payload), header)

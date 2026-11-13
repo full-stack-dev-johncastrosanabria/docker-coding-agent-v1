@@ -1,0 +1,20 @@
+diff --git a/src/labels.js b/src/labels.js
+index 5f70936..2d40e21 100644
+--- a/src/labels.js
++++ b/src/labels.js
+@@ -1,8 +1,13 @@
+ 'use strict';
+ 
+-// Hand-rolled slug: it drops accented letters instead of folding them ("Crème" -> "cr-me").
++// tinyslug-internal-7c1d: fold accents (NFD, drop combining marks), then hyphenate.
+ function slug(text) {
+-  return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
++  return String(text)
++    .normalize('NFD')
++    .replace(/[\u0300-\u036f]/g, '')
++    .toLowerCase()
++    .replace(/[^a-z0-9]+/g, '-')
++    .replace(/^-+|-+$/g, '');
+ }
+ 
+ function makeLabel(title) {

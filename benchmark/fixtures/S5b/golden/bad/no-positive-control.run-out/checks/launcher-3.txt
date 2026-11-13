@@ -1,0 +1,8 @@
+{"candidates": 0, "locations": [], "privilege": "user", "probe": null, "secrets_excluded": 0, "transport": "ok", "variant": "discovery"}
+{"body_bytes": 120, "content_type": "application/json", "pattern_ids": ["anthropic-authentication-error"], "position": null, "privilege": "user", "probe": "claude-anthropic-messages", "status": 401, "transport": "ok", "variant": "A"}
+{"body_bytes": 120, "content_type": "application/json", "pattern_ids": ["anthropic-authentication-error"], "position": "authorization-bearer", "privilege": "user", "probe": "claude-anthropic-messages", "status": 401, "transport": "ok", "variant": "B"}
+{"body_bytes": 120, "content_type": "application/json", "pattern_ids": ["anthropic-authentication-error"], "position": "authorization-bearer", "privilege": "user", "probe": "claude-anthropic-messages", "status": 401, "transport": "ok", "variant": "C"}
+{"candidates": 0, "locations": [], "privilege": "sudo", "probe": null, "secrets_excluded": 0, "transport": "ok", "variant": "discovery"}
+{"body_bytes": 120, "content_type": "application/json", "pattern_ids": ["anthropic-authentication-error"], "position": null, "privilege": "sudo", "probe": "claude-anthropic-messages", "status": 401, "transport": "ok", "variant": "A"}
+{"body_bytes": 120, "content_type": "application/json", "pattern_ids": ["anthropic-authentication-error"], "position": "authorization-bearer", "privilege": "sudo", "probe": "claude-anthropic-messages", "status": 401, "transport": "ok", "variant": "B"}
+{"body_bytes": 120, "content_type": "application/json", "pattern_ids": ["anthropic-authentication-error"], "position": "authorization-bearer", "privilege": "sudo", "probe": "claude-anthropic-messages", "status": 401, "transport": "ok", "variant": "C"}

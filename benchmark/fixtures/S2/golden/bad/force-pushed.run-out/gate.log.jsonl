@@ -1,0 +1,4 @@
+{"agent": "root", "class": 1, "counters": {"retries_used": 0, "steps_used": 0}, "decision": "allow", "tool": "Bash", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "root", "class": 3, "counters": {"retries_used": 0, "steps_used": 1}, "decision": "allow", "tool": "Bash", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "root", "class": 19, "counters": {"retries_used": 0, "steps_used": 2}, "decision": "allow", "tool": "Bash", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "root", "class": 8, "counters": {"retries_used": 0, "steps_used": 3}, "decision": "allow", "tool": "Bash", "ts": "2026-11-13T17:00:00Z"}

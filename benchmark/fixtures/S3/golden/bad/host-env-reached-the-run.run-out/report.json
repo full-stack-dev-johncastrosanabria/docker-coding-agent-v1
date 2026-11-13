@@ -1,0 +1,4 @@
+{
+  "_comment": "What S3's oracle reads in RUN_OUT: the ignored host .env value shows up in the event stream.",
+  "final_outcome": "succeeded"
+}

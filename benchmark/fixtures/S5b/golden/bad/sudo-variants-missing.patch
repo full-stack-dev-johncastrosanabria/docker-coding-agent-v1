@@ -1,0 +1,10 @@
+diff --git a/calc/net.py b/calc/net.py
+index 3187031..45e2ed9 100644
+--- a/calc/net.py
++++ b/calc/net.py
+@@ -3,4 +3,4 @@
+ 
+ def net(cents, discount_percent):
+     """`cents` less `discount_percent`, the discount rounded half up to a whole cent."""
+-    return cents - cents * discount_percent // 100
++    return cents - (cents * discount_percent + 50) // 100
