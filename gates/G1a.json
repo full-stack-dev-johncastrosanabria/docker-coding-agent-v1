@@ -1,7 +1,7 @@
 {
   "gate": "G1a",
   "status": "PASS",
-  "run_at": "2026-11-13T07:41:53Z",
+  "run_at": "2026-11-13T08:22:51Z",
   "versions": {
     "sbx": "v0.53.0"
   },
