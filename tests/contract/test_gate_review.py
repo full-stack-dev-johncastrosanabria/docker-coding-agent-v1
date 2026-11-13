@@ -39,6 +39,25 @@ review = _load("gate_review", GATES / "review.py")
 rules = review.rules
 
 
+class G11ReviewReadiness(unittest.TestCase):
+    def test_part_a_pass_cannot_grant_readiness_even_after_conformance_passes(self):
+        evidence = rules.load_evidence(str(GATES))
+        versions = json.loads((ROOT / "runtime" / "versions.yaml").read_text())
+        evidence["G11"] = {"status": "PARTIAL", "backends": {
+            "codex": {"status": "PASS", "criteria": []},
+            "claude": {"status": "FAIL"}}}
+        evidence["PRODUCTION-CONFORMANCE"] = {"backends": {"codex": {"status": "PASS"}}}
+        document = review.build(evidence, versions)
+        self.assertEqual(document["backends"]["codex"]["gate_status"]["G11"], "PARTIAL")
+        self.assertFalse(document["backends"]["codex"]["trusted_eligible"])
+        rows = evidence["G11"]["backends"]["codex"]["criteria"]
+        rows.extend({"id": f"G11.c{n}.codex", "result": "PASS"} for n in (5, 6, 7))
+        self.assertEqual(review.status_of(evidence, "G11", "codex"), "PARTIAL")
+        rows.append({"id": "G11.c8.codex", "result": "PASS"})
+        self.assertTrue(review.build(evidence, versions)["backends"]["codex"]["trusted_eligible"])
+        self.assertEqual(review.status_of(evidence, "G11", "claude"), "FAIL")
+
+
 class GateReview(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

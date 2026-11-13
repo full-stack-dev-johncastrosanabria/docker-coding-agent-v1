@@ -294,7 +294,17 @@ def _evidence_status(evidence_by_id, gate, backend=None):
     if evidence is None:
         return "NOT-RUN"
     if backend is not None:
-        return _lookup(evidence, ("backends", backend, "status"))
+        status = _lookup(evidence, ("backends", backend, "status"))
+        if gate == "G11" and status == PASS:
+            # Part A records a backend PASS while the document stays PARTIAL. Only the
+            # backend's own four part-B criteria can turn that into runtime readiness;
+            # the other backend may still be pending or failed at that point.
+            entry = (evidence.get("backends") or {}).get(backend) or {}
+            passed = {row.get("id") for row in entry.get("criteria", [])
+                      if row.get("result") == PASS}
+            if not all(f"G11.c{number}.{backend}" in passed for number in (5, 6, 7, 8)):
+                return "PARTIAL"
+        return status
     return evidence.get("status")
 
 
