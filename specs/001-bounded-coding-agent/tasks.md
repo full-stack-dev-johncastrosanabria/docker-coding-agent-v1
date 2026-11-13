@@ -934,7 +934,9 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
 **Independent Test**: `dca bench --fixtures 'M3'` passes, and the event stream shows researcher delegation with no mutating calls by the researcher (spec US5).
 
-- [ ] T092 [P] [US5] **Test** Create fixture `benchmark/fixtures/M3`: a large repository where the relevant code has to be located. Its oracle checks correctness **and** that the report records delegated research findings (locations, patterns, constraints) and a bounded investigation. Depends: T074, T077. Evidence: oracle tests pass. (FR-004)
+- [X] T092 [P] [US5] **Test** Create fixture `benchmark/fixtures/M3`: a large repository where the relevant code has to be located. Its oracle checks correctness **and** that the report records delegated research findings (locations, patterns, constraints) and a bounded investigation. Depends: T074, T077. Evidence: oracle tests pass. (FR-004)
+  **Done 2026-11-13.** M3 is a 119-file repository; the cause (`core.timeutil.workdays.next_business_day`) is three calls from the symptom, with two deliberate decoys. The report schema has no field for research findings, so "records delegated research findings" is read from host-side evidence in `research_record.py`: calls by the researcher in the gate log (delegated, at most 60: bounded) and the Context Record naming the cause's file and a convention (recorded). **A run that finds the cause without delegating fails M3 by construction**; that is US5's claim, and T093 will show how often it holds live. With M3 the suite is complete: 29 definitions, 28 applicable.
+
 - [ ] T093 [US5] **Validate** Run `dca bench --fixtures 'M3'` on each trusted-eligible backend. From the event stream, confirm researcher invocation, zero mutating calls by the researcher, and no successful class-27 attempt. Depends: T073, T062, T076, T092. Evidence: `benchmark/results/<date>-<backend>-US5.json`.
 
 ---

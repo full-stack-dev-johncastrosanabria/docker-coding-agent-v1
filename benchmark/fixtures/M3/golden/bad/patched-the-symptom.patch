@@ -1,0 +1,51 @@
+diff --git a/billing/grace.py b/billing/grace.py
+index 305ab1d..2b3e4c9 100644
+--- a/billing/grace.py
++++ b/billing/grace.py
+@@ -8,4 +8,7 @@ import datetime
+ def last_day_without_fee(due):
+     """Customers may still pay without a fee on the first business day on or after the day
+     following the due date."""
+-    return next_business_day(due + datetime.timedelta(days=1))
++    day = next_business_day(due + datetime.timedelta(days=1))
++    while day.weekday() >= 5:
++        day += datetime.timedelta(days=1)
++    return day
+diff --git a/billing/terms.py b/billing/terms.py
+index 47766e5..22f9136 100644
+--- a/billing/terms.py
++++ b/billing/terms.py
+@@ -1,10 +1,14 @@
+ """Payment terms: when an invoice falls due."""
+ 
+-from core.timeutil.workdays import add_business_days
++from core.timeutil.holidays import is_holiday
++from core.timeutil.workdays import add_business_days, is_weekend, ONE_DAY
+ 
+ NET_DAYS = {"net5": 5, "net10": 10, "net15": 15}
+ 
+ 
+ def due_date(issued, terms="net10"):
+     """The business day an invoice issued on `issued` falls due under `terms`."""
+-    return add_business_days(issued, NET_DAYS[terms])
++    day = add_business_days(issued, NET_DAYS[terms])
++    while is_weekend(day) or is_holiday(day):
++        day += ONE_DAY
++    return day
+diff --git a/tests/test_holiday_weekend.py b/tests/test_holiday_weekend.py
+new file mode 100644
+index 0000000..d417d8c
+--- /dev/null
++++ b/tests/test_holiday_weekend.py
+@@ -0,0 +1,11 @@
++import datetime
++import unittest
++
++from billing.late_fees import late_fee
++from billing.terms import due_date
++
++
++class HolidayWeekendTest(unittest.TestCase):
++    def test_a_due_date_never_lands_on_a_holiday_weekend(self):
++        self.assertEqual(due_date(datetime.date(2025, 4, 4), "net10"), datetime.date(2025, 4, 22))
++        self.assertEqual(late_fee(datetime.date(2025, 4, 4), datetime.date(2025, 4, 23)), 0)

@@ -1,0 +1,21 @@
+{
+  "id": "M3",
+  "category": "medium",
+  "trust_level": "both",
+  "gate_condition": "always",
+  "seed": "seed",
+  "task": "A customer whose invoice was issued on 4 April 2025 on net10 terms paid on 23 April 2025 and was charged a late fee. Finance says that invoice was not late yet: a due date, and the last day to pay without a fee, must never land on a weekend or on a public holiday. Other invoices around public holidays are affected too.\n\nFind where this goes wrong and fix it at its cause, so that everything in the back office that depends on it is right, not only late fees. Add a regression test. The test suite currently passes.",
+  "acceptance_criteria": [
+    "the invoice issued on 2025-04-04 on net10 terms falls due on 2025-04-22, and paying it on 2025-04-23 carries no late fee",
+    "no due date and no last-day-without-fee lands on a weekend or a public holiday, including when holidays and weekends are adjacent",
+    "the fix is made where the wrong date is computed, so every caller of that code is corrected, and code that deliberately keeps its own calendar is left alone",
+    "a regression test covers the reported invoice, and the existing tests still pass"
+  ],
+  "verification": {"type": "deterministic", "commands": ["python3 -m unittest discover -s tests -t ."]},
+  "expected_disposition": "succeeded",
+  "expected_classification": "planned",
+  "allowed_change_scope": ["core/timeutil/*.py", "tests/*.py"],
+  "prohibited_checks": ["no-test-weakening", "reviewer-byte-identical"],
+  "oracle": "oracle.sh",
+  "golden": {"good": "golden/good.patch", "bad": ["golden/bad/patched-the-symptom.patch", "golden/bad/changed-the-carrier-calendar.patch", "golden/bad/no-delegated-research.patch", "golden/bad/location-not-recorded.patch"]}
+}

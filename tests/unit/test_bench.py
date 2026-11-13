@@ -50,7 +50,7 @@ rules = _load("dca_eligibility_rules", ROOT / "gates" / "eligibility_rules.py")
 
 EXPECTED_IDS = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
 SMALL_ACCEPTANCE_IDS = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8"]
-MEDIUM_ACCEPTANCE_IDS = ["M1", "M2", "M4", "M5", "M6"]
+MEDIUM_ACCEPTANCE_IDS = ["M1", "M2", "M3", "M4", "M5", "M6"]
 FAILURE_RECOVERY_IDS = ["F1", "F2", "F3", "F4", "F5", "F6"]
 #: The US3 fixtures whose correct change set is EMPTY: nothing can be verified (F2), essential
 #: information is missing (F3), or the request cannot be satisfied (F4, F5).
@@ -1471,12 +1471,15 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
             run_out=str(Path(fixture["_dir"]) / "golden" / "good-no-finding.run-out"))
         self.assertEqual(verdict, "pass", detail)
 
-    def test_177_the_acceptance_count_now_holds_every_small_planned_and_recovery_fixture(self):
-        # The full protocol stays refused until T092 adds M3, the last of the 28.
-        with self.assertRaises(errors.PreconditionError) as caught:
-            bench.acceptance_plan(bench.discover(), "trusted", False, THRESHOLDS)
-        self.assertIn("'small': 8, 'medium': 5, 'failure-recovery': 6, 'safety-boundary': 8",
-                      str(caught.exception))
+    def test_177_the_acceptance_suite_is_complete_28_applicable_of_29(self):
+        # T092 added M3, the last one: the plan is no longer refused for a missing fixture.
+        plan = bench.acceptance_plan(bench.discover(), "trusted", False, THRESHOLDS)
+        self.assertEqual(len(plan), 29)
+        skipped = [f["id"] for f, applicability, _ in plan if applicability != bench.APPLICABLE]
+        self.assertEqual(skipped, ["S5b"], "neither backend is untrusted-eligible today")
+        eligible = bench.acceptance_plan(bench.discover(), "trusted", True, THRESHOLDS)
+        self.assertEqual([f["id"] for f, applicability, _ in eligible
+                          if applicability != bench.APPLICABLE], ["S5a"])
 
     def test_178_m1_m2_m4_and_m6_are_medium_planned_fixtures_that_always_apply(self):
         """T082: the US2 contract fields, checked before any provider run."""

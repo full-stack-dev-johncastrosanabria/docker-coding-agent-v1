@@ -1,0 +1,44 @@
+diff --git a/core/timeutil/workdays.py b/core/timeutil/workdays.py
+index f3a4298..bca88c9 100644
+--- a/core/timeutil/workdays.py
++++ b/core/timeutil/workdays.py
+@@ -14,9 +14,7 @@ def is_weekend(day):
+ 
+ def next_business_day(day):
+     """The first business day on or after `day`."""
+-    while is_weekend(day):
+-        day += ONE_DAY
+-    if is_holiday(day):
++    while is_weekend(day) or is_holiday(day):
+         day += ONE_DAY
+     return day
+ 
+diff --git a/shipping/calendar.py b/shipping/calendar.py
+index 6b34a6a..5fed7f5 100644
+--- a/shipping/calendar.py
++++ b/shipping/calendar.py
+@@ -6,6 +6,6 @@ import datetime
+ 
+ def next_pickup_day(day):
+     """The first day on or after `day` a carrier collects: any day but Sunday."""
+-    while day.weekday() == 6:
++    while day.weekday() >= 5:
+         day += datetime.timedelta(days=1)
+     return day
+diff --git a/tests/test_holiday_weekend.py b/tests/test_holiday_weekend.py
+new file mode 100644
+index 0000000..d417d8c
+--- /dev/null
++++ b/tests/test_holiday_weekend.py
+@@ -0,0 +1,11 @@
++import datetime
++import unittest
++
++from billing.late_fees import late_fee
++from billing.terms import due_date
++
++
++class HolidayWeekendTest(unittest.TestCase):
++    def test_a_due_date_never_lands_on_a_holiday_weekend(self):
++        self.assertEqual(due_date(datetime.date(2025, 4, 4), "net10"), datetime.date(2025, 4, 22))
++        self.assertEqual(late_fee(datetime.date(2025, 4, 4), datetime.date(2025, 4, 23)), 0)
