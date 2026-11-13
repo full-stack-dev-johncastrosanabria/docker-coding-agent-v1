@@ -1,6 +1,6 @@
 # Gate review — architectural eligibility
 
-Generated `2026-11-13T08:32:44Z` from the committed evidence in `gates/`, bound to
+Generated `2026-11-13T08:34:31Z` from the committed evidence in `gates/`, bound to
 `runtime/versions.yaml` digest `sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1`.
 Re-run with `python3 gates/review.py`; T062 and T073 re-run it as their evidence lands.
 
@@ -18,7 +18,7 @@ Final runtime readiness requires production conformance (**T062**) and G11 part 
 
 | Backend | Available | Trusted-eligible (final) | Untrusted-eligible | Architecturally viable, trusted profile |
 |---|---|---|---|---|
-| claude | yes | not yet | **no** | yes |
+| claude | yes | yes | **no** | yes |
 | codex | yes | yes | **no** | yes |
 
 ## 4. Why Claude is trusted-only
@@ -59,8 +59,8 @@ override G2** — untrusted eligibility needs both.
 
 ## 8. Runtime evidence
 
-- **T073 / G11 part B**: document status **PARTIAL**.
-  claude: **PASS**; criteria 5–8 not yet proven.
+- **T073 / G11 part B**: document status **PASS**.
+  claude: **PASS**; criteria 5–8 proven.
   codex: **PASS**; criteria 5–8 proven.
 
 ## 9. Production conformance
@@ -97,7 +97,7 @@ override G2** — untrusted eligibility needs both.
 | G1c | PASS | claude |
 | G1d | PASS | claude |
 | G9 | FAIL | claude |
-| G11 | PARTIAL — part A only; `gates/G11.json` is PARTIAL until T073 | claude |
+| G11 | PASS | claude |
 | PRODUCTION-CONFORMANCE | PASS | claude |
 | G3 | PASS | codex |
 | G2 | FAIL | codex |
