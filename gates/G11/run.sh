@@ -25,6 +25,19 @@
 
 set -u
 
+SELECTED_BACKEND=""
+case $# in
+    0) ;;
+    2)
+        [ "$1" = --backend ] || { echo 'usage: run.sh [--backend claude|codex]' >&2; exit 2; }
+        case $2 in
+            claude|codex) SELECTED_BACKEND=$2 ;;
+            *) echo 'usage: run.sh [--backend claude|codex]' >&2; exit 2 ;;
+        esac
+        ;;
+    *) echo 'usage: run.sh [--backend claude|codex]' >&2; exit 2 ;;
+esac
+
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd) || exit 1
 cd "$ROOT" || exit 1
 
@@ -115,6 +128,18 @@ python3 gates/G11/record.py --preflight "$OBS" "$WORK" || stop
 
 # --- which backends are available, from the accepted availability evidence --------------------------
 AVAILABLE=$(python3 gates/G11/record.py --available) || stop
+if [ -n "$SELECTED_BACKEND" ]; then
+    case " $AVAILABLE " in
+        *" $SELECTED_BACKEND "*) ;;
+        *) record selected_backend_unavailable "$SELECTED_BACKEND"; stop ;;
+    esac
+    for backend in $AVAILABLE; do
+        if [ "$backend" != "$SELECTED_BACKEND" ]; then
+            record "skip_${backend}_reason" "deferred by --backend $SELECTED_BACKEND"
+        fi
+    done
+    AVAILABLE=$SELECTED_BACKEND
+fi
 record available_backends "$AVAILABLE"
 record expected_tool_calls "$EXPECTED_N"
 [ -n "$AVAILABLE" ] || { record no_backend_available true; stop; }

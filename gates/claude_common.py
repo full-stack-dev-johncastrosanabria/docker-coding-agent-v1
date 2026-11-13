@@ -83,6 +83,25 @@ def read_versions(path=VERSIONS):
         return json.load(fh)
 
 
+def prior_backend_evidence(path, gate, backend, versions, obs, fingerprint):
+    """Retain a deliberately unselected backend only under the same proven foundation."""
+    if not obs.get(f"skip_{backend}_reason") \
+            or f"create_dca-{gate.lower()}-{backend}_exit" in obs:
+        return None
+    previous = read_json(os.path.dirname(path), os.path.basename(path))
+    if not isinstance(previous, dict) or previous.get("gate") != gate:
+        return None
+    if rules_module.evidence_problems(previous, versions):
+        return None
+    if fingerprint is None or previous.get("network_policy_fingerprint") != fingerprint:
+        return None
+    if not previous.get("criteria") or any(
+            row.get("result") != "PASS" for row in previous["criteria"]):
+        return None
+    entry = (previous.get("backends") or {}).get(backend)
+    return previous if isinstance(entry, dict) and entry.get("status") else None
+
+
 # --- the pinned Claude base ----------------------------------------------------------------------
 
 def claude_base(versions):

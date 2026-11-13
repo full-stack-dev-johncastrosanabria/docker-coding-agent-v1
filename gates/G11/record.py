@@ -363,6 +363,9 @@ def evaluate(obs, work, versions=None):
     per_backend, statuses, facts = {}, {}, {}
     for backend in ("claude", "codex"):
         ok, why = availability(backend, versions)
+        deferred = obs.get(f"skip_{backend}_reason")
+        if deferred and f"create_dca-g11-{backend}_exit" not in obs:
+            ok, why = False, deferred
         if not ok:
             per_backend[backend] = []
             statuses[backend] = ("NOT-RUN", why)
@@ -390,7 +393,14 @@ def record(obs_path, work=WORK, versions_path=VERSIONS, evidence_path=EVIDENCE):
     criteria, per_backend, statuses, fingerprint, facts = evaluate(obs, work, versions)
 
     backends = {}
+    retained = []
     for backend, (status, why) in statuses.items():
+        previous = claude.prior_backend_evidence(
+            evidence_path, GATE, backend, versions, obs, fingerprint)
+        if previous is not None:
+            backends[backend] = previous["backends"][backend]
+            retained.append(f"{backend} from {previous.get('run_at')}")
+            continue
         entry = {"status": status}
         if why is not None:
             entry["not_run_reason"] = why
@@ -449,6 +459,10 @@ def record(obs_path, work=WORK, versions_path=VERSIONS, evidence_path=EVIDENCE):
     }
     if fingerprint is not None:
         evidence["network_policy_fingerprint"] = fingerprint
+    if retained:
+        evidence["notes"] += (" Retained unselected backend evidence, including any completed "
+                              "part B, under identical pins and network policy: "
+                              + "; ".join(retained) + ". Only the selected backend ran part A anew.")
     with open(evidence_path, "w", encoding="utf-8") as fh:
         fh.write(json.dumps(evidence, indent=2, ensure_ascii=False) + "\n")
     return evidence, facts

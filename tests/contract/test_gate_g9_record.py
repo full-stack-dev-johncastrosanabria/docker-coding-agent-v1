@@ -261,6 +261,17 @@ class G9Recorder(unittest.TestCase):
         evidence, _ = self._record_to(obs)
         self.assertEqual(evidence["backends"]["claude"]["status"], "FAIL")
 
+    def test_selected_claude_rerun_retains_current_codex_result(self):
+        previous, _ = self._record_to()
+        obs = self._capture()
+        obs.pop("create_dca-g9-codex_exit")
+        obs["skip_codex_reason"] = "deferred by --backend claude"
+        obs["control_claude_exit"] = "1"
+        evidence, _ = self._record_to(obs)
+        self._validate(evidence)
+        self.assertEqual(evidence["backends"]["codex"], previous["backends"]["codex"])
+        self.assertEqual(evidence["backends"]["claude"]["status"], "FAIL")
+
     def test_04_a_failed_positive_control_fails_the_backend(self):
         _, status = self._results(self._capture(**{"control_claude_exit": "1"}))
         self.assertEqual(status, "FAIL")

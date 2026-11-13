@@ -444,7 +444,14 @@ def record(obs_path, work=WORK, versions_path=VERSIONS, evidence_path=EVIDENCE, 
         obs, work, versions, probes_path)
 
     backends = {}
+    retained = []
     for backend, (status, why) in statuses.items():
+        previous = claude.prior_backend_evidence(
+            evidence_path, GATE, backend, versions, obs, fingerprint)
+        if previous is not None:
+            backends[backend] = previous["backends"][backend]
+            retained.append(f"{backend} from {previous.get('run_at')}")
+            continue
         entry = {"status": status}
         if why is not None:
             entry["not_run_reason"] = why
@@ -546,6 +553,9 @@ def record(obs_path, work=WORK, versions_path=VERSIONS, evidence_path=EVIDENCE, 
         evidence["notes"] += " IMPLICATIONS: " + " ".join(implications.values())
     if fingerprint is not None:
         evidence["network_policy_fingerprint"] = fingerprint
+    if retained:
+        evidence["notes"] += (" Retained unselected backend evidence under identical pins and "
+                              "network policy: " + "; ".join(retained) + ".")
     with open(evidence_path, "w", encoding="utf-8") as fh:
         fh.write(json.dumps(evidence, indent=2, ensure_ascii=False) + "\n")
     return evidence, facts

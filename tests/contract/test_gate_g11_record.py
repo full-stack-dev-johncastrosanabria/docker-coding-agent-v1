@@ -203,6 +203,40 @@ class G11Recorder(unittest.TestCase):
 
     # --- part A stays part A --------------------------------------------------------------------
 
+    def test_selected_claude_rerun_retains_current_codex_part_b(self):
+        previous, _ = self._record_to()
+        previous["backends"]["codex"]["criteria"].extend(
+            {"id": f"G11.c{n}.codex", "description": "SYNTHETIC part B",
+             "result": "PASS", "evidence_ref": "SYNTHETIC"} for n in (5, 6, 7, 8))
+        (self.tmp / "G11.json").write_text(json.dumps(previous))
+        obs = self._capture()
+        obs.pop("create_dca-g11-codex_exit")
+        obs["skip_codex_reason"] = "deferred by --backend claude"
+        evidence, _ = self._record_to(obs)
+        self._validate(evidence)
+        self.assertEqual(evidence["backends"]["codex"], previous["backends"]["codex"])
+        self.assertEqual(evidence["backends"]["claude"]["status"], "PASS")
+        self.assertEqual(evidence["status"], "PARTIAL")
+        self.assertIn("Retained unselected backend evidence", evidence["notes"])
+
+    def test_unselected_evidence_is_not_rebound_after_pin_or_network_drift(self):
+        previous, _ = self._record_to()
+        obs = self._capture()
+        obs.pop("create_dca-g11-codex_exit")
+        obs["skip_codex_reason"] = "deferred by --backend claude"
+        for reason in ("pins", "network", "shared-failure"):
+            with self.subTest(reason=reason):
+                stale = json.loads(json.dumps(previous))
+                if reason == "pins":
+                    stale["provenance"]["runtime_versions_digest"] = "sha256:" + "0" * 64
+                elif reason == "network":
+                    stale["network_policy_fingerprint"] = "sha256:" + "0" * 64
+                else:
+                    stale["criteria"][0]["result"] = "FAIL"
+                (self.tmp / "G11.json").write_text(json.dumps(stale))
+                evidence, _ = self._record_to(obs)
+                self.assertEqual(evidence["backends"]["codex"]["status"], "NOT-RUN")
+
     def test_01_a_clean_run_passes_part_a_on_both_backends(self):
         evidence, _ = self._record_to()
         self._validate(evidence)
