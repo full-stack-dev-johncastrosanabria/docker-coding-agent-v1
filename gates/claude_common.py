@@ -238,7 +238,7 @@ def preflight(gate, obs, work, versions=None, g4_path=G4_EVIDENCE):
     policy = read_json(work, "pf-policy.json")
     listing = read_json(work, "pf-ls.json")
     refusals = preflight_module.ssh_forwarding_refusals(forwarding, socket_path)
-    running = listing.get("sandboxes") if isinstance(listing, dict) else None
+    running = preflight_module.sandbox_list(listing)
 
     accepted, why_accepted = accepted_network_state(g4_path, versions)
     active, why_governance = governance_active(
@@ -342,9 +342,9 @@ def cleanup_row(gate, obs, work, names):
     """Every sandbox this gate created was removed by name and none remains."""
     remaining = read_json(work, "ls-after.json")
     left = (
-        [e for e in remaining.get("sandboxes", [])
-         if isinstance(e, dict) and e.get("name") in set(names)]
-        if isinstance(remaining, dict) else None
+        [e for e in preflight_module.sandbox_list(remaining)
+         if e.get("name") in set(names)]
+        if preflight_module.sandbox_list(remaining) is not None else None
     )
     attempted = [n for n in names if f"create_{n}_exit" in obs]
     removed = bool(attempted) and all(obs.get(f"rm_{n}_exit") == "0" for n in attempted)

@@ -184,7 +184,6 @@ def evaluate(obs, work):
 
     with open(VERSIONS, encoding="utf-8") as fh:
         pins = json.load(fh)
-    templates = read_json(work, "templates.json")
     host_store = read_json(work, "host-skills.json")
     host_skills = (host_store or {}).get("skills")
     # Whether any base's control mounted the store, which decides how a base with no mount is
@@ -204,10 +203,10 @@ def evaluate(obs, work):
         probed = obs.get(f"probe_{sandbox}_exit") == "0"
         image = obs.get(f"image_{sandbox}") or ""
         workspace_line = obs.get(f"workspace_line_{sandbox}", "")
-        pinned_base = pins["sandbox_bases"][backend]["base"]
-        pinned_digest = pins["sandbox_bases"][backend]["version"]
-        repository, _, tag = (pinned_base or "").rpartition(":")
-        cached = preflight_module.template_image(templates, repository, tag)
+        reference = preflight_module.pinned_reference(pins, backend)
+        problem = preflight_module.composition_problem(
+            read_json(work, f"inspect-{sandbox}.json"), reference,
+            os.path.join(ROOT, "gates", "G6", "work", "kit"))
         directories = skill_directories(probe)
         control_directories = skill_directories(control_probe)
         control_mounts = (
@@ -223,14 +222,10 @@ def evaluate(obs, work):
                 created
                 and probed
                 and "no workspace bind mount" in workspace_line
-                and image == pinned_base
-                and obs.get("template_ls_exit") == "0"
-                and preflight_module.template_identity_matches(cached, pinned_base, pinned_digest),
+                and problem is None,
                 f"create exit {obs.get(f'create_{sandbox}_exit', '-')}, probe exit "
-                f"{obs.get(f'probe_{sandbox}_exit', '-')}, sbx resolved {image or 'not reported'} "
-                f"(pin {pinned_base}), cached template {(cached or {}).get('repository', 'not found')} "
-                f"tag {(cached or {}).get('tag', '-')} image id {(cached or {}).get('id', '-')} "
-                f"prefixing the pinned digest {pinned_digest}, workspace "
+                f"{obs.get(f'probe_{sandbox}_exit', '-')}, created from {reference}; sbx inspect: "
+                f"{'composition proven' if problem is None else problem}; workspace "
                 f"'{workspace_line or 'not reported'}'",
                 ready,
             )
@@ -309,8 +304,8 @@ def evaluate(obs, work):
     remaining = read_json(work, "ls-after.json")
     names = {name for _, sandbox in BACKENDS for name in (sandbox, f"{sandbox}-control")}
     left = (
-        [e for e in (remaining or {}).get("sandboxes", []) if isinstance(e, dict) and e.get("name") in names]
-        if isinstance(remaining, dict)
+        [e for e in preflight_module.sandbox_list(remaining) if e.get("name") in names]
+        if preflight_module.sandbox_list(remaining) is not None
         else None
     )
     rows.append(

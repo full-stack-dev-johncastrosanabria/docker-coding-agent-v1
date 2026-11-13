@@ -85,7 +85,7 @@ def count(obs, key):
 
 
 def sandbox_names(listing):
-    entries = listing.get("sandboxes") if isinstance(listing, dict) else None
+    entries = preflight_module.sandbox_list(listing)
     if not isinstance(entries, list):
         return None
     return sorted(e.get("name") for e in entries if isinstance(e, dict))
@@ -308,10 +308,9 @@ def evaluate(obs, work):
     with open(VERSIONS, encoding="utf-8") as fh:
         pins = json.load(fh)
     image = obs.get(f"image_{SANDBOX}") or ""
-    pinned_base = pins["sandbox_bases"]["claude"]["base"]
-    pinned_digest = pins["sandbox_bases"]["claude"]["version"]
-    repository, _, tag = (pinned_base or "").rpartition(":")
-    cached = preflight_module.template_image(read_json(work, "templates.json"), repository, tag)
+    reference = preflight_module.pinned_reference(pins, "claude")
+    problem = preflight_module.composition_problem(read_json(work, f"inspect-{SANDBOX}.json"),
+                                                   reference)
     vm_done = obs.get("vm_exit") == "0"
 
     rows.append(
@@ -322,12 +321,11 @@ def evaluate(obs, work):
             and obs.get("cp_in_exit") == "0"
             and obs.get("input_bundle_verify_exit") == "0"
             and "no workspace bind mount" in obs.get(f"workspace_line_{SANDBOX}", "")
-            and image == pinned_base
-            and preflight_module.template_identity_matches(cached, pinned_base, pinned_digest),
+            and problem is None,
             f"create exit {obs.get(f'create_{SANDBOX}_exit', '-')}, input bundle verify "
             f"{obs.get('input_bundle_verify_exit', '-')}, sbx cp in {obs.get('cp_in_exit', '-')}, "
-            f"base {image or 'not reported'} (pin {pinned_base}) with cached template id "
-            f"{(cached or {}).get('id', '-')}, workspace "
+            f"created from {reference}; sbx inspect: "
+            f"{'composition proven' if problem is None else problem}; workspace "
             f"'{obs.get(f'workspace_line_{SANDBOX}', 'not reported')}'",
             ready,
         )

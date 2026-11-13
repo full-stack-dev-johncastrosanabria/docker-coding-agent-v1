@@ -355,7 +355,7 @@ def preflight(obs, work):
     policy = read_json(work, "pf-policy.json")
     listing = read_json(work, "pf-ls.json")
     refusals = preflight_module.ssh_forwarding_refusals(forwarding, socket_path)
-    running = (listing or {}).get("sandboxes") if isinstance(listing, dict) else None
+    running = preflight_module.sandbox_list(listing)
 
     return [
         (
@@ -523,8 +523,8 @@ def evaluate(obs, work, hosts_file=HOSTS_FILE, allowlist_file=ALLOWLIST_FILE):
     remaining = read_json(work, "ls-after.json")
     names = {sandbox for _, sandbox in BACKENDS}
     left = (
-        [e for e in (remaining or {}).get("sandboxes", []) if isinstance(e, dict) and e.get("name") in names]
-        if isinstance(remaining, dict)
+        [e for e in preflight_module.sandbox_list(remaining) if e.get("name") in names]
+        if preflight_module.sandbox_list(remaining) is not None
         else None
     )
     rows.append(
@@ -583,12 +583,13 @@ def record(obs_path, work=WORK, versions_path=VERSIONS, evidence_path=EVIDENCE):
             "T014 is gate preparation, not a gate: it builds the draft inventory that lets G4 tell a "
             "documented or provider host apart from one the sandboxed backend process requires. "
             "Sources were used in priority order and discovery was NOT needed for either backend: the "
-            "built-in claude kit declares a sandbox-scoped allow rule covering seven hosts, of which "
-            "only api.anthropic.com carries task traffic, and the built-in docker-agent kit declares "
-            "no network rule at all, so Codex's endpoints come from the pinned docker-agent artifact "
+            "pinned v3 claude workload kit declares a sandbox-scoped allow rule (its hosts are listed in "
+            "the inventory), of which only api.anthropic.com carries task traffic, and the pinned v3 "
+            "shell workload kit Codex runs on declares no network rule at all, so Codex's endpoints "
+            "come from the pinned docker-agent artifact "
             "this project ships. No backend prompt was run, no credential was used and none was "
             "recorded. Nothing here is a proven allowance: G4 decides the effective per-sandbox "
-            "policy, and the six non-required Claude kit hosts are must-deny candidates for it. "
+            "policy, and every non-required Claude kit host is a must-deny candidate for it. "
             "Both sandboxes were mountless, created with --skills off, held no repository code, and "
             "were created and removed one at a time by name; sbx rm --all and sbx reset are never "
             "used, and nothing global changed."

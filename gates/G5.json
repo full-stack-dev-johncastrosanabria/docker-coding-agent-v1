@@ -1,19 +1,19 @@
 {
   "gate": "G5",
   "status": "PASS",
-  "run_at": "2026-09-20T16:30:22Z",
+  "run_at": "2026-11-13T07:07:15Z",
   "versions": {
-    "sbx": "v0.43.0"
+    "sbx": "v0.53.0"
   },
   "provenance": {
-    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+    "runtime_versions_digest": "sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1"
   },
   "criteria": [
     {
       "id": "G5.0a",
       "description": "sbx client and server still match the pinned exact version and the server is running",
       "result": "PASS",
-      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 state running"
+      "evidence_ref": "pin v0.53.0, client v0.53.0, server v0.53.0 state running"
     },
     {
       "id": "G5.0b",
@@ -37,31 +37,31 @@
       "id": "G5.1",
       "description": "mountless sandbox with --skills=off from the exact pinned Claude base, input bundle copied in",
       "result": "PASS",
-      "evidence_ref": "create exit 0, input bundle verify 0, sbx cp in 0, base docker/sandbox-templates:claude-code-docker (pin docker/sandbox-templates:claude-code-docker) with cached template id 94670d5b2a24, workspace 'none · no workspace bind mount'"
+      "evidence_ref": "create exit 0, input bundle verify 0, sbx cp in 0, created from docker.io/sbx/claude@sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9; sbx inspect: composition proven; workspace 'none · no workspace bind mount'"
     },
     {
       "id": "G5.2",
       "description": "the task branch is created at source.commit, hooks disabled, and one commit is made on refs/heads/dca/g5-happy",
       "result": "PASS",
-      "evidence_ref": "source.commit 7aabb5e073d81567d287379e8f06a80c4ddbe648, task branch base 7aabb5e073d81567d287379e8f06a80c4ddbe648, ref refs/heads/dca/g5-happy, candidate db921b729350a13baf746c824707f43c02c77551, core.hooksPath /dev/null, exported heads 1; failures none"
+      "evidence_ref": "source.commit d1ec942ead74538fde5d2b57ad8eac4104580d50, task branch base d1ec942ead74538fde5d2b57ad8eac4104580d50, ref refs/heads/dca/g5-happy, candidate 236ca3dea26474adab0a471e7e9169c98c578179, core.hooksPath /dev/null, exported heads 1; failures none"
     },
     {
       "id": "G5.3",
       "description": "the returned bundle is quarantined outside .git, fully validated, and advertises exactly the task ref",
       "result": "PASS",
-      "evidence_ref": "sbx cp out 0, quarantine inside .git no, 635 bytes, verify exit 0, scratch-repo unpack exit 0 at db921b729350a13baf746c824707f43c02c77551, advertised heads 1: 'db921b729350a13baf746c824707f43c02c77551 refs/heads/dca/g5-happy'; failures none"
+      "evidence_ref": "sbx cp out 0, quarantine inside .git no, 636 bytes, verify exit 0, scratch-repo unpack exit 0 at 236ca3dea26474adab0a471e7e9169c98c578179, advertised heads 1: '236ca3dea26474adab0a471e7e9169c98c578179 refs/heads/dca/g5-happy'; failures none"
     },
     {
       "id": "G5.4",
       "description": "the import adds exactly refs/heads/dca/g5-happy at the candidate commit, with no checkout or merge",
       "result": "PASS",
-      "evidence_ref": "refs/heads/dca/g5-happy before: no, fetch attempted yes exit 0, ref after db921b729350a13baf746c824707f43c02c77551; host HEAD 7aabb5e073d81567d287379e8f06a80c4ddbe648 -> 7aabb5e073d81567d287379e8f06a80c4ddbe648, refs 1 -> 2; failures none"
+      "evidence_ref": "refs/heads/dca/g5-happy before: no, fetch attempted yes exit 0, ref after 236ca3dea26474adab0a471e7e9169c98c578179; host HEAD d1ec942ead74538fde5d2b57ad8eac4104580d50 -> d1ec942ead74538fde5d2b57ad8eac4104580d50, refs 1 -> 2; failures none"
     },
     {
       "id": "G5.n1",
       "description": "negative: a corrupted returned bundle fails validation, imports nothing and changes nothing",
       "result": "PASS",
-      "evidence_ref": "copied 569 bytes, truncated to 189; git bundle verify exit 0 (header check alone), scratch-repo unpack exit 1 (non-zero required), scratch ref absent, import attempted no, refs/heads/dca/g5-corrupt absent; failures none"
+      "evidence_ref": "copied 568 bytes, truncated to 189; git bundle verify exit 0 (header check alone), scratch-repo unpack exit 1 (non-zero required), scratch ref absent, import attempted no, refs/heads/dca/g5-corrupt absent; failures none"
     },
     {
       "id": "G5.n2",

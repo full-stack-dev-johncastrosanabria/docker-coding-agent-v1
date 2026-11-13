@@ -416,7 +416,7 @@ def evaluate(obs, work, versions=None, g4_path=common.G4_EVIDENCE):
     fresh_problems = []
     for slot in SLOTS:
         before = common.read_json(work, f"ls-before-{slot}.json") or {}
-        existing = before.get("sandboxes") if isinstance(before, dict) else None
+        existing = common.preflight_module.sandbox_list(before)
         if existing:
             fresh_problems.append(
                 f"{slot}: {len(existing)} sandbox(es) already existed when this one was created, so "
@@ -437,7 +437,7 @@ def evaluate(obs, work, versions=None, g4_path=common.G4_EVIDENCE):
         if removal != "0":
             fresh_problems.append(f"{slot}: removal exited {removal!r}")
     between = common.read_json(work, "ls-between-a.json") or {}
-    if isinstance(between, dict) and between.get("sandboxes"):
+    if common.preflight_module.sandbox_list(between):
         fresh_problems.append(
             "the first sandbox was still present after removal, so the second was not created from "
             "a clean state")

@@ -242,7 +242,7 @@ def evaluate(obs, work, versions=None, g4_path=None, g3_path=None):
     exec_problems = []
     for slot in SLOTS:
         before = common.read_json(work, f"ls-before-{slot}.json") or {}
-        if isinstance(before, dict) and before.get("sandboxes"):
+        if common.preflight_module.sandbox_list(before):
             exec_problems.append(
                 f"{slot}: a sandbox already existed when this one was created, so more than one was "
                 "live at a time")
@@ -263,7 +263,7 @@ def evaluate(obs, work, versions=None, g4_path=None, g3_path=None):
         if (vmstate.get(slot) or {}).get("stdin_is_tty") != "no":
             exec_problems.append(f"{slot}: stdin was a TTY, so the run was not non-interactive")
     between = common.read_json(work, "ls-between-a.json") or {}
-    if isinstance(between, dict) and between.get("sandboxes"):
+    if common.preflight_module.sandbox_list(between):
         exec_problems.append("the first sandbox survived its removal, so the second was not fresh")
     rows.append((
         f"{GATE}.proxy-execution",

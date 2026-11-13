@@ -73,8 +73,8 @@
           "purpose": "discovery",
           "sandbox_required": false,
           "profiles": [],
-          "source": "kit",
-          "evidence_ref": "gates/inventory/work/policy-claude.json rule kit:dca-inv-claude; https://code.claude.com/docs/en/network-config (fetched 2026-09-20)",
+          "source": "docs",
+          "evidence_ref": "https://code.claude.com/docs/en/network-config (fetched 2026-09-20); declared by the pre-v3 claude agent kit, and no longer declared by the pinned v3 workload kit (gates/inventory/work/policy-claude.json, 2026-11-13)",
           "note": "Documented as \"Claude Code documentation lookups by the built-in claude-code-guide agent and pre-approved WebFetch requests. Blocking this host only affects documentation lookups.\" V1 uses neither, and unconstrained web browsing is out of scope, so no runtime requirement is established."
         },
         {
@@ -106,6 +106,26 @@
           "source": "kit",
           "evidence_ref": "gates/inventory/work/policy-claude.json rule kit:dca-inv-claude; https://code.claude.com/docs/en/network-config (fetched 2026-09-20)",
           "note": "Documented as the \"Claude in Chrome extension WebSocket bridge\". Browser automation is excluded from V1, so this is a must-deny destination."
+        },
+        {
+          "host": "deb.debian.org",
+          "port": 80,
+          "purpose": "discovery",
+          "sandbox_required": false,
+          "profiles": [],
+          "source": "kit",
+          "evidence_ref": "gates/inventory/work/policy-claude.json rule kit:dca-inv-claude (sandbox-scoped network allow observed on a kit-only sandbox, 2026-11-13)",
+          "note": "Declared on port 80 by the pinned v3 claude workload kit (sbx v0.53, Docker Hardened Images), whose startup hook refreshes the apt package cache in the background. V1 installs nothing at runtime, so no requirement is established and this is a must-deny destination."
+        },
+        {
+          "host": "dhi.io",
+          "port": 80,
+          "purpose": "discovery",
+          "sandbox_required": false,
+          "profiles": [],
+          "source": "kit",
+          "evidence_ref": "gates/inventory/work/policy-claude.json rule kit:dca-inv-claude (sandbox-scoped network allow observed on a kit-only sandbox, 2026-11-13)",
+          "note": "Declared on port 80 by the pinned v3 claude workload kit (sbx v0.53, Docker Hardened Images), the Docker Hardened Images package mirror its apt cache refresh uses. V1 installs nothing at runtime, so no requirement is established and this is a must-deny destination."
         }
       ]
     },

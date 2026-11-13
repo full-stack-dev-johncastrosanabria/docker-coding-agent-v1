@@ -1,19 +1,19 @@
 {
   "gate": "INVENTORY",
   "status": "PASS",
-  "run_at": "2026-09-20T17:47:11Z",
+  "run_at": "2026-11-13T07:09:21Z",
   "versions": {
-    "sbx": "v0.43.0"
+    "sbx": "v0.53.0"
   },
   "provenance": {
-    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+    "runtime_versions_digest": "sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1"
   },
   "criteria": [
     {
       "id": "INV.0a",
       "description": "sbx client and server still match the pinned exact version and the server is running",
       "result": "PASS",
-      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 running"
+      "evidence_ref": "pin v0.53.0, client v0.53.0, server v0.53.0 running"
     },
     {
       "id": "INV.0b",
@@ -37,13 +37,13 @@
       "id": "INV.0e",
       "description": "the G6 probe kit and the pinned docker-agent artifact are present, with the pinned SHA-256",
       "result": "PASS",
-      "evidence_ref": "kit yes, artifact sha256 a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623 vs pin a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623"
+      "evidence_ref": "kit yes, artifact sha256 7ff167391f6f1267d8a1d3ef62856c1a8b7bb99713ffc5bc3702c3b3fcd082ef vs pin 7ff167391f6f1267d8a1d3ef62856c1a8b7bb99713ffc5bc3702c3b3fcd082ef"
     },
     {
       "id": "INV.1.claude",
       "description": "claude: the built-in kit's sandbox-scoped network declarations were read from a kit-only sandbox holding no repository code",
       "result": "PASS",
-      "evidence_ref": "create exit 0, policy ls exit 0, declared ['api.anthropic.com:443', 'bridge.claudeusercontent.com:443', 'claude.com:443', 'code.claude.com:443', 'downloads.claude.ai:443', 'mcp-proxy.anthropic.com:443', 'platform.claude.com:443']"
+      "evidence_ref": "create exit 0, policy ls exit 0, declared ['api.anthropic.com:443', 'bridge.claudeusercontent.com:443', 'claude.com:443', 'deb.debian.org:80', 'dhi.io:80', 'downloads.claude.ai:443', 'mcp-proxy.anthropic.com:443', 'platform.claude.com:443']"
     },
     {
       "id": "INV.1.codex",
@@ -107,5 +107,5 @@
     }
   ],
   "fallback_applied": null,
-  "notes": "T014 is gate preparation, not a gate: it builds the draft inventory that lets G4 tell a documented or provider host apart from one the sandboxed backend process requires. Sources were used in priority order and discovery was NOT needed for either backend: the built-in claude kit declares a sandbox-scoped allow rule covering seven hosts, of which only api.anthropic.com carries task traffic, and the built-in docker-agent kit declares no network rule at all, so Codex's endpoints come from the pinned docker-agent artifact this project ships. No backend prompt was run, no credential was used and none was recorded. Nothing here is a proven allowance: G4 decides the effective per-sandbox policy, and the six non-required Claude kit hosts are must-deny candidates for it. Both sandboxes were mountless, created with --skills off, held no repository code, and were created and removed one at a time by name; sbx rm --all and sbx reset are never used, and nothing global changed."
+  "notes": "T014 is gate preparation, not a gate: it builds the draft inventory that lets G4 tell a documented or provider host apart from one the sandboxed backend process requires. Sources were used in priority order and discovery was NOT needed for either backend: the pinned v3 claude workload kit declares a sandbox-scoped allow rule (its hosts are listed in the inventory), of which only api.anthropic.com carries task traffic, and the pinned v3 shell workload kit Codex runs on declares no network rule at all, so Codex's endpoints come from the pinned docker-agent artifact this project ships. No backend prompt was run, no credential was used and none was recorded. Nothing here is a proven allowance: G4 decides the effective per-sandbox policy, and every non-required Claude kit host is a must-deny candidate for it. Both sandboxes were mountless, created with --skills off, held no repository code, and were created and removed one at a time by name; sbx rm --all and sbx reset are never used, and nothing global changed."
 }

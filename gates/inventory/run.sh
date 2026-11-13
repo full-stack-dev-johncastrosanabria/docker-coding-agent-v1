@@ -33,7 +33,7 @@ cd "$ROOT" || exit 1
 WORK=gates/inventory/work
 OBS=$WORK/observations.env
 KIT=gates/G6/work/kit
-ARTIFACT=$KIT/files/home/dca-kit/docker-agent
+ARTIFACT=$KIT/payload/opt/dca/bin/docker-agent
 SANDBOXES="dca-inv-claude dca-inv-codex"
 CODEX_RUNTIME_URL=https://chatgpt.com/backend-api/codex
 CODEX_LOGIN_URL=https://auth.openai.com
@@ -123,21 +123,17 @@ python3 gates/inventory/record.py --preflight "$OBS" "$WORK" || stop
 # backend prompt is ever run in it. It exists only so the kit's own network declarations become
 # readable as effective sandbox-scoped rules.
 
-for pair in "claude dca-inv-claude claude" "codex dca-inv-codex docker-agent"; do
+. gates/sbx_create.sh
+
+for pair in "claude dca-inv-claude" "codex dca-inv-codex"; do
     backend=${pair%% *}
-    rest=${pair#* }
-    name=${rest%% *}
-    agent=${rest#* }
+    name=${pair#* }
 
     if [ "$backend" = codex ]; then
-        run_sbx create "$agent" --name "$name" --skills off --kit "./$KIT" \
-            >"$WORK/create-$name.txt" 2>&1
+        create_pinned "$backend" "$name" "$KIT"
     else
-        run_sbx create "$agent" --name "$name" --skills off >"$WORK/create-$name.txt" 2>&1
+        create_pinned "$backend" "$name"
     fi
-    record "create_${name}_exit" "$?"
-    record "image_${name}" "$(awk '/^ *image  */ {print $2; exit}' "$WORK/create-$name.txt")"
-    record "workspace_line_${name}" "$(awk '/^ *workspace  */ {$1=""; print; exit}' "$WORK/create-$name.txt" | sed 's/^ *//')"
 
     run_sbx policy ls "$name" --json >"$WORK/policy-$backend.json" 2>"$WORK/policy-$backend.err"
     record "policy_${name}_exit" "$?"

@@ -744,7 +744,7 @@ def preflight(obs, work):
     policy = read_json(work, "pf-policy.json")
     listing = read_json(work, "pf-ls.json")
     refusals = preflight_module.ssh_forwarding_refusals(forwarding, socket_path)
-    running = (listing or {}).get("sandboxes") if isinstance(listing, dict) else None
+    running = preflight_module.sandbox_list(listing)
 
     return [
         (
@@ -1020,8 +1020,8 @@ def evaluate(obs, work, inventory_file=INVENTORY_FILE, draft_file=DRAFT_FILE):
     remaining = read_json(work, "ls-after.json")
     names = {cell["name"] for cell in matrix or []}
     left = (
-        [e for e in (remaining or {}).get("sandboxes", []) if isinstance(e, dict) and e.get("name") in names]
-        if isinstance(remaining, dict)
+        [e for e in preflight_module.sandbox_list(remaining) if e.get("name") in names]
+        if preflight_module.sandbox_list(remaining) is not None
         else None
     )
     removed = all(

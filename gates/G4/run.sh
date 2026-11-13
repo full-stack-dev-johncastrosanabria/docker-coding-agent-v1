@@ -170,6 +170,8 @@ record plan_exit 0
 
 # --- one cell at a time ---------------------------------------------------------------------------
 
+. gates/sbx_create.sh
+
 for name in $(awk '/^cell /{print $2}' "$PLAN"); do
     agent=$(awk -v n="$name" '$1=="cell" && $2==n {print $5}' "$PLAN")
     allow=$(awk -v n="$name" '$1=="allow" && $2==n {print $3}' "$PLAN")
@@ -177,11 +179,10 @@ for name in $(awk '/^cell /{print $2}' "$PLAN"); do
     dests=$(awk -v n="$name" '$1=="dest" && $2==n {print $3}' "$PLAN")
 
     if [ "$agent" = docker-agent ]; then
-        run_sbx create "$agent" --name "$name" --skills off --kit "./$KIT" >"$WORK/create-$name.txt" 2>&1
+        create_pinned codex "$name" "$KIT"
     else
-        run_sbx create "$agent" --name "$name" --skills off >"$WORK/create-$name.txt" 2>&1
+        create_pinned claude "$name"
     fi
-    record "create_${name}_exit" "$?"
 
     # Sandbox-scoped rules only. A missing --sandbox here would write a GLOBAL rule.
     rules_status=0

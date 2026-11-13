@@ -159,6 +159,16 @@ def ssh_agent_isolation_failures(probe):
     return reasons
 
 
+def sandbox_list(document):
+    """The sandbox entries of `sbx ls --json`: v0.43's {"sandboxes": [...]} or v0.53's bare
+    array. Anything else - an error envelope, extra keys, a non-list - is None, never "empty"."""
+    if isinstance(document, dict) and set(document) == {"sandboxes"}:
+        document = document["sandboxes"]
+    if isinstance(document, list) and all(isinstance(e, dict) for e in document):
+        return document
+    return None
+
+
 # --- sandbox base identity ----------------------------------------------------------------------
 #
 # sbx >= 0.53 creates every sandbox from a digest-qualified v3 workload kit, and `sbx inspect

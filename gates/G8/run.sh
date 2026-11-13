@@ -73,8 +73,6 @@ run_sbx settings get --json ssh.agentSocketPath >"$WORK/pf-ssh-socket.json" 2>"$
 record pf_ssh_socket_exit "$?"
 run_sbx policy ls --json >"$WORK/pf-policy.json" 2>"$WORK/pf-policy.err"
 record pf_policy_exit "$?"
-run_sbx template ls --json >"$WORK/templates.json" 2>"$WORK/templates.err"
-record template_ls_exit "$?"
 # The host's shared skills store, read-only: its contents decide how much a bare "nothing was
 # injected" observation is worth, which the control sandboxes then test directly.
 run_sbx skills ls --json >"$WORK/host-skills.json" 2>"$WORK/host-skills.err"
@@ -113,23 +111,21 @@ probe() {
 
 # --- one subject and one control per pinned base -------------------------------------------------
 
-for pair in "claude dca-g8-claude" "docker-agent dca-g8-codex"; do
-    agent=${pair% *}
+. gates/sbx_create.sh
+
+for pair in "claude dca-g8-claude" "codex dca-g8-codex"; do
+    backend=${pair% *}
     name=${pair#* }
 
     # Subject: mountless, --skills off, the G6 probe kit.
-    run_sbx create "$agent" --name "$name" --skills off --kit "./$KIT" >"$WORK/create-$name.txt" 2>&1
-    record "create_${name}_exit" "$?"
-    record "image_${name}" "$(awk '/^ *image  */ {print $2; exit}' "$WORK/create-$name.txt")"
-    record "workspace_line_${name}" "$(awk '/^ *workspace  */ {$1=""; print; exit}' "$WORK/create-$name.txt" | sed 's/^ *//')"
+    create_pinned "$backend" "$name" "$KIT"
     probe "$name" >"$WORK/probe-$name.env" 2>"$WORK/probe-$name.err"
     record "probe_${name}_exit" "$?"
 
     # Control: same base, mountless, shared store left at readonly, no kit. It answers whether a
     # shared-store mount is observable at all here.
     control="$name-control"
-    run_sbx create "$agent" --name "$control" --skills readonly >"$WORK/create-$control.txt" 2>&1
-    record "create_${control}_exit" "$?"
+    create_pinned "$backend" "$control" "" --skills readonly
     probe "$control" >"$WORK/probe-$control.env" 2>"$WORK/probe-$control.err"
     record "probe_${control}_exit" "$?"
 done
