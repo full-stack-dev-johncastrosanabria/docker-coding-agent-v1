@@ -376,6 +376,14 @@ class TestBenchRuns(unittest.TestCase):
         self.assertEqual(seen[0][seen[0].index("--effort") + 1], "high")
         self.assertNotIn("--autocompact", seen[0])
 
+    def test_51b_one_model_id_is_never_sent_to_both_backends(self):
+        options = mock.Mock(model="claude-opus-5-5", effort=None, autocompact=None)
+        with self.assertRaises(errors.UsageError):
+            bench._choice(options, ["claude", "codex"])
+        shared = mock.Mock(model=None, effort="high", autocompact="off")
+        self.assertEqual(bench._choice(shared, ["claude", "codex"]),
+                         {"choice": {"effort": "high", "autocompact": "off"}})
+
     def test_52_a_wrong_answer_is_caught_by_the_oracle(self):
         fixture = bench.discover(selection="R1")[0]
         bad = os.path.join(fixture["_dir"], fixture["golden"]["bad"][0])

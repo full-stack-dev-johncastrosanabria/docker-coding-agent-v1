@@ -87,5 +87,22 @@ class Rendering(unittest.TestCase):
             stage.render_agent_config("claude", "agents: {}\n", {"effort": "low"})
 
 
+class StagedKit(unittest.TestCase):
+    def test_08_a_kit_staged_with_a_choice_still_passes_the_in_vm_preflight(self):
+        import sys
+        import tempfile
+        preflight = _load("dca_kit_preflight_choice", ROOT / "src" / "dca" / "kit_preflight.py")
+        with tempfile.TemporaryDirectory() as prefix:
+            kit = stage.stage(prefix, python=sys.executable, skills_source=str(ROOT / "runtime" /
+                                                                              "skills"),
+                              backends=["claude"], choice={"model": "claude-opus-5-5",
+                                                           "autocompact": "off"})
+            self.assertEqual(preflight.run(kit, python=sys.executable), [])
+            settings = json.loads(Path(kit, "backends", "claude",
+                                       "managed-settings.json").read_text())
+            self.assertEqual(settings["env"]["DISABLE_AUTO_COMPACT"], "1")
+            self.assertEqual(settings["env"]["ANTHROPIC_MODEL"], "", "the pinned env is kept")
+
+
 if __name__ == "__main__":
     unittest.main()

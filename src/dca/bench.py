@@ -1305,6 +1305,9 @@ def _choice(options, backends):
     picked = {key: getattr(options, key, None) for key in ("model", "effort", "autocompact")}
     if not any(value is not None for value in picked.values()):
         return {}
+    if picked["model"] is not None and len(backends) > 1:
+        raise UsageError("--model names one provider's model; run each backend on its own "
+                         "instead of --backend both")
     try:
         from . import launcher as launcher_module
     except ImportError:  # loaded by path in tests
