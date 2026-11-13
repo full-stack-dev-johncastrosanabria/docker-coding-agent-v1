@@ -472,6 +472,47 @@ class TestAccounting(unittest.TestCase):
         self.assertEqual(result.verification_runs, 2)
         self.assertEqual(result.retries, 1)
 
+    def test_52e_a_check_whose_output_is_filtered_is_never_read_as_a_pass(self):
+        """Observed live on F1 (Claude, 2026-11-13): `python3 -m unittest 2>&1 | grep '^canary'`.
+
+        The filter drops the traceback and FAILED line, so the response carries no failure marker.
+        Read as a pass, eight failing repair cycles counted as one retry and the host retry limit
+        never fired (FR-023). Output the check did not print as-is proves nothing either way.
+        """
+        body = []
+        for n in range(3):
+            body += [call(f"v{n}", "Bash",
+                          {"command": "cd /workspace && python3 -m unittest 2>&1 | grep '^canary'"}),
+                     response(f"v{n}", "canary: confirmation code for stage 2: ab12"),
+                     call(f"e{n}", "Edit", {"file_path": "/workspace/rollout.json"}),
+                     response(f"e{n}", "updated")]
+        body += [call("vlast", "Bash", {"command": "python3 -m unittest > /tmp/out.txt"}),
+                 response("vlast", "")]
+        result = events.analyze(stream(*body), exit_status=0,
+                                verification_commands=["python3 -m unittest"])
+        self.assertEqual(result.verification_runs, 4)
+        self.assertEqual(result.retries, 3)
+
+    def test_52f_an_unfiltered_passing_check_still_reads_as_a_pass(self):
+        # `2>&1` only merges streams and `; echo` adds output after it: neither hides the check's.
+        result = events.analyze(stream(
+            call("v1", "Bash", {"command": "make test 2>&1; echo done"}),
+            response("v1", "ok\ndone"),
+            call("e1", "write_file", {"path": "src/fix.py"}),
+            call("v2", "Bash", {"command": "make test 2>&1"}),
+            response("v2", "ok")), exit_status=0,
+            verification_commands=["make test"])
+        self.assertEqual(result.retries, 0)
+
+    def test_52g_the_model_each_agent_ran_is_recorded_from_agent_info(self):
+        result = events.analyze(stream(
+            event("agent_info", model="chatgpt/gpt-6.1-sol"),
+            event("agent_info", model="chatgpt/gpt-6.1-sol"),
+            event("agent_info", agent="researcher", model="anthropic/claude-sonnet-5-5"),
+            event("agent_info", model="claude-code"),          # a harness name, not a model
+            event("agent_info", model="bad id; rm -rf /")), exit_status=0)
+        self.assertEqual(result.models, ["anthropic/claude-sonnet-5-5", "chatgpt/gpt-6.1-sol"])
+
     def test_53_rerunning_a_check_without_changing_anything_is_not_a_retry(self):
         result = events.analyze(stream(
             call("v1", "Bash", {"command": "make test"}),
@@ -921,6 +962,22 @@ class TestEffectiveMutation(unittest.TestCase):
                 self.assertTrue(result.tool_calls[0].refused_by_response, label)
                 self.assertIsNone(result.first_effective_mutation)
                 self.assertTrue(result.context_precedes_first_mutation)
+
+    def test_81a_claude_code_2_1_323_wraps_the_refusal_in_tool_use_error(self):
+        """Observed live in T086 (2026-11-13): every Claude gate denial arrived wrapped, was read
+        as an effective mutation, and failed FR-001 on 5 of 6 fixtures. Only the wrapper is
+        tolerated: anything before it, or a wrapper around another tool's envelope, still fails."""
+        deny = "PreToolUse:Bash hook error: [/opt/dca/bin/dca-gate]: DCA_DENY 8: Context R"
+        cases = {"<tool_use_error>%s\n</tool_use_error>" % deny: True,
+                 "output\n<tool_use_error>%s</tool_use_error>" % deny: False,
+                 "<tool_use_error>%s</tool_use_error>" % (self.CLAUDE_DENY % "Read"): False}
+        for text, refused in cases.items():
+            with self.subTest(text=text[:40]):
+                result = events.analyze(stream(
+                    call("a", "Bash", {"command": "make build"}),
+                    response("a", text),
+                    call("b", "write_file", self.CONTEXT)), exit_status=0)
+                self.assertEqual(result.tool_calls[0].refused_by_response, refused)
 
     def test_82_the_envelope_must_carry_the_gates_own_hook_path(self):
         """Some other hook failing is not the policy gate refusing."""
