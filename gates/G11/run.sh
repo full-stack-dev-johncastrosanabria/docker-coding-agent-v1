@@ -154,17 +154,16 @@ trap 'cleanup' EXIT INT TERM
 # ==================================================================================================
 # One backend at a time, one sandbox at a time.
 # ==================================================================================================
+. gates/sbx_create.sh
 for backend in $AVAILABLE; do
     case $backend in
         claude)
             SANDBOX=dca-g11-claude
-            TEMPLATE=claude
             AGENT=gates/G11/agent-claude.yaml
             SAFETY=""
             ;;
         codex)
             SANDBOX=dca-g11-codex
-            TEMPLATE=docker-agent
             AGENT=gates/G11/agent-codex.yaml
             SAFETY="--safety strict"
             ;;
@@ -174,31 +173,22 @@ for backend in $AVAILABLE; do
     run_sbx ls --json >"$WORK/ls-before-$backend.json" 2>&1
     record "ls_before_${backend}_exit" "$?"
 
-    run_sbx create "$TEMPLATE" --name "$SANDBOX" --skills off --kit "./$KIT" \
-        >"$WORK/create-$SANDBOX.txt" 2>&1
-    create_status=$?
-    record "create_${SANDBOX}_exit" "$create_status"
-    [ "$create_status" -eq 0 ] && : >"$WORK/created-$SANDBOX"
-    [ "$create_status" -eq 0 ] || stop
-
-    run_sbx template ls --json >"$WORK/templates.json" 2>"$WORK/templates.err"
-    record templates_exit "$?"
-    record "sbx_resolved_base_$backend" \
-        "$(sed -n 's/.*\(docker\/sandbox-templates:[a-z0-9.-]*\).*/\1/p' \
-           "$WORK/create-$SANDBOX.txt" | head -1)"
-
     POLICY_ALLOW=$(python3 gates/G11/record.py --policy "$backend" allow) || stop
     POLICY_DENY=$(python3 gates/G11/record.py --policy "$backend" deny) || stop
     record "policy_allow_$backend" "$POLICY_ALLOW"
     record "policy_deny_$backend" "$POLICY_DENY"
 
+    # The profile's denies go in WITH the create, so they hold while the VM boots.
+    # shellcheck disable=SC2046
+    create_pinned "$backend" "$SANDBOX" "$KIT" $(deny_flags "$POLICY_DENY")
+    create_status=$?
+    [ "$create_status" -eq 0 ] && : >"$WORK/created-$SANDBOX"
+    [ "$create_status" -eq 0 ] || stop
+
+
     rules_status=0
     run_sbx policy allow network --sandbox "$SANDBOX" "$POLICY_ALLOW" \
         >"$WORK/allow-$SANDBOX.txt" 2>&1 || rules_status=1
-    if [ -n "$POLICY_DENY" ]; then
-        run_sbx policy deny network --sandbox "$SANDBOX" "$POLICY_DENY" \
-            >"$WORK/deny-$SANDBOX.txt" 2>&1 || rules_status=1
-    fi
     record "policy_rules_${backend}_exit" "$rules_status"
 
     run_sbx cp "$AGENT" "$SANDBOX":/tmp/agent.yaml >"$WORK/cp-agent-$backend.txt" 2>&1

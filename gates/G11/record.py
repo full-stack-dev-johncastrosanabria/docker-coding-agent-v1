@@ -174,8 +174,7 @@ def backend_rows(backend, obs, work, versions, ran):
     captures = os.path.join(CAPTURES, backend)
     rows = []
 
-    base = module.base_identity_row(GATE, obs, work, versions,
-                                    observed_key=f"sbx_resolved_base_{backend}")
+    base = module.base_identity_row(GATE, obs, work, versions, names=[f"dca-g11-{backend}"])
     rows.append((*base, ran))
     # policy_row reads the generic observation names, so this backend's names are restated for it.
     policy_obs = dict(obs)

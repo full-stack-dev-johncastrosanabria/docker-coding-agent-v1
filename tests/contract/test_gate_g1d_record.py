@@ -439,6 +439,14 @@ class G1dRecorder(unittest.TestCase):
         self.work.mkdir()
         self._write_work()
 
+    def _write_inspect(self, sandbox, backend, kits=()):
+        """sbx's own composition record of a sandbox: the pinned workload plus the G6 kit."""
+        base = self.versions["sandbox_bases"][backend]
+        self._write(f"inspect-{sandbox}.json", {
+            "name": sandbox, "host_mounts": [],
+            "kits": [f"{base['base']}@{base['version']}", str(GATES / "G6" / "work" / "kit")]
+            if kits == () else kits})
+
     def _write(self, name, document):
         (self.work / name).write_text(
             document if isinstance(document, str) else json.dumps(document), encoding="utf-8")
@@ -520,11 +528,7 @@ class G1dRecorder(unittest.TestCase):
         self._write("governance-before.json", governance)
         self._write("governance-after.json", governance)
 
-        image, digest = self.common.claude_base(self.versions)
-        repository, _, tag = image.rpartition(":")
-        self._write("templates.json", {"images": [
-            {"repository": f"docker.io/{repository}", "tag": tag,
-             "id": digest.removeprefix("sha256:")[:12]}]})
+        self._write_inspect("dca-g1d", "claude")
 
         self._write("trusted-verification.md", self.trusted_text)
         self._write("layout.txt", self._layout())
@@ -565,7 +569,7 @@ class G1dRecorder(unittest.TestCase):
             "pf_version_exit": "0", "pf_ssh_forwarding_exit": "0", "pf_ssh_socket_exit": "0",
             "pf_policy_exit": "0", "pf_ls_exit": "0",
             "governance_before_exit": "1", "governance_after_exit": "1",
-            "ls_after_exit": "0", "policy_after_exit": "0", "templates_exit": "0",
+            "ls_after_exit": "0", "policy_after_exit": "0", "inspect_dca-g1d_exit": "0",
             "sbx_resolved_base": self.common.claude_base(self.versions)[0],
             "policy_allow": ",".join(self.allow), "policy_deny": ",".join(self.deny),
             "policy_rules_exit": "0", f"create_{SANDBOX}_exit": "0",

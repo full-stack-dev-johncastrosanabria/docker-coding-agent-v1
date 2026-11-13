@@ -26,6 +26,9 @@ ROOT = Path(__file__).resolve().parents[2]
 GATES = ROOT / "gates"
 STAMP = "2026-09-21T06:00:00Z"
 MARKER = "DCA-G9-OK"
+# A sandbox's creation time as `sbx inspect --json` reports it, and a log entry inside its life.
+CREATED = "2026-11-13T01:20:27-06:00"
+SEEN = "2026-11-13T01:20:30.340000-06:00"
 
 
 def _load(name, path):
@@ -105,6 +108,12 @@ class G9Recorder(unittest.TestCase):
             lines.append(entry)
         return "".join(json.dumps(l) + "\n" for l in lines)
 
+    def _write_inspect(self, backend, kits=()):
+        reference = self.claude.preflight_module.pinned_reference(self.versions, backend)
+        self._write(f"inspect-dca-g9-{backend}.json", {
+            "name": f"dca-g9-{backend}", "created_at": CREATED, "host_mounts": [],
+            "kits": [reference, str(GATES / "G6" / "work" / "kit")] if kits == () else kits})
+
     def _write_work(self):
         pins = self.versions
         self._write("pf-version.json", {
@@ -126,28 +135,23 @@ class G9Recorder(unittest.TestCase):
         self._write("governance-before.json", governance)
         self._write("governance-after.json", governance)
 
-        images = []
-        for backend, module in (("claude", self.claude), ("codex", self.rec.codex)):
-            image, digest = (module.claude_base(self.versions) if backend == "claude"
-                             else module.codex_base(self.versions))
-            repository, _, tag = image.rpartition(":")
-            images.append({"repository": f"docker.io/{repository}", "tag": tag,
-                           "id": digest.removeprefix("sha256:")[:12]})
-        self._write("templates.json", {"images": images})
+        # sbx's own composition record of each sandbox: the pinned workload plus the G6 kit.
+        for backend in ("claude", "codex"):
+            self._write_inspect(backend)
 
         for backend in ("claude", "codex"):
             self._write(f"vmstate-{backend}.txt",
                         "stdin_is_tty=no\nworkload_user=agent\nsudo_resolves_to=root\n"
                         f"agent_binary={self.versions['docker_agent']}\n")
             self._write(f"control-{backend}.json", agent_stream())
-            # the exact shape pinned sbx v0.43.0 emits, taken from a real capture
+            # the exact shape pinned sbx v0.53.0 emits, taken from a real capture
             self._write(f"policylog-control-{backend}.json",
                         {"allowed": [{"host": f"{self._hosts(backend)}:443",
-                                            "vm_name": f"dca-g9-{backend}",
-                                            "proxy_type": "forward", "count_since": 30}],
+                                            "sandbox_id": f"dca-g9-{backend}",
+                                            "proxy_type": "forward", "count": 30, "last_seen": SEEN}],
                          "blocked": [{"host": "api.docker.com:443",
-                                            "vm_name": f"dca-g9-{backend}",
-                                            "count_since": 3}]})
+                                            "sandbox_id": f"dca-g9-{backend}",
+                                            "count": 3, "last_seen": SEEN}]})
             for privilege in ("user", "sudo"):
                 self._write(f"workload-{privilege}-{backend}.jsonl",
                             self._workload(backend, privilege))
@@ -160,7 +164,7 @@ class G9Recorder(unittest.TestCase):
             "pf_version_exit": "0", "pf_ssh_forwarding_exit": "0", "pf_ssh_socket_exit": "0",
             "pf_policy_exit": "0", "pf_ls_exit": "0",
             "governance_before_exit": "1", "governance_after_exit": "1",
-            "ls_after_exit": "0", "policy_after_exit": "0", "templates_exit": "0",
+            "ls_after_exit": "0", "policy_after_exit": "0", 
             "available_backends": "claude codex",
         }
         for backend, module in (("claude", self.claude), ("codex", self.rec.codex)):
@@ -252,7 +256,7 @@ class G9Recorder(unittest.TestCase):
 
     def test_06_a_control_without_the_probe_host_in_the_policy_log_fails(self):
         self._write("policylog-control-claude.json",
-                    {"allowed": [{"host": "pypi.org:443", "count_since": 2}],
+                    {"allowed": [{"host": "pypi.org:443", "count": 2, "last_seen": SEEN}],
                      "blocked": []})
         results, _ = self._results()
         self.assertEqual(results["G9.control.claude"], "FAIL")
@@ -260,8 +264,8 @@ class G9Recorder(unittest.TestCase):
     def test_07_a_blocked_or_untravelled_policy_log_entry_is_not_a_control(self):
         """Blocked traffic, or a permitting rule with no traffic, is not evidence of a call."""
         for log in ({"allowed": [], "blocked": [
-                        {"host": "api.anthropic.com:443", "count_since": 4}]},
-                    {"allowed": [{"host": "api.anthropic.com:443", "count_since": 0}],
+                        {"host": "api.anthropic.com:443", "count": 4, "last_seen": SEEN}]},
+                    {"allowed": [{"host": "api.anthropic.com:443", "count": 0, "last_seen": SEEN}],
                      "blocked": []},
                     {"allowed": [], "blocked": []}):
             with self.subTest(log=str(log)[:48]):
@@ -272,9 +276,9 @@ class G9Recorder(unittest.TestCase):
         """Regression: the first implementation guessed generic key names, found nothing, and
         failed both positive controls although the agents had genuinely called the endpoints."""
         self._write("policylog-real.json", {
-            "allowed": [{"host": "api.anthropic.com:443", "vm_name": "dca-g9-claude",
-                               "proxy_type": "forward", "count_since": 30}],
-            "blocked": [{"host": "mcp-proxy.anthropic.com:443", "count_since": 2}]})
+            "allowed": [{"host": "api.anthropic.com:443", "sandbox_id": "dca-g9-claude",
+                               "proxy_type": "forward", "count": 30, "last_seen": SEEN}],
+            "blocked": [{"host": "mcp-proxy.anthropic.com:443", "count": 2, "last_seen": SEEN}]})
         hosts = self.rec.policy_log_hosts(str(self.work), "policylog-real.json")
         self.assertIs(hosts.get("api.anthropic.com"), True)
         self.assertIs(hosts.get("mcp-proxy.anthropic.com"), False)
@@ -336,9 +340,18 @@ class G9Recorder(unittest.TestCase):
                 self.assertEqual(results["G9.setup.codex"], "FAIL")
 
     def test_16_a_base_mismatch_fails(self):
-        results, _ = self._results(
-            self._capture(**{"sbx_resolved_base_claude": "docker/sandbox-templates:wrong"}))
-        self.assertEqual(results["G9.base"], "FAIL")
+        for kits in (["docker.io/sbx/claude:latest"], None):
+            with self.subTest(kits=kits):
+                self._write_inspect("claude", kits=kits)
+                self.assertEqual(self._results()[0]["G9.base"], "FAIL")
+
+    def test_16b_an_earlier_sandboxs_traffic_never_satisfies_the_control(self):
+        """sbx >= 0.53 keeps the policy log of a removed sandbox of the same name."""
+        self._write("policylog-control-claude.json", {
+            "allowed": [{"host": "api.anthropic.com:443", "count": 30,
+                         "last_seen": "2026-11-13T01:14:30.277756-06:00"}],
+            "blocked": []})
+        self.assertEqual(self._results()[0]["G9.control.claude"], "FAIL")
 
     # --- availability and independence ----------------------------------------------------------------
 

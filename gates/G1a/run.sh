@@ -138,10 +138,8 @@ apply_policy() {
         run_sbx policy allow network --sandbox "$name" "$allow" \
             >"$WORK/allow-$name.txt" 2>&1 || status=1
     fi
-    if [ -n "$deny" ]; then
-        run_sbx policy deny network --sandbox "$name" "$deny" \
-            >"$WORK/deny-$name.txt" 2>&1 || status=1
-    fi
+    # The profile's denies were applied at creation (create_pinned ... deny_flags), so they
+    # already held while the VM booted.
     run_sbx policy ls "$name" --json >"$WORK/effective-$name.json" 2>&1
     record "effective_${name}_exit" "$?"
     return $status
@@ -217,7 +215,8 @@ STUB
 
     # --- step 1: the login sandbox ----------------------------------------------------------------
     . gates/sbx_create.sh
-    create_pinned claude "$LOGIN_SANDBOX" "$KIT"
+    # shellcheck disable=SC2046
+    create_pinned claude "$LOGIN_SANDBOX" "$KIT" $(deny_flags "$POLICY_LOGIN_DENY")
     create_status=$?
     [ "$create_status" -eq 0 ] && : >"$WORK/created-$LOGIN_SANDBOX"
     [ "$create_status" -eq 0 ] || stop
@@ -277,7 +276,8 @@ run)
     # --- step 2: a completely fresh sandbox, no /login, no TTY, no API key -------------------------
     # Step 1's composition record (inspect-$LOGIN_SANDBOX.json) belongs to this same run.
     SBX_CREATE_KEEP_RECORDS=1 . gates/sbx_create.sh
-    create_pinned claude "$FRESH_SANDBOX" "$KIT"
+    # shellcheck disable=SC2046
+    create_pinned claude "$FRESH_SANDBOX" "$KIT" $(deny_flags "$POLICY_DENY")
     create_status=$?
     [ "$create_status" -eq 0 ] && : >"$WORK/created-$FRESH_SANDBOX"
     [ "$create_status" -eq 0 ] || stop

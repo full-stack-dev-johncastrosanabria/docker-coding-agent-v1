@@ -125,17 +125,9 @@ class G1aRecorder(unittest.TestCase):
         self._write("governance-before.json", governance)
         self._write("governance-after.json", governance)
 
-        image, digest = self.common.claude_base(self.versions)
-        pinned_ref = f"{image}@{digest}"
-        repository, _, tag = image.rpartition(":")
-        # The mutable tag may move; both create commands must use the immutable digest instead.
-        self._write("templates.json", {"images": [
-            {"repository": f"docker.io/{repository}", "tag": tag,
-             "id": "549730947ed8"}]})
+        # sbx's own composition record of each sandbox: the pinned workload plus the G6 kit.
         for sandbox in (LOGIN, FRESH):
-            self._write(f"create-{sandbox}.txt",
-                        f"── RESOLVE SETUP\n     image      {pinned_ref}\n"
-                        "   ✓ configuration resolved\n")
+            self._write_inspect(sandbox)
 
         # Step 1 proves the plan; the fresh sandbox reports null on the inherited path.
         self._write(f"auth-{LOGIN}.json", auth_doc(plan="pro"))
@@ -298,14 +290,26 @@ class G1aRecorder(unittest.TestCase):
         self.assertEqual(results["G1a.0e"], "FAIL")
         self.assertEqual(results["G1a.step2"], "NOT-RUN")
 
+    def _write_inspect(self, sandbox, kits=()):
+        image, digest = self.common.claude_base(self.versions)
+        self._write(f"inspect-{sandbox}.json", {
+            "name": sandbox, "host_mounts": [],
+            "kits": [f"{image}@{digest}", str(GATES / "G6" / "work" / "kit")]
+            if kits == () else kits})
+
     def test_15_a_substituted_base_fails(self):
-        self._write(f"create-{LOGIN}.txt", "image      docker/other:latest\n")
+        self._write_inspect(LOGIN, kits=["docker.io/sbx/claude:latest"])
         self.assertEqual(
             self._results(self._capture())["G1a.base"],
             "FAIL")
 
     def test_15_b_fresh_sandbox_must_use_the_pinned_digest(self):
-        self._write(f"create-{FRESH}.txt", "image      docker/other:latest\n")
+        image, _ = self.common.claude_base(self.versions)
+        self._write_inspect(FRESH, kits=[f"{image}@sha256:" + "0" * 64])
+        self.assertEqual(self._results(self._capture())["G1a.base"], "FAIL")
+
+    def test_15_d_a_sandbox_with_no_composition_record_fails(self):
+        (self.work / f"inspect-{FRESH}.json").unlink()
         self.assertEqual(self._results(self._capture())["G1a.base"], "FAIL")
 
     def test_15_c_a_changed_creation_request_fails_even_with_matching_logs(self):

@@ -91,18 +91,20 @@ def claude_base(versions):
     return base.get("base"), base.get("version")
 
 
-def base_identity_row(gate, obs, work, versions, observed_key=None):
+def base_identity_row(gate, obs, work, versions, names=None):
     """Every sandbox this gate created is exactly the pinned sandbox_bases.claude workload.
 
     gates/sbx_create.sh creates each sandbox from the digest-qualified workload and saves sbx's
     own composition record as inspect-<sandbox>.json. Every such record must list the pinned
     reference first and nothing but the G6 probe kit after it. No record at all fails: a gate
-    whose base cannot be shown is treated like one that used the wrong base.
+    whose base cannot be shown is treated like one that used the wrong base. `names` restricts
+    the judgement to those sandboxes, for a gate that also creates the other backend's.
     """
     reference = preflight_module.pinned_reference(versions, "claude")
     kit = os.path.join(ROOT, "gates", "G6", "work", "kit")
     records = sorted(name for name in (os.listdir(work) if os.path.isdir(work) else [])
-                     if name.startswith("inspect-") and name.endswith(".json"))
+                     if name.startswith("inspect-") and name.endswith(".json")
+                     and (names is None or name[len("inspect-"):-len(".json")] in names))
     problems = []
     for name in records:
         inspected = read_json(work, name)

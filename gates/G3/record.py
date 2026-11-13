@@ -255,7 +255,7 @@ def evaluate(obs, work, versions=None, g4_path=common.G4_EVIDENCE):
     preflight_ok = all(row[2] for row in rows)
 
     base = common.base_identity_row(GATE, obs, work, versions)
-    rows.append((*base, preflight_ok and "templates_exit" in obs))
+    rows.append((*base, preflight_ok and any(f"inspect_{n}_exit" in obs for n in SANDBOXES.values())))
     policy = common.policy_row(GATE, obs, "trusted", g4_path)
     rows.append((*policy, preflight_ok and "policy_allow" in obs))
     bindings_ok = preflight_ok and base[2] and policy[2]

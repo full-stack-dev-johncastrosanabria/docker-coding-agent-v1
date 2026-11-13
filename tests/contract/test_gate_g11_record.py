@@ -85,6 +85,14 @@ class G11Recorder(unittest.TestCase):
 
     # --- fixtures -------------------------------------------------------------------------------
 
+    def _write_inspect(self, sandbox, backend, kits=()):
+        """sbx's own composition record of a sandbox: the pinned workload plus the G6 kit."""
+        base = self.versions["sandbox_bases"][backend]
+        self._write(f"inspect-{sandbox}.json", {
+            "name": sandbox, "host_mounts": [],
+            "kits": [f"{base['base']}@{base['version']}", str(GATES / "G6" / "work" / "kit")]
+            if kits == () else kits})
+
     def _write(self, name, document):
         (self.work / name).write_text(
             document if isinstance(document, str) else json.dumps(document), encoding="utf-8")
@@ -132,14 +140,8 @@ class G11Recorder(unittest.TestCase):
         self._write("governance-before.json", governance)
         self._write("governance-after.json", governance)
 
-        images = []
-        for module in (self.claude, self.rec.codex):
-            image, digest = (module.claude_base(self.versions) if module is self.claude
-                             else module.codex_base(self.versions))
-            repository, _, tag = image.rpartition(":")
-            images.append({"repository": f"docker.io/{repository}", "tag": tag,
-                           "id": digest.removeprefix("sha256:")[:12]})
-        self._write("templates.json", {"images": images})
+        for backend in ("claude", "codex"):
+            self._write_inspect(f"dca-g11-{backend}", backend)
 
         for backend in ("claude", "codex"):
             self._write(f"vmstate-{backend}.txt",
@@ -154,7 +156,7 @@ class G11Recorder(unittest.TestCase):
             "pf_version_exit": "0", "pf_ssh_forwarding_exit": "0", "pf_ssh_socket_exit": "0",
             "pf_policy_exit": "0", "pf_ls_exit": "0",
             "governance_before_exit": "1", "governance_after_exit": "1",
-            "ls_after_exit": "0", "policy_after_exit": "0", "templates_exit": "0",
+            "ls_after_exit": "0", "policy_after_exit": "0", 
             "available_backends": "claude codex", "expected_tool_calls": "3",
         }
         for backend, module in (("claude", self.claude), ("codex", self.rec.codex)):
@@ -332,9 +334,8 @@ class G11Recorder(unittest.TestCase):
                 self.assertEqual(results["G11.invocation.codex"], "FAIL")
 
     def test_19_a_base_mismatch_fails(self):
-        results, _ = self._results(
-            self._capture(**{"sbx_resolved_base_claude": "docker/sandbox-templates:wrong"}))
-        self.assertEqual(results["G11.base"], "FAIL")
+        self._write_inspect("dca-g11-claude", "claude", kits=["docker.io/sbx/claude:latest"])
+        self.assertEqual(self._results()[0]["G11.base"], "FAIL")
 
     def test_20_one_backend_failing_does_not_fail_the_other(self):
         self._write_captures("claude", tool_calls=1)

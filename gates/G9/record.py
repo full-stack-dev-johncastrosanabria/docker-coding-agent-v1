@@ -134,7 +134,7 @@ def agent_answer(work, name):
     return "".join(parts) if parts else None
 
 
-def policy_log_hosts(work, name):
+def policy_log_hosts(work, name, sandbox=None):
     """{host: allowed} from one `sbx policy log --json` capture.
 
     The pinned sbx v0.53.0 emits two lists, `allowed` and `blocked`, each entry keyed by
@@ -143,9 +143,14 @@ def policy_log_hosts(work, name):
     the positive control and makes the whole gate look like a FAIL it is not.
 
     A host counts as allowed only when it appears under `allowed` AND traffic was actually
-    seen. A rule permitting a host is not evidence that the agent called it.
+    seen. A rule permitting a host is not evidence that the agent called it. With `sandbox`, only
+    that sandbox's own lifetime counts (preflight.policy_log_since): sbx keeps the log of an
+    earlier sandbox of the same name, and a stale entry must never satisfy the control.
     """
     document = claude.read_json(work, name)
+    if sandbox is not None:
+        document = claude.preflight_module.policy_log_since(
+            document, claude.read_json(work, f"inspect-{sandbox}.json"))
     if not isinstance(document, dict):
         return {}
     hosts = {}
@@ -155,7 +160,7 @@ def policy_log_hosts(work, name):
     for entry in document.get("allowed") or []:
         if not isinstance(entry, dict) or not isinstance(entry.get("host"), str):
             continue
-        count = entry.get("count_since")
+        count = entry.get("count", entry.get("count_since"))
         seen = True if count is None else isinstance(count, int) and count > 0
         host = entry["host"].split(":")[0]
         hosts[host] = hosts.get(host, False) or seen
@@ -252,8 +257,7 @@ def backend_rows(backend, obs, work, versions, probes, ran):
     host = obs.get(f"probe_host_{backend}")
     rows = []
 
-    base = module.base_identity_row(GATE, obs, work, versions,
-                                    observed_key=f"sbx_resolved_base_{backend}")
+    base = module.base_identity_row(GATE, obs, work, versions, names=[f"dca-g9-{backend}"])
     rows.append((*base, ran))
     policy_obs = dict(obs)
     policy_obs["policy_allow"] = obs.get(f"policy_allow_{backend}")
@@ -296,7 +300,7 @@ def backend_rows(backend, obs, work, versions, probes, ran):
 
     # --- the positive control ---------------------------------------------------------------------
     answer = agent_answer(work, f"control-{backend}.json")
-    hosts = policy_log_hosts(work, f"policylog-control-{backend}.json")
+    hosts = policy_log_hosts(work, f"policylog-control-{backend}.json", f"dca-g9-{backend}")
     control_problems = []
     if obs.get(f"control_{backend}_exit") != "0":
         control_problems.append(
