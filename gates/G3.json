@@ -1,19 +1,19 @@
 {
   "gate": "G3",
-  "status": "PASS",
-  "run_at": "2026-09-21T02:17:28Z",
+  "status": "FAIL",
+  "run_at": "2026-11-13T07:26:16Z",
   "versions": {
-    "sbx": "v0.43.0"
+    "sbx": "v0.53.0"
   },
   "provenance": {
-    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+    "runtime_versions_digest": "sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1"
   },
   "criteria": [
     {
       "id": "G3.0a",
       "description": "sbx client and server still match the pinned exact version and the server is running",
       "result": "PASS",
-      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 running"
+      "evidence_ref": "pin v0.53.0, client v0.53.0, server v0.53.0 running"
     },
     {
       "id": "G3.0b",
@@ -41,9 +41,9 @@
     },
     {
       "id": "G3.base",
-      "description": "every sandbox in this gate came from the exact pinned sandbox_bases.codex base: the reference sbx resolved, the cached template's repository, tag and image id, and the pinned digest all agree; no base was discovered or substituted",
+      "description": "every sandbox in this gate was created from the exact pinned sandbox_bases.codex workload, by digest, and sbx's own inspect record shows that composition and nothing else; no base was discovered or substituted",
       "result": "PASS",
-      "evidence_ref": "pinned docker/sandbox-templates:docker-agent-docker sha256:6a1b26c279bb74321e8cf9599e8d19732a3354814a6ca446a5251702c58ea90b; sbx resolved docker/sandbox-templates:docker-agent-docker; cached template docker.io/docker/sandbox-templates:docker-agent-docker id 6a1b26c279bb"
+      "evidence_ref": "pinned docker.io/sbx/shell@sha256:89ed5d63def6bfb2373d408e3ab6ad55aa5c010f884a182a78299fcf85ea42d1; 1 sandbox record(s); every composition matches"
     },
     {
       "id": "G3.policy",
@@ -54,74 +54,74 @@
     {
       "id": "G3.model",
       "description": "the model this gate ran is one the BACKEND actually accepts, not merely one the provider lists: candidates from the pinned artifact are tried against the real endpoint in T019's preference order, the first acceptance is taken, it is a non-deprecated GPT-5.x, and both runs reported that exact model and the native chatgpt provider. An older family is never selected to make the gate pass and no second provider is introduced",
-      "result": "PASS",
-      "evidence_ref": "`docker agent models` lists ['gpt-5.6']; the backend accepted gpt-5.5 and rejected ['gpt-5.6']; both runs reported provider chatgpt model gpt-5.5; fallback_applied True - the preferred gpt-5.6 is LISTED by `docker agent models` and marked default, but the backend REJECTED it: The 'gpt-5.6' model is not supported when using Codex with a ChatGPT account.. T019's documented fallback selected gpt-5.5, the first candidate the backend accepted in preference order; it also rejected ['gpt-5.6']"
+      "result": "FAIL",
+      "evidence_ref": "the backend rejected every candidate it was asked about (['gpt-5.6', 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex', 'gpt-5-codex']), so no non-deprecated GPT-5.x model is usable"
     },
     {
       "id": "G3.no-api-key",
       "description": "the run authenticated from the developer's subscription OAuth credential, not from a provider API key: the host has no API-key variable, this gate sets none, and the decisive negative control holds - with the credential absent the identical task fails. Variables the sandbox base declares itself are recorded by name and emptiness, never by value",
-      "result": "PASS",
-      "evidence_ref": "host: all absent; in-VM classification {'OPENAI_API_KEY': 'present', 'OPENAI_BASE_URL': 'absent', 'OPENAI_ORG_ID': 'absent', 'ANTHROPIC_API_KEY': 'present', 'ANTHROPIC_AUTH_TOKEN': 'absent', 'CLAUDE_API_KEY': 'absent'}; negative control with no credential exited '1' without the marker"
+      "result": "FAIL",
+      "evidence_ref": "b: the VM state could not be read; the no-credential negative control was never run, so nothing shows the run depended on the OAuth credential rather than on the environment"
     },
     {
       "id": "G3.pinned-binary",
       "description": "the docker-agent that actually ran in both sandboxes is the pinned artifact: the binary attempts a self-update at startup, so the version it reports afterwards is what proves the pin held rather than the kit's install step alone",
-      "result": "PASS",
-      "evidence_ref": "both sandboxes ran the pinned docker-agent v1.136.0"
+      "result": "FAIL",
+      "evidence_ref": "b: the in-VM docker-agent reported None, not the pinned 'v1.160.0'"
     },
     {
       "id": "G3.minimal-credential",
       "description": "the trusted fallback copied ONLY chatgpt-auth.json: the staged directory and the in-VM config directory each hold exactly that one file, and the marker files of a full ~/.config/cagent copy are absent, so no .env, cache or unrelated state travelled with it",
-      "result": "PASS",
-      "evidence_ref": "staged 1 entry (chatgpt-auth.json); both VM config dirs hold exactly it, mode 600 owner agent:agent; host ~/.config/cagent had 4 entries and was not copied"
+      "result": "FAIL",
+      "evidence_ref": "b: the VM state could not be read"
     },
     {
       "id": "G3.fresh-sandboxes",
       "description": "TWO CONSECUTIVE completely fresh sandboxes each ran the native task successfully and non-interactively - stdin from /dev/null and not a TTY - with the second created only after the first was removed by name, so only one was ever live",
-      "result": "PASS",
-      "evidence_ref": "both sandboxes (dca-g3-a, dca-g3-b) answered DCA-G3-OK with stdin not a TTY; each was created with zero sandboxes present and removed by name"
+      "result": "NOT-RUN",
+      "evidence_ref": "this step did not run, because an earlier one did not hold (fail-closed)"
     },
     {
       "id": "G3.approval-allow",
       "description": "an explicit pre_tool_use allow decision lets the write execute, exactly once",
-      "result": "PASS",
-      "evidence_ref": "file_exists=yes, marker_lines=1 (expected written once)"
+      "result": "NOT-RUN",
+      "evidence_ref": "this step did not run, because an earlier one did not hold (fail-closed)"
     },
     {
       "id": "G3.approval-exit2",
       "description": "a pre_tool_use hook that exits 2 blocks the call, and the file is never created",
-      "result": "PASS",
-      "evidence_ref": "file_exists=no, marker_lines=0 (expected never written)"
+      "result": "NOT-RUN",
+      "evidence_ref": "this step did not run, because an earlier one did not hold (fail-closed)"
     },
     {
       "id": "G3.approval-no-decision",
       "description": "a hook that runs and succeeds but expresses NO decision does not allow the call: absence of a decision falls through to confirmation, which --exec refuses",
-      "result": "PASS",
-      "evidence_ref": "file_exists=no, marker_lines=0 (expected never written)"
+      "result": "NOT-RUN",
+      "evidence_ref": "this step did not run, because an earlier one did not hold (fail-closed)"
     },
     {
       "id": "G3.approval-hostile",
       "description": "a user config asking for safety: autonomous and yolo: true does not defeat the command line: the session still runs strict, so the exit-2 hook is still consulted and still blocks",
-      "result": "PASS",
-      "evidence_ref": "file_exists=no, marker_lines=0 (expected never written)"
+      "result": "NOT-RUN",
+      "evidence_ref": "this step did not run, because an earlier one did not hold (fail-closed)"
     },
     {
       "id": "G3.strict",
       "description": "every native invocation passed --safety strict on the command line rather than relying on a config default, and that mode actually held: the hostile user config really did ask for autonomous and yolo, and the hook was still consulted and still blocked. No weaker mode was substituted anywhere",
-      "result": "PASS",
-      "evidence_ref": "--safety strict on every invocation; the hostile config asked for safety=autonomous yolo=true and lost"
+      "result": "NOT-RUN",
+      "evidence_ref": "this step did not run, because an earlier one did not hold (fail-closed)"
     },
     {
       "id": "G3.refresh",
       "description": "whether the trusted token-file fallback needs auth.openai.com INSIDE the VM is recorded from runtime behavior, not from documentation: the host stays host-oauth-login/sandbox_required=false, it is explicitly denied to both sandboxes, and both native runs still succeeded - so no promotion is justified by this gate",
-      "result": "PASS",
-      "evidence_ref": "auth.openai.com denied to both sandboxes and both native runs succeeded anyway; inventory still host-oauth-login/sandbox_required=False, profiles []"
+      "result": "NOT-RUN",
+      "evidence_ref": "this step did not run, because an earlier one did not hold (fail-closed)"
     },
     {
       "id": "G3.credential-hygiene",
       "description": "the credential was staged only in a mode-0700 directory OUTSIDE the repository and that directory was removed on exit, so no copy of the token file remains in the tree and none of its contents, digests or headers was ever read or recorded",
-      "result": "PASS",
-      "evidence_ref": "the staging directory was removed; evidence records only presence, mode, owner and entry names"
+      "result": "FAIL",
+      "evidence_ref": "the staged credential directory was reported as None"
     },
     {
       "id": "G3.fingerprint",
@@ -132,27 +132,32 @@
     {
       "id": "G3.clean",
       "description": "every sandbox this gate created was removed by name, none remains, and the global network baseline is intact afterwards",
-      "result": "PASS",
-      "evidence_ref": "removals [('dca-g3-a', '0'), ('dca-g3-b', '0')], remaining [], global network rules after: ['default-deny-all']"
+      "result": "FAIL",
+      "evidence_ref": "removals [('dca-g3-a', '-')], remaining [], global network rules after: ['default-deny-all']"
     }
   ],
   "codex_backend": {
     "provider": "chatgpt",
-    "selected_model": "gpt-5.5",
-    "model_fallback_applied": true,
-    "model_selection_reason": "the preferred gpt-5.6 is LISTED by `docker agent models` and marked default, but the backend REJECTED it: The 'gpt-5.6' model is not supported when using Codex with a ChatGPT account.. T019's documented fallback selected gpt-5.5, the first candidate the backend accepted in preference order; it also rejected ['gpt-5.6']",
+    "selected_model": null,
+    "model_fallback_applied": false,
+    "model_selection_reason": "the backend rejected every candidate it was asked about (['gpt-5.6', 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex', 'gpt-5-codex']), so no non-deprecated GPT-5.x model is usable",
     "listed_models": [
       "gpt-5.6"
     ],
-    "backend_accepted_models": [
-      "gpt-5.5"
-    ],
+    "backend_accepted_models": [],
     "backend_rejected_models": [
-      "gpt-5.6"
+      "gpt-5.6",
+      "gpt-5.5",
+      "gpt-5.4",
+      "gpt-5.3-codex",
+      "gpt-5.2-codex",
+      "gpt-5.1-codex-max",
+      "gpt-5.1-codex",
+      "gpt-5-codex"
     ],
     "safety": "strict",
-    "token_file_fallback_proven": true,
-    "in_vm_refresh_required": false,
+    "token_file_fallback_proven": false,
+    "in_vm_refresh_required": null,
     "refresh_candidate": {
       "host": "auth.openai.com",
       "purpose": "host-oauth-login",
@@ -160,7 +165,7 @@
       "profiles": []
     }
   },
-  "fallback_applied": "model gpt-5.5",
+  "fallback_applied": null,
   "notes": "Native ChatGPT availability and the trusted token-file fallback, proven in TWO CONSECUTIVE completely fresh mountless sandboxes created with --skills off from the exact pinned sandbox_bases.codex base, under the network policy accepted G4 proved for codex/trusted, with only one sandbox live at a time. The model is the one the signed-in plan actually lists, read from the provider rather than asserted; T019's fallback would accept only a non-deprecated GPT-5.x. Provisioning copies ONLY chatgpt-auth.json, never the full ~/.config/cagent: the staged directory and the in-VM config directory each hold exactly that one file and the markers of a full copy are absent. The credential is staged in a mode-0700 directory OUTSIDE the repository and removed on every exit path; no token value, partial value, digest, Authorization header, cookie or file content is ever read or recorded - only presence, mode, owner, entry names and counts. Every invocation passes --safety strict on the command line rather than relying on a config default. The approval matrix is decided by what happened to the workspace file, not by what the run reported: an explicit allow writes it exactly once, an exit-2 hook does not, a hook expressing NO decision does not, and a user config asking for safety: autonomous and yolo: true does not - which is the behavioral proof that strict held, because under autonomous the hook would never have been consulted. Whether the fallback needs auth.openai.com inside the VM is OBSERVED: that host is explicitly denied to both sandboxes and both runs still succeeded, so no promotion is justified here and it stays host-oauth-login/sandbox_required=false. Every rule this gate added carried --sandbox; the global fingerprint is captured with zero sandboxes before and after; sbx policy init, sbx reset and sbx rm --all are never called. Both sandboxes were removed by name.",
   "network_policy_fingerprint": "sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697"
 }
