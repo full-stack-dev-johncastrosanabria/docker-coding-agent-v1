@@ -1,6 +1,6 @@
 # Gate review — architectural eligibility
 
-Generated `2026-11-13T08:30:28Z` from the committed evidence in `gates/`, bound to
+Generated `2026-11-13T08:32:44Z` from the committed evidence in `gates/`, bound to
 `runtime/versions.yaml` digest `sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1`.
 Re-run with `python3 gates/review.py`; T062 and T073 re-run it as their evidence lands.
 
@@ -65,7 +65,7 @@ override G2** — untrusted eligibility needs both.
 
 ## 9. Production conformance
 
-- **claude T062**: **NOT-RUN**.
+- **claude T062**: **PASS**.
 - **codex T062**: **PASS**.
 
 ## 10. Accepted architectural risks and fallbacks
@@ -98,7 +98,7 @@ override G2** — untrusted eligibility needs both.
 | G1d | PASS | claude |
 | G9 | FAIL | claude |
 | G11 | PARTIAL — part A only; `gates/G11.json` is PARTIAL until T073 | claude |
-| PRODUCTION-CONFORMANCE | NOT-RUN | claude |
+| PRODUCTION-CONFORMANCE | PASS | claude |
 | G3 | PASS | codex |
 | G2 | FAIL | codex |
 | G9 | PASS | codex |

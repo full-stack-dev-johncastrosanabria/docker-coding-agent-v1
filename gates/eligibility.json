@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-13T08:30:28Z",
+  "generated_at": "2026-11-13T08:32:44Z",
   "pinned_versions": {
     "docker_agent": "v1.160.0",
     "docker_agent_config_version": 15,
@@ -42,7 +42,7 @@
         "G9": "FAIL",
         "G11": "PARTIAL"
       },
-      "production_conformance": "NOT-RUN",
+      "production_conformance": "PASS",
       "fallbacks_applied": []
     },
     "codex": {
