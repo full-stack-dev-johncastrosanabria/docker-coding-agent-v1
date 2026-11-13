@@ -1,25 +1,25 @@
 {
   "gate": "G2",
   "status": "FAIL",
-  "run_at": "2026-09-21T03:22:53Z",
+  "run_at": "2026-11-13T07:54:36Z",
   "versions": {
-    "sbx": "v0.43.0"
+    "sbx": "v0.53.0"
   },
   "provenance": {
-    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+    "runtime_versions_digest": "sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1"
   },
   "criteria": [
     {
       "id": "G2.g3",
       "description": "T022 runs only on a current G3 PASS, and it runs the model G3 proved the backend actually accepts - a stale or failed G3 is never interpreted as permission to proceed",
       "result": "PASS",
-      "evidence_ref": "G3 is a current PASS and verified the model gpt-5.5"
+      "evidence_ref": "G3 is a current PASS and verified the model gpt-6.1-sol"
     },
     {
       "id": "G2.0a",
       "description": "sbx client and server still match the pinned exact version and the server is running",
       "result": "PASS",
-      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 running"
+      "evidence_ref": "pin v0.53.0, client v0.53.0, server v0.53.0 running"
     },
     {
       "id": "G2.0b",
@@ -47,9 +47,9 @@
     },
     {
       "id": "G2.base",
-      "description": "every sandbox in this gate came from the exact pinned sandbox_bases.codex base: the reference sbx resolved, the cached template's repository, tag and image id, and the pinned digest all agree; no base was discovered or substituted",
+      "description": "every sandbox in this gate was created from the exact pinned sandbox_bases.codex workload, by digest, and sbx's own inspect record shows that composition and nothing else; no base was discovered or substituted",
       "result": "PASS",
-      "evidence_ref": "pinned docker/sandbox-templates:docker-agent-docker sha256:6a1b26c279bb74321e8cf9599e8d19732a3354814a6ca446a5251702c58ea90b; sbx resolved docker/sandbox-templates:docker-agent-docker; cached template docker.io/docker/sandbox-templates:docker-agent-docker id 6a1b26c279bb"
+      "evidence_ref": "pinned docker.io/sbx/shell@sha256:89ed5d63def6bfb2373d408e3ab6ad55aa5c010f884a182a78299fcf85ea42d1; 2 sandbox record(s); every composition matches"
     },
     {
       "id": "G2.policy",
@@ -91,7 +91,7 @@
       "id": "G2.pinned-binary",
       "description": "the docker-agent that actually ran in both sandboxes is the pinned artifact, reported after its startup self-update attempt",
       "result": "PASS",
-      "evidence_ref": "both sandboxes ran the pinned docker-agent v1.136.0"
+      "evidence_ref": "both sandboxes ran the pinned docker-agent v1.160.0"
     },
     {
       "id": "G2.fingerprint",
@@ -108,7 +108,7 @@
   ],
   "codex_backend": {
     "provider": "chatgpt",
-    "selected_model": "gpt-5.5",
+    "selected_model": "gpt-6.1-sol",
     "model_fallback_applied": false,
     "model_selection_reason": "not selected here: G2 runs the model G3 verified the backend accepts",
     "safety": "strict",
