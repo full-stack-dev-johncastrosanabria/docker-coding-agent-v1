@@ -1266,7 +1266,7 @@ class G4Recorder(unittest.TestCase):
             self.assertIn("--sandbox", line, line)
         # The explicit denies are creation-time, sandbox-scoped flags, so they hold while the VM
         # boots; a later `sbx policy deny` would miss the kit's startup traffic.
-        self.assertIn("--deny-network", body)
+        self.assertIn('deny_flags "$deny"', body)
         self.assertNotIn("policy deny network", body)
 
         # Mountless, skill-less sandboxes from the pinned workload (gates/sbx_create.sh defaults
