@@ -39,7 +39,8 @@ BOOTSTRAP_RULE = preflight_module.BOOTSTRAP_RULE
 bootstrap_rule_matches = preflight_module.bootstrap_rule_matches
 template_identity_matches = preflight_module.template_identity_matches
 
-DOCKER_AGENT_VERSION = "v1.136.0"
+with open(VERSIONS, encoding="utf-8") as _pins_file:
+    DOCKER_AGENT_VERSION = json.load(_pins_file)["docker_agent"]
 SSH_KEY = "ssh.agentForwardingEnabled"
 BACKENDS = (("claude", "dca-g6-claude"), ("codex", "dca-g6-codex"))
 PREFLIGHT = ("G6.0a", "G6.0b", "G6.0c")
@@ -112,6 +113,8 @@ def parse_version(text):
 
 def sandboxes(listing):
     """The sandbox entries of an `sbx ls --json` document, or None for an unexpected shape."""
+    if isinstance(listing, list):
+        return listing
     if isinstance(listing, dict) and set(listing) == {"sandboxes"} and isinstance(listing["sandboxes"], list):
         return listing["sandboxes"]
     return None

@@ -21,7 +21,9 @@ GATES = ROOT / "gates"
 SSH_KEY = "ssh.agentForwardingEnabled"
 ARTIFACT_SHA = "a" * 64
 ARTIFACT_URL = (
-    "https://github.com/docker/docker-agent/releases/download/v1.136.0/docker-agent-linux-arm64"
+    "https://github.com/docker/docker-agent/releases/download/"
+    + json.loads((ROOT / "runtime" / "versions.yaml").read_text())["docker_agent"]
+    + "/docker-agent-linux-arm64"
 )
 CLAUDE_DIGEST = "sha256:94670d5b2a24" + "0" * 52
 CODEX_DIGEST = "sha256:6a1b26c279bb" + "0" * 52
@@ -55,7 +57,7 @@ class G6Recorder(unittest.TestCase):
         pins = json.loads(self.versions_before)
 
         probe = {
-            "docker_agent_version": "v1.136.0",
+            "docker_agent_version": pins["docker_agent"],
             "docker_agent_sha256": ARTIFACT_SHA,
             "python3_path": "/usr/bin/python3",
             "python3_min_exit": "0",

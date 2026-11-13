@@ -1,0 +1,201 @@
+{
+  "gate": "G4",
+  "status": "PASS",
+  "run_at": "2026-09-20T21:26:33Z",
+  "versions": {
+    "sbx": "v0.43.0"
+  },
+  "provenance": {
+    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+  },
+  "criteria": [
+    {
+      "id": "G4.0a",
+      "description": "sbx client and server still match the pinned exact version and the server is running",
+      "result": "PASS",
+      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 running"
+    },
+    {
+      "id": "G4.0b",
+      "description": "the SSH-agent baseline still refuses nothing, and SSH_AUTH_SOCK is removed from every sbx call",
+      "result": "PASS",
+      "evidence_ref": "refusals none, SSH_AUTH_SOCK in the sbx environment: removed"
+    },
+    {
+      "id": "G4.0c",
+      "description": "the global network policy is exactly the G0 bootstrap deny-all rule, which G4 evaluates rather than trusts",
+      "result": "PASS",
+      "evidence_ref": "1 network rule(s): ['default-deny-all']"
+    },
+    {
+      "id": "G4.0d",
+      "description": "no sandbox exists before G4 creates one, so the fingerprint is read from a clean global state",
+      "result": "PASS",
+      "evidence_ref": "sbx ls --json: []"
+    },
+    {
+      "id": "G4.inputs",
+      "description": "the T014 artifacts this matrix derives from are the reviewed, committed ones: each is tracked and clean in git when the gate starts, the T014 gate evidence itself is a current PASS, and the digest of every input is recorded in the evidence, so a later edit cannot silently produce a different allow set",
+      "result": "PASS",
+      "evidence_ref": "control_plane_hosts sha256:d89d73b864c15fb4ae95c97cb663f3a60ae919eeac47a1fc0dbd01b0de5eb0df, inventory_evidence sha256:ee9e5a0ce22b22156d80276ec6ad48c59cde15fda5abbdd565de05b66a4c3280, trusted_allowlist_draft sha256:ae83c2f01bcc6f08627c43e868a55d08d76220944b1dcee430677a00995a68bb"
+    },
+    {
+      "id": "G4.matrix",
+      "description": "the G4 matrix derives from the committed T014 inventory and trusted-allowlist draft: required hosts are the entries the inventory marks sandbox_required, the trusted profile exercises every declared draft candidate, and everything else those documents name is must-deny",
+      "result": "PASS",
+      "evidence_ref": "4 cells; 11 trusted candidates exercised (registry.npmjs.org, pypi.org, files.pythonhosted.org, proxy.golang.org, crates.io, static.crates.io, github.com, codeload.github.com, objects.githubusercontent.com, code.claude.com, docs.claude.com); untrusted grant pypi.org"
+    },
+    {
+      "id": "G4.claude.trusted.effective",
+      "description": "claude / trusted: every active network rule in the effective policy is accounted for - no wildcard or unknown allow, no global allow, no rule from another sandbox, and every kit allow outside the profile is neutralized by an explicit sandbox-scoped deny",
+      "result": "PASS",
+      "evidence_ref": "18 network rule(s) inspected; every allow is either permitted by the profile or neutralized (5 explicit deny/denies present)"
+    },
+    {
+      "id": "G4.claude.trusted",
+      "description": "claude / trusted: every destination agrees across the policy check, a real connection attempt and the policy log",
+      "result": "PASS",
+      "evidence_ref": "22 destinations verified on three surfaces (12 permitted, 10 denied)"
+    },
+    {
+      "id": "G4.claude.trusted.exact",
+      "description": "claude / trusted: the sandbox reached nothing beyond the destinations this profile permits",
+      "result": "PASS",
+      "evidence_ref": "no destination outside the permitted set was reached"
+    },
+    {
+      "id": "G4.claude.untrusted.effective",
+      "description": "claude / untrusted: every active network rule in the effective policy is accounted for - no wildcard or unknown allow, no global allow, no rule from another sandbox, and every kit allow outside the profile is neutralized by an explicit sandbox-scoped deny",
+      "result": "PASS",
+      "evidence_ref": "9 network rule(s) inspected; every allow is either permitted by the profile or neutralized (6 explicit deny/denies present)"
+    },
+    {
+      "id": "G4.claude.untrusted",
+      "description": "claude / untrusted: every destination agrees across the policy check, a real connection attempt and the policy log",
+      "result": "PASS",
+      "evidence_ref": "22 destinations verified on three surfaces (2 permitted, 20 denied)"
+    },
+    {
+      "id": "G4.claude.untrusted.exact",
+      "description": "claude / untrusted: the sandbox reached nothing beyond the destinations this profile permits",
+      "result": "PASS",
+      "evidence_ref": "no destination outside the permitted set was reached"
+    },
+    {
+      "id": "G4.codex.trusted.effective",
+      "description": "codex / trusted: every active network rule in the effective policy is accounted for - no wildcard or unknown allow, no global allow, no rule from another sandbox, and every kit allow outside the profile is neutralized by an explicit sandbox-scoped deny",
+      "result": "PASS",
+      "evidence_ref": "12 network rule(s) inspected; every allow is either permitted by the profile or neutralized (0 explicit deny/denies present)"
+    },
+    {
+      "id": "G4.codex.trusted",
+      "description": "codex / trusted: every destination agrees across the policy check, a real connection attempt and the policy log",
+      "result": "PASS",
+      "evidence_ref": "22 destinations verified on three surfaces (12 permitted, 10 denied)"
+    },
+    {
+      "id": "G4.codex.trusted.exact",
+      "description": "codex / trusted: the sandbox reached nothing beyond the destinations this profile permits",
+      "result": "PASS",
+      "evidence_ref": "no destination outside the permitted set was reached"
+    },
+    {
+      "id": "G4.codex.untrusted.effective",
+      "description": "codex / untrusted: every active network rule in the effective policy is accounted for - no wildcard or unknown allow, no global allow, no rule from another sandbox, and every kit allow outside the profile is neutralized by an explicit sandbox-scoped deny",
+      "result": "PASS",
+      "evidence_ref": "2 network rule(s) inspected; every allow is either permitted by the profile or neutralized (0 explicit deny/denies present)"
+    },
+    {
+      "id": "G4.codex.untrusted",
+      "description": "codex / untrusted: every destination agrees across the policy check, a real connection attempt and the policy log",
+      "result": "PASS",
+      "evidence_ref": "22 destinations verified on three surfaces (2 permitted, 20 denied)"
+    },
+    {
+      "id": "G4.codex.untrusted.exact",
+      "description": "codex / untrusted: the sandbox reached nothing beyond the destinations this profile permits",
+      "result": "PASS",
+      "evidence_ref": "no destination outside the permitted set was reached"
+    },
+    {
+      "id": "G4.kit-override",
+      "description": "a sandbox-scoped deny overrides the built-in kit's non-removable allow, computed per profile: every kit host a profile does not permit is denied by an explicit local rule, not merely absent from an allowlist",
+      "result": "PASS",
+      "evidence_ref": "11 kit-allowed host(s) explicitly denied across the claude cells: trusted/bridge.claudeusercontent.com, trusted/claude.com, trusted/downloads.claude.ai, trusted/mcp-proxy.anthropic.com, trusted/platform.claude.com, untrusted/bridge.claudeusercontent.com, untrusted/claude.com, untrusted/code.claude.com, untrusted/downloads.claude.ai, untrusted/mcp-proxy.anthropic.com, untrusted/platform.claude.com"
+    },
+    {
+      "id": "G4.no-promotion",
+      "description": "auth.openai.com and platform.claude.com stay must-deny in every cell: neither is promoted without the runtime evidence its documented promotion path requires",
+      "result": "PASS",
+      "evidence_ref": "both denied in all four cells, on the policy check and in the log"
+    },
+    {
+      "id": "G4.governance",
+      "description": "the global governance status is observed as a typed boolean before and after the run, from the recorded probe document rather than a scraped string, and is unchanged: an unread governance status is never folded into the fingerprint",
+      "result": "PASS",
+      "evidence_ref": "governance.active before False, after False"
+    },
+    {
+      "id": "G4.fingerprint",
+      "description": "the global network-policy fingerprint is recorded as a typed field and is unchanged: G4 mutated nothing global, and every rule it added was sandbox-scoped",
+      "result": "PASS",
+      "evidence_ref": "network_policy_fingerprint sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697; after the run sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697"
+    },
+    {
+      "id": "G4.clean",
+      "description": "every G4 sandbox was removed by name, none remains, and the sandbox-scoped rules went with them",
+      "result": "PASS",
+      "evidence_ref": "removals ['0', '0', '0', '0'], remaining [], global network rules after: ['default-deny-all']"
+    }
+  ],
+  "fallback_applied": null,
+  "notes": "Effective per-sandbox network policy, proven for all four {claude, codex} x {trusted, untrusted} cells on four surfaces that must agree: the effective rule set itself, the policy check, a real in-sandbox connection attempt, and the policy log. The effective rule set is inspected rule by rule, because the other three only ever speak about destinations G4 thought to probe and so cannot detect a latent allow. The matrix is derived from the committed T014 inventory and trusted-allowlist draft rather than restated, and the trusted profile exercises every declared draft candidate. Claude's built-in kit allows seven hosts and its rule is editable:false, so the hosts a profile does not permit are denied by explicit sandbox-scoped rules, computed per profile; Codex's base contributes no network allow at all, so chatgpt.com is added explicitly. auth.openai.com and platform.claude.com stay must-deny in every cell. Untrusted cells get the control plane plus a single named granted host and nothing else, so untrusted never inherits the trusted allowlist. Every rule G4 added carried --sandbox; the global fingerprint is captured with zero sandboxes before and after and recorded as the typed network_policy_fingerprint field; this gate run itself never calls sbx policy init, sbx reset or sbx rm --all. Sandboxes are mountless, created with --skills off and removed one at a time by name. The proven allow set per backend and profile - T051's input, and the subset T061 checks against - is the typed proven_network_allowset field, written only on PASS; it is never recorded as prose, and a FAIL carries no proven set at all.",
+  "inventory_inputs": {
+    "inventory_evidence_sha256": "sha256:ee9e5a0ce22b22156d80276ec6ad48c59cde15fda5abbdd565de05b66a4c3280",
+    "control_plane_hosts_sha256": "sha256:d89d73b864c15fb4ae95c97cb663f3a60ae919eeac47a1fc0dbd01b0de5eb0df",
+    "trusted_allowlist_draft_sha256": "sha256:ae83c2f01bcc6f08627c43e868a55d08d76220944b1dcee430677a00995a68bb"
+  },
+  "network_policy_fingerprint": "sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697",
+  "proven_network_allowset": {
+    "claude": {
+      "trusted": [
+        "api.anthropic.com",
+        "code.claude.com",
+        "codeload.github.com",
+        "crates.io",
+        "docs.claude.com",
+        "files.pythonhosted.org",
+        "github.com",
+        "objects.githubusercontent.com",
+        "proxy.golang.org",
+        "pypi.org",
+        "registry.npmjs.org",
+        "static.crates.io"
+      ],
+      "untrusted": [
+        "api.anthropic.com",
+        "pypi.org"
+      ]
+    },
+    "codex": {
+      "trusted": [
+        "chatgpt.com",
+        "code.claude.com",
+        "codeload.github.com",
+        "crates.io",
+        "docs.claude.com",
+        "files.pythonhosted.org",
+        "github.com",
+        "objects.githubusercontent.com",
+        "proxy.golang.org",
+        "pypi.org",
+        "registry.npmjs.org",
+        "static.crates.io"
+      ],
+      "untrusted": [
+        "chatgpt.com",
+        "pypi.org"
+      ]
+    }
+  }
+}

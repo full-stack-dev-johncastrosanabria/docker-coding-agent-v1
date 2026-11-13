@@ -1,16 +1,16 @@
 {
   "claude_code": {
-    "exact": "2.1.278",
+    "exact": "2.1.323",
     "tested": "2.1.277"
   },
-  "docker_agent": "v1.136.0",
+  "docker_agent": "v1.160.0",
   "docker_agent_artifact": {
-    "sha256": "a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623",
-    "url": "https://github.com/docker/docker-agent/releases/download/v1.136.0/docker-agent-linux-arm64",
+    "sha256": "7ff167391f6f1267d8a1d3ef62856c1a8b7bb99713ffc5bc3702c3b3fcd082ef",
+    "url": "https://github.com/docker/docker-agent/releases/download/v1.160.0/docker-agent-linux-arm64",
     "verification": "release-asset-digest"
   },
   "docker_agent_config_version": 15,
-  "harness_module": "github.com/rumpl/harness@9376b9c76461",
+  "harness_module": "github.com/rumpl/harness@04282da16ab5",
   "sandbox_bases": {
     "claude": {
       "base": "docker/sandbox-templates:claude-code-docker",
@@ -22,7 +22,7 @@
     }
   },
   "sbx": {
-    "exact": "v0.43.0",
+    "exact": "v0.53.0",
     "minimum": "0.43.0"
   }
 }

@@ -1,0 +1,99 @@
+{
+  "gate": "G8",
+  "status": "PASS",
+  "run_at": "2026-09-20T03:31:08Z",
+  "versions": {
+    "sbx": "v0.43.0"
+  },
+  "provenance": {
+    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+  },
+  "criteria": [
+    {
+      "id": "G8.0a",
+      "description": "sbx client and server still match the pinned exact version and the server is running",
+      "result": "PASS",
+      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 state running, exit 0"
+    },
+    {
+      "id": "G8.0b",
+      "description": "the accepted SSH baseline is unchanged: forwarding false and no fixed agent socket",
+      "result": "PASS",
+      "evidence_ref": "ssh.agentForwardingEnabled=False, ssh.agentSocketPath='', detector refusals none, host SSH_AUTH_SOCK as seen by sbx removed"
+    },
+    {
+      "id": "G8.0c",
+      "description": "global network policy is still exactly the post-G0 bootstrap baseline (unrepaired)",
+      "result": "PASS",
+      "evidence_ref": "exit 0, 1 network rule(s) [{'id': 'default-deny-all', 'scope': 'global', 'applies_to': 'all', 'resource_type': 'network', 'decision': 'deny', 'resources': ['**'], 'origin': 'local', 'layer': 'local', 'status': 'active'}]"
+    },
+    {
+      "id": "G8.claude.create",
+      "description": "claude: mountless sandbox with --skills=off from the exact pinned base",
+      "result": "PASS",
+      "evidence_ref": "create exit 0, probe exit 0, sbx resolved docker/sandbox-templates:claude-code-docker (pin docker/sandbox-templates:claude-code-docker), cached template docker.io/docker/sandbox-templates tag claude-code-docker image id 94670d5b2a24 prefixing the pinned digest sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2, workspace 'none · no workspace bind mount'"
+    },
+    {
+      "id": "G8.claude.store",
+      "description": "claude: the Docker Sandboxes shared skills store is not mounted",
+      "result": "PASS",
+      "evidence_ref": "18 mounts, none under a skills path (no skill-path mount targets); discovered skill directories [('/opt/dca/skills', 0)]; failures none"
+    },
+    {
+      "id": "G8.claude.skills",
+      "description": "claude: exactly the two G6 probe skills, and no other skill anywhere",
+      "result": "PASS",
+      "evidence_ref": "/opt/dca/skills: dca-probe-one dca-probe-two; other discovered directories []; speckit-* paths 0; failures none"
+    },
+    {
+      "id": "G8.claude.control",
+      "description": "claude: a --skills=readonly control records whether a store mount is observable here",
+      "result": "PASS",
+      "evidence_ref": "control sandbox dca-g8-claude-control: create exit 0, probe exit 0, skills-path mount targets '/home/agent/.claude/skills', mounted skill directories ['/home/agent/.claude/skills']; host shared store holds 0 skills. The mount is observable at readonly and absent at off, so the --skills=off observation for this base is a differential, not a bare negative"
+    },
+    {
+      "id": "G8.claude.cleanup",
+      "description": "claude: both sandboxes were removed by name",
+      "result": "PASS",
+      "evidence_ref": "sbx rm --force dca-g8-claude exit 0, dca-g8-claude-control exit 0"
+    },
+    {
+      "id": "G8.codex.create",
+      "description": "codex: mountless sandbox with --skills=off from the exact pinned base",
+      "result": "PASS",
+      "evidence_ref": "create exit 0, probe exit 0, sbx resolved docker/sandbox-templates:docker-agent-docker (pin docker/sandbox-templates:docker-agent-docker), cached template docker.io/docker/sandbox-templates tag docker-agent-docker image id 6a1b26c279bb prefixing the pinned digest sha256:6a1b26c279bb74321e8cf9599e8d19732a3354814a6ca446a5251702c58ea90b, workspace 'none · no workspace bind mount'"
+    },
+    {
+      "id": "G8.codex.store",
+      "description": "codex: the Docker Sandboxes shared skills store is not mounted",
+      "result": "PASS",
+      "evidence_ref": "13 mounts, none under a skills path (no skill-path mount targets); discovered skill directories [('/opt/dca/skills', 0)]; failures none"
+    },
+    {
+      "id": "G8.codex.skills",
+      "description": "codex: exactly the two G6 probe skills, and no other skill anywhere",
+      "result": "PASS",
+      "evidence_ref": "/opt/dca/skills: dca-probe-one dca-probe-two; other discovered directories []; speckit-* paths 0; failures none"
+    },
+    {
+      "id": "G8.codex.control",
+      "description": "codex: a --skills=readonly control records whether a store mount is observable here",
+      "result": "PASS",
+      "evidence_ref": "control sandbox dca-g8-codex-control: create exit 0, probe exit 0, skills-path mount targets 'none', mounted skill directories []; host shared store holds 0 skills. No skills-path mount appeared even at readonly, while ['dca-g8-claude-control'] mounted one from the same host store, so this is base-specific rather than an artifact of the store being empty: this base exposes no agent skills directory for the store to mount into. The --skills=off result for this base is therefore a bare negative, corroborated by the absence of any skill directory other than the kit's"
+    },
+    {
+      "id": "G8.codex.cleanup",
+      "description": "codex: both sandboxes were removed by name",
+      "result": "PASS",
+      "evidence_ref": "sbx rm --force dca-g8-codex exit 0, dca-g8-codex-control exit 0"
+    },
+    {
+      "id": "G8.clean",
+      "description": "no G8 sandbox remains",
+      "result": "PASS",
+      "evidence_ref": "sbx ls --json after cleanup: 0 sandboxes, of which G8's: []"
+    }
+  ],
+  "fallback_applied": null,
+  "notes": "Verification only: G8 changes nothing global. Both pinned bases are covered, because the shared store is mounted at the agent's skills directory, which is agent-specific. Skill directories are discovered in the VM, not assumed. Each base also gets a --skills=readonly control sandbox, so the --skills=off result is read against what a mounted store would look like here. G8 proves shared-store isolation at the probe stage with the G6 kit; the final four runtime skills are a later property of the production kit (T056) and production conformance (T062), not of this gate. All four sandboxes are mountless, named and removed by name; sbx rm --all and sbx reset are never used."
+}

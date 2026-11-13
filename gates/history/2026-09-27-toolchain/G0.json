@@ -1,0 +1,78 @@
+{
+  "gate": "G0",
+  "status": "PASS",
+  "run_at": "2026-09-20T00:41:34Z",
+  "versions": {
+    "docker_engine": "29.8.0",
+    "docker_agent": "v1.136.0",
+    "claude_code": "2.1.278",
+    "git": "2.54.0",
+    "sbx": "v0.43.0"
+  },
+  "provenance": {
+    "pins": {
+      "docker_agent": "v1.136.0",
+      "docker_agent_config_version": 15,
+      "sbx": "v0.43.0",
+      "claude_code": "2.1.278"
+    }
+  },
+  "criteria": [
+    {
+      "id": "G0.1",
+      "description": "Docker Desktop server is reachable",
+      "result": "PASS",
+      "evidence_ref": "Docker Engine 29.8.0"
+    },
+    {
+      "id": "G0.2",
+      "description": "sbx is installed and reports its version",
+      "result": "PASS",
+      "evidence_ref": "sbx client v0.43.0, version --json exit 0"
+    },
+    {
+      "id": "G0.3",
+      "description": "sbx client and server >= 0.43.0, server running (mountless create, --skills=off)",
+      "result": "PASS",
+      "evidence_ref": "client (0, 43, 0), server state running version v0.43.0"
+    },
+    {
+      "id": "G0.4",
+      "description": "sbx daemon healthy and matching (diagnose Daemon, Version match)",
+      "result": "PASS",
+      "evidence_ref": "diagnose Daemon: pass, Version match: pass"
+    },
+    {
+      "id": "G0.5",
+      "description": "the developer is signed in to Docker Sandboxes (diagnose Authentication)",
+      "result": "PASS",
+      "evidence_ref": "diagnose Authentication: pass"
+    },
+    {
+      "id": "G0.6",
+      "description": "no sandbox is running while the global setting changes",
+      "result": "PASS",
+      "evidence_ref": "sbx ls --json exit 0, reports 0 sandboxes (any listed sandbox blocks the change: no per-entry status field has been observed, so G0 uses the stricter rule)"
+    },
+    {
+      "id": "G0.7",
+      "description": "global ssh.agentForwardingEnabled is effectively false: set, daemon restarted, re-read, daemon healthy",
+      "result": "PASS",
+      "evidence_ref": "before=True, after=False, get-before exit 0, set exit 0, daemon restart exit 0, get-after exit 0, diagnose Daemon after restart: pass"
+    },
+    {
+      "id": "G0.8",
+      "description": "global network policy recorded; bootstrap preset only when uninitialized",
+      "result": "PASS",
+      "evidence_ref": "previous_state=uninitialized; bootstrap_preset=deny-all; reason=prerequisite for pre-G4 sandbox verification gates; init exit 0; policy ls after init exit 0; governance=unknown/not observable from sbx policy ls --json"
+    },
+    {
+      "id": "G0.9",
+      "description": "exact sbx and Claude Code versions written into runtime/versions.yaml",
+      "result": "PASS",
+      "evidence_ref": "sbx=v0.43.0, claude_code=2.1.278"
+    }
+  ],
+  "fallback_applied": null,
+  "notes": "Observed by gates/G0/run.sh from the documented sbx JSON surfaces, against the observed sbx v0.43.0 candidate (it becomes the V1 pin only once G0 passes and runtime/versions.yaml records it). No credential value is read or recorded. G0 initializes the global network policy to the conservative deny-all bootstrap preset only when sbx reports it uninitialized, because a preset is required before the first sandbox runs (G6) and G4 runs later; an existing policy or governance state is recorded and left unchanged. G4 remains authoritative for the effective policy."
+}

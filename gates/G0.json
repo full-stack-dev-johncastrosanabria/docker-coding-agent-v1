@@ -1,20 +1,20 @@
 {
   "gate": "G0",
   "status": "PASS",
-  "run_at": "2026-09-20T00:41:34Z",
+  "run_at": "2026-11-13T05:56:50Z",
   "versions": {
-    "docker_engine": "29.8.0",
-    "docker_agent": "v1.136.0",
-    "claude_code": "2.1.278",
+    "docker_engine": "29.9.3",
+    "docker_agent": "v1.160.0",
+    "claude_code": "2.1.323",
     "git": "2.54.0",
-    "sbx": "v0.43.0"
+    "sbx": "v0.53.0"
   },
   "provenance": {
     "pins": {
-      "docker_agent": "v1.136.0",
+      "docker_agent": "v1.160.0",
       "docker_agent_config_version": 15,
-      "sbx": "v0.43.0",
-      "claude_code": "2.1.278"
+      "sbx": "v0.53.0",
+      "claude_code": "2.1.323"
     }
   },
   "criteria": [
@@ -22,19 +22,19 @@
       "id": "G0.1",
       "description": "Docker Desktop server is reachable",
       "result": "PASS",
-      "evidence_ref": "Docker Engine 29.8.0"
+      "evidence_ref": "Docker Engine 29.9.3"
     },
     {
       "id": "G0.2",
       "description": "sbx is installed and reports its version",
       "result": "PASS",
-      "evidence_ref": "sbx client v0.43.0, version --json exit 0"
+      "evidence_ref": "sbx client v0.53.0, version --json exit 0"
     },
     {
       "id": "G0.3",
       "description": "sbx client and server >= 0.43.0, server running (mountless create, --skills=off)",
       "result": "PASS",
-      "evidence_ref": "client (0, 43, 0), server state running version v0.43.0"
+      "evidence_ref": "client (0, 53, 0), server state running version v0.53.0"
     },
     {
       "id": "G0.4",
@@ -70,9 +70,9 @@
       "id": "G0.9",
       "description": "exact sbx and Claude Code versions written into runtime/versions.yaml",
       "result": "PASS",
-      "evidence_ref": "sbx=v0.43.0, claude_code=2.1.278"
+      "evidence_ref": "sbx=v0.53.0, claude_code=2.1.323"
     }
   ],
   "fallback_applied": null,
-  "notes": "Observed by gates/G0/run.sh from the documented sbx JSON surfaces, against the observed sbx v0.43.0 candidate (it becomes the V1 pin only once G0 passes and runtime/versions.yaml records it). No credential value is read or recorded. G0 initializes the global network policy to the conservative deny-all bootstrap preset only when sbx reports it uninitialized, because a preset is required before the first sandbox runs (G6) and G4 runs later; an existing policy or governance state is recorded and left unchanged. G4 remains authoritative for the effective policy."
+  "notes": "Observed by gates/G0/run.sh from the documented sbx JSON surfaces, against the observed sbx candidate recorded above (it becomes the V1 pin only once G0 passes and runtime/versions.yaml records it). No credential value is read or recorded. G0 initializes the global network policy to the conservative deny-all bootstrap preset only when sbx reports it uninitialized, because a preset is required before the first sandbox runs (G6) and G4 runs later; an existing policy or governance state is recorded and left unchanged. G4 remains authoritative for the effective policy."
 }

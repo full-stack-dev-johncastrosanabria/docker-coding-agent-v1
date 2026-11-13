@@ -377,6 +377,34 @@ class G0Recorder(unittest.TestCase):
                 self.assert_fails("G0.6")
                 self.assertFalse(self.may_change_globals())
 
+    def test_observed_053_shapes_pass_without_changing_the_legacy_guards(self):
+        for component in ("client", "server"):
+            self.files["version.json"][component]["version"] = "v0.53.0"
+        self.files["ls.json"] = []
+        self.texts["policy-before.err"] = (
+            "error: global network policy has not been initialized\n"
+            "  try: sbx policy init <allow-all|balanced|deny-all>\n")
+        self.obs["claude_code"] = "2.1.323"
+        self.obs["docker_agent"] = "v1.160.0"
+        self.assertEqual(self.run_recorder()[0], "PASS")
+        versions = json.loads(self.versions_path.read_text())
+        self.assertEqual(versions["sbx"]["exact"], "v0.53.0")
+        self.assertEqual(versions["claude_code"]["exact"], "2.1.323")
+        self.assertIsNone(self.record_module.sandbox_count([], (0, 43, 0)))
+        self.assertIsNone(self.record_module.sandbox_count([], (0, 54, 0)))
+
+    def test_053_uninitialized_policy_still_requires_an_exact_match(self):
+        self.files["version.json"]["client"]["version"] = "v0.53.0"
+        self.texts["policy-before.err"] = (
+            "error: global network policy has not been initialized\n"
+            "  try: sbx policy init <allow-all|balanced|deny-all>\n")
+        self.write()
+        self.assertTrue(self.record_module.policy_uninitialized(str(self.work), self.obs))
+        for changed in ("extra error\n", self.texts["policy-before.err"] + "extra error\n",
+                        POLICY_UNINITIALIZED_TEXT):
+            (self.work / "policy-before.err").write_text(changed)
+            self.assertFalse(self.record_module.policy_uninitialized(str(self.work), self.obs))
+
     def test_unexpected_or_unreadable_listing_fails_closed(self):
         self.setUp()
         del self.files["ls.json"]

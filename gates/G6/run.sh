@@ -26,7 +26,8 @@ WORK=gates/G6/work
 OBS=$WORK/observations.env
 KIT=$WORK/kit
 ARTIFACT=$WORK/docker-agent-linux-arm64
-ARTIFACT_URL=https://github.com/docker/docker-agent/releases/download/v1.136.0/docker-agent-linux-arm64
+DOCKER_AGENT_VERSION=$(python3 -c 'import json; print(json.load(open("runtime/versions.yaml"))["docker_agent"])')
+ARTIFACT_URL=https://github.com/docker/docker-agent/releases/download/$DOCKER_AGENT_VERSION/docker-agent-linux-arm64
 CLAUDE_SANDBOX=dca-g6-claude
 CODEX_SANDBOX=dca-g6-codex
 
@@ -74,13 +75,13 @@ python3 gates/G6/record.py --preflight "$OBS" "$WORK" || stop
 # --- pinned artifact (fetched on the host; the sandbox needs no egress) ---------------------
 
 if [ ! -f "$ARTIFACT" ]; then
-    gh release download v1.136.0 --repo docker/docker-agent \
+    gh release download "$DOCKER_AGENT_VERSION" --repo docker/docker-agent \
         --pattern 'docker-agent-linux-arm64' --dir "$WORK" >"$WORK/download.txt" 2>&1
     record artifact_download_exit "$?"
 fi
 # Authoritative release metadata: the official GitHub Releases API publishes the asset's size
 # and digest, which record.py compares with the downloaded bytes and the locally computed hash.
-gh api repos/docker/docker-agent/releases/tags/v1.136.0 >"$WORK/release.json" 2>"$WORK/release.err"
+gh api "repos/docker/docker-agent/releases/tags/$DOCKER_AGENT_VERSION" >"$WORK/release.json" 2>"$WORK/release.err"
 record release_metadata_exit "$?"
 
 record artifact_url "$ARTIFACT_URL"

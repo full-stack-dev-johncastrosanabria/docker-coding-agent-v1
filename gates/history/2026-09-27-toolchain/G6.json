@@ -1,0 +1,143 @@
+{
+  "gate": "G6",
+  "status": "PASS",
+  "run_at": "2026-09-20T01:47:02Z",
+  "versions": {
+    "sbx": "v0.43.0",
+    "docker_agent": "v1.136.0"
+  },
+  "provenance": {
+    "pins": {
+      "docker_agent_artifact_sha256": "a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623",
+      "sandbox_bases": {
+        "claude": {
+          "base": "docker/sandbox-templates:claude-code-docker",
+          "version": "sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2"
+        },
+        "codex": {
+          "base": "docker/sandbox-templates:docker-agent-docker",
+          "version": "sha256:6a1b26c279bb74321e8cf9599e8d19732a3354814a6ca446a5251702c58ea90b"
+        }
+      }
+    },
+    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+  },
+  "criteria": [
+    {
+      "id": "G6.0a",
+      "description": "sbx client and server still match the pinned exact version and the server is running",
+      "result": "PASS",
+      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 state running, exit 0"
+    },
+    {
+      "id": "G6.0b",
+      "description": "global ssh.agentForwardingEnabled is still false (G0)",
+      "result": "PASS",
+      "evidence_ref": "value=False, source=override, exit 0"
+    },
+    {
+      "id": "G6.0c",
+      "description": "global network policy is still in the post-G0 state (deny-all bootstrap, unrepaired)",
+      "result": "PASS",
+      "evidence_ref": "exit 0, 1 network rule(s) [{'id': 'default-deny-all', 'scope': 'global', 'applies_to': 'all', 'resource_type': 'network', 'decision': 'deny', 'resources': ['**'], 'origin': 'local', 'layer': 'local', 'status': 'active'}] (the bootstrap rule must be the only one; filesystem rules are separate)"
+    },
+    {
+      "id": "G6.1",
+      "description": "the pinned docker-agent v1.136.0 artifact is fetched and hashed on the host",
+      "result": "PASS",
+      "evidence_ref": "https://github.com/docker/docker-agent/releases/download/v1.136.0/docker-agent-linux-arm64 sha256=a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623 bytes=131178992"
+    },
+    {
+      "id": "G6.1b",
+      "description": "the artifact matches the official GitHub release metadata (URL, size, asset digest)",
+      "result": "PASS",
+      "evidence_ref": "release asset docker-agent-linux-arm64: url matches, size 131178992 vs downloaded 131178992, digest sha256:a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623 vs computed sha256:a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623; this is a release-hosting asset digest, not a Docker signature or attestation (gh attestation verify exit 1: none published)"
+    },
+    {
+      "id": "G6.2",
+      "description": "the probe kit validates and stages only host-provided files (no sandbox egress)",
+      "result": "PASS",
+      "evidence_ref": "sbx kit validate exit 0; kit declares no permissions.network and no remote kit source (kit.allowLocalKits default)"
+    },
+    {
+      "id": "G6.claude.create",
+      "description": "claude: mountless sandbox from the claude base, shared skills off",
+      "result": "PASS",
+      "evidence_ref": "create exit 0, probe exit 0, sbx resolved workspace 'none · no workspace bind mount', mounts at the workspace path 0, workspace entries 0, mounts at the shared skills path 0, other host-backed mounts (microVM plumbing) /etc/resolv.conf /etc/hosts, os Ubuntu 26.04 LTS"
+    },
+    {
+      "id": "G6.claude.kit",
+      "description": "claude: kit files installed (artifact, probe file, manifest, managed settings, two skills)",
+      "result": "PASS",
+      "evidence_ref": "docker-agent v1.136.0 sha256 matches the host artifact, probe file yes, manifest yes, managed settings yes, skills yes/yes"
+    },
+    {
+      "id": "G6.claude.python",
+      "description": "claude: /usr/bin/python3 exists and is >= 3.11",
+      "result": "PASS",
+      "evidence_ref": "/usr/bin/python3 version 3.14.4, version check exit 0"
+    },
+    {
+      "id": "G6.claude.base",
+      "description": "claude: the exact sandbox base is recorded and the cached template matches it",
+      "result": "PASS",
+      "evidence_ref": "sbx_resolved_base docker/sandbox-templates:claude-code-docker; registry_digest_at_gate_time sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2; cached template repository docker.io/docker/sandbox-templates tag claude-code-docker image id 94670d5b2a24 (sbx template ls --json; a short image id, not a digest on its own), whose id prefixes that registry digest, so the three together name the image sbx actually used"
+    },
+    {
+      "id": "G6.claude.cleanup",
+      "description": "claude: the probe sandbox was removed by name",
+      "result": "PASS",
+      "evidence_ref": "sbx rm --force dca-g6-claude exit 0"
+    },
+    {
+      "id": "G6.codex.create",
+      "description": "codex: mountless sandbox from the codex base, shared skills off",
+      "result": "PASS",
+      "evidence_ref": "create exit 0, probe exit 0, sbx resolved workspace 'none · no workspace bind mount', mounts at the workspace path 0, workspace entries 0, mounts at the shared skills path 0, other host-backed mounts (microVM plumbing) /etc/resolv.conf /etc/hosts, os Ubuntu 26.04 LTS"
+    },
+    {
+      "id": "G6.codex.kit",
+      "description": "codex: kit files installed (artifact, probe file, manifest, managed settings, two skills)",
+      "result": "PASS",
+      "evidence_ref": "docker-agent v1.136.0 sha256 matches the host artifact, probe file yes, manifest yes, managed settings yes, skills yes/yes"
+    },
+    {
+      "id": "G6.codex.python",
+      "description": "codex: /usr/bin/python3 exists and is >= 3.11",
+      "result": "PASS",
+      "evidence_ref": "/usr/bin/python3 version 3.14.4, version check exit 0"
+    },
+    {
+      "id": "G6.codex.base",
+      "description": "codex: the exact sandbox base is recorded and the cached template matches it",
+      "result": "PASS",
+      "evidence_ref": "sbx_resolved_base docker/sandbox-templates:docker-agent-docker; registry_digest_at_gate_time sha256:6a1b26c279bb74321e8cf9599e8d19732a3354814a6ca446a5251702c58ea90b; cached template repository docker.io/docker/sandbox-templates tag docker-agent-docker image id 6a1b26c279bb (sbx template ls --json; a short image id, not a digest on its own), whose id prefixes that registry digest, so the three together name the image sbx actually used"
+    },
+    {
+      "id": "G6.codex.cleanup",
+      "description": "codex: the probe sandbox was removed by name",
+      "result": "PASS",
+      "evidence_ref": "sbx rm --force dca-g6-codex exit 0"
+    },
+    {
+      "id": "G6.templates",
+      "description": "the local sbx template store was read (read-only) to identify the bases",
+      "result": "PASS",
+      "evidence_ref": "sbx template ls --json exit 0, 2 cached templates"
+    },
+    {
+      "id": "G6.clean",
+      "description": "no G6 sandbox remains",
+      "result": "PASS",
+      "evidence_ref": "sbx ls --json after cleanup: 0 sandboxes"
+    },
+    {
+      "id": "G6.pins",
+      "description": "docker_agent_artifact and both sandbox_bases written into runtime/versions.yaml",
+      "result": "PASS",
+      "evidence_ref": "written"
+    }
+  ],
+  "fallback_applied": null,
+  "notes": "Observed by gates/G6/run.sh. Both sandboxes were mountless (no workspace path), created with --skills off, explicitly named and removed by name; sbx rm --all was never used. The probe kit is a local directory kit that stages the host-fetched docker-agent artifact, so it declares no network permission and the sandboxes needed no egress under the G0 deny-all bootstrap policy. The artifact pin is verified against the digest the official GitHub release metadata publishes for the asset (release-asset-digest): release-hosting integrity, not a Docker signature or attestation, of which none is published for this artifact."
+}
