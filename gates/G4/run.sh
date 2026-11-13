@@ -199,7 +199,9 @@ for name in $(awk '/^cell /{print $2}' "$PLAN"); do
 
     # Surface 1: the authorizer's decision for every destination.
     for host in $dests; do
-        run_sbx policy check network --sandbox "$name" "$host:$PORT" --json \
+        # A destination is a bare host on $PORT, or host:port for a must-deny host on another port.
+        case "$host" in *:*) target=$host ;; *) target=$host:$PORT ;; esac
+        run_sbx policy check network --sandbox "$name" "$target" --json \
             >"$WORK/check-$name-$host.json" 2>"$WORK/check-$name-$host.err"
     done
 
@@ -211,7 +213,8 @@ for name in $(awk '/^cell /{print $2}' "$PLAN"); do
         if command -v curl >/dev/null 2>&1; then printf 'probe_tool=curl\n'; else printf 'probe_tool=none\n'; exit 0; fi
         for h in \$HOSTS; do
             printf '### host=%s\n' \"\$h\"
-            curl -sS -o /dev/null -D - --max-time 20 --connect-timeout 10 \"https://\$h/\" 2>&1 | head -3
+            case \"\$h\" in *:80) url=\"http://\${h%:80}/\" ;; *) url=\"https://\$h/\" ;; esac
+            curl -sS -o /dev/null -D - --max-time 20 --connect-timeout 10 \"\$url\" 2>&1 | head -3
         done
     " >"$WORK/probe-$name.txt" 2>"$WORK/probe-$name.err"
     record "probe_${name}_exit" "$?"

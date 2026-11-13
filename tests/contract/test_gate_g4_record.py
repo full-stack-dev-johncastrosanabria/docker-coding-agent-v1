@@ -30,10 +30,17 @@ DRAFT_FILE = GATES / "inventory" / "trusted-allowlist.draft.json"
 ESTABLISHED = "HTTP/1.0 200 Connection established\n\nHTTP/2 404 \ndate: Sun, 20 Sep 2026\n"
 BLOCKED = "HTTP/1.0 200 OK\n\nHTTP/1.1 403 Forbidden\nContent-Length: 46\n"
 
+# The pinned v3 claude workload kit's grant (sbx v0.53). A destination off port 443 is named
+# `host:port`, exactly as G4's matrix names it.
 CLAUDE_KIT_HOSTS = (
     "api.anthropic.com", "platform.claude.com", "downloads.claude.ai", "claude.com",
-    "code.claude.com", "mcp-proxy.anthropic.com", "bridge.claudeusercontent.com",
+    "mcp-proxy.anthropic.com", "bridge.claudeusercontent.com", "deb.debian.org:80", "dhi.io:80",
 )
+
+
+def target(dest):
+    """The `host:port` a policy rule, check or log entry names for a G4 destination."""
+    return dest if ":" in dest else f"{dest}:443"
 
 
 def _load(name, path):
@@ -205,18 +212,33 @@ class G4Recorder(unittest.TestCase):
                 self.assertTrue(untrusted < trusted, f"{untrusted} vs {trusted}")
 
     def test_09_claude_kit_overrides_are_computed_per_profile(self):
-        """code.claude.com is a documentation candidate, so trusted permits it, untrusted denies it."""
+        """code.claude.com is a documentation candidate the v3 kit no longer grants: trusted
+        permits it and untrusted denies it implicitly. Every kit host neither profile permits -
+        the port-80 apt mirrors included - is denied explicitly in both."""
         trusted = self.cell("claude", "trusted")
         untrusted = self.cell("claude", "untrusted")
-        self.assertNotIn("code.claude.com", trusted["deny_rules"])
         self.assertEqual(trusted["expected"]["code.claude.com"], self.record_module.ALLOW)
+        self.assertEqual(untrusted["expected"]["code.claude.com"],
+                         self.record_module.DENY_IMPLICIT)
+        for cell in (trusted, untrusted):
+            self.assertNotIn("code.claude.com", cell["deny_rules"])
+            self.assertEqual(set(cell["deny_rules"]), set(CLAUDE_KIT_HOSTS) - {"api.anthropic.com"})
+            for dest in ("deb.debian.org:80", "dhi.io:80"):
+                self.assertEqual(cell["expected"][dest], self.record_module.DENY_EXPLICIT)
+
+        # The per-profile computation itself: a kit host that is a trusted candidate needs an
+        # override only where the profile does not permit it.
+        inventory = json.loads(json.dumps(self.inventory))
+        for entry in inventory["backends"]["claude"]["hosts"]:
+            if entry["host"] == "code.claude.com":
+                entry["source"] = "kit"
+        trusted, untrusted = (
+            next(c for c in self.record_module.cells(inventory, self.draft)
+                 if c["name"] == f"dca-g4-claude-{p}") for p in ("trusted", "untrusted"))
+        self.assertNotIn("code.claude.com", trusted["deny_rules"])
         self.assertIn("code.claude.com", untrusted["deny_rules"])
         self.assertEqual(untrusted["expected"]["code.claude.com"],
                          self.record_module.DENY_EXPLICIT)
-        self.assertEqual(set(trusted["deny_rules"]),
-                         set(CLAUDE_KIT_HOSTS) - {"api.anthropic.com", "code.claude.com"})
-        self.assertEqual(set(untrusted["deny_rules"]),
-                         set(CLAUDE_KIT_HOSTS) - {"api.anthropic.com"})
 
     def test_10_codex_adds_chatgpt_com_and_needs_no_override(self):
         for profile in ("trusted", "untrusted"):
@@ -273,7 +295,7 @@ class G4Recorder(unittest.TestCase):
         rules = list(FS_RULES)
         if kit and cell["backend"] == "claude":
             rules.append(net_rule(sandbox, "allow",
-                                  [f"{h}:443" for h in CLAUDE_KIT_HOSTS], kit=True))
+                                  [target(h) for h in CLAUDE_KIT_HOSTS], kit=True))
         for host in cell["allow_rules"]:
             rules.append(net_rule(sandbox, "allow", [host]))
         for host in cell["deny_rules"]:
@@ -407,13 +429,13 @@ class G4Recorder(unittest.TestCase):
             if decision == self.record_module.ALLOW:
                 checks[host] = check_doc(True)
                 probes[host] = ESTABLISHED
-                allowed.append({"host": f"{host}:443"})
+                allowed.append({"host": target(host)})
             else:
                 kind = "explicit" if decision == self.record_module.DENY_EXPLICIT else "implicit"
                 checks[host] = check_doc(False, kind)
                 probes[host] = BLOCKED
                 blocked.append({
-                    "host": f"{host}:443",
+                    "host": target(host),
                     "reason": ("Denied by local rule" if kind == "explicit"
                                else "No matching allow rule (default deny)"),
                 })
@@ -446,9 +468,9 @@ class G4Recorder(unittest.TestCase):
     def test_31_an_implicit_deny_where_an_explicit_override_was_required_fails(self):
         cell = self.cell("claude", "untrusted")
         checks, probes, log = self._surfaces(cell)
-        checks["code.claude.com"] = check_doc(False, "implicit")
+        checks["dhi.io:80"] = check_doc(False, "implicit")
         failures = self.record_module.cell_failures(cell, checks, probes, log)
-        self.assertTrue(any("code.claude.com" in f and "deny-explicit" in f for f in failures),
+        self.assertTrue(any("dhi.io:80" in f and "deny-explicit" in f for f in failures),
                         failures)
 
     def test_32_a_missing_surface_fails_closed(self):
@@ -597,7 +619,7 @@ class G4Recorder(unittest.TestCase):
         self.assertEqual(results["G4.claude.trusted.effective"], "NOT-RUN")
 
     def test_43_a_kit_allow_that_was_not_overridden_fails_the_gate(self):
-        (self.work / "check-dca-g4-claude-untrusted-code.claude.com.json").write_text(
+        (self.work / "check-dca-g4-claude-untrusted-dhi.io:80.json").write_text(
             json.dumps(check_doc(True)), encoding="utf-8")
         results = self._results(self._capture())
         self.assertEqual(results["G4.kit-override"], "FAIL")
@@ -1022,6 +1044,18 @@ class G4Recorder(unittest.TestCase):
         cell = next(c for c in cells if c["name"] == name)
         return {h for h, d in cell["expected"].items() if d == self.record_module.ALLOW}, cell
 
+    def test_94_a_host_off_port_443_can_only_ever_be_must_deny(self):
+        """The v3 kit's port-80 apt mirrors enter the matrix as `host:80`, deny-only; a required
+        host on 80, or any other port, stops the gate before any live policy work."""
+        with self.assertRaises(ValueError):
+            self.record_module.cells(self._inventory_with(
+                "claude", "dhi.io", sandbox_required=True, profiles=["trusted"]), self.draft)
+        with self.assertRaises(ValueError):
+            self.record_module.cells(self._inventory_with("claude", "dhi.io", port=22), self.draft)
+        with self.assertRaises(ValueError):
+            self.record_module.cells(
+                self._inventory_with("claude", "api.anthropic.com", port=80), self.draft)
+
     def test_76_a_trusted_only_refresh_host_never_widens_untrusted(self):
         """The documented promotion path: untrusted access is never broadened by a promotion."""
         inventory = self._inventory_with(
@@ -1137,7 +1171,7 @@ class G4Recorder(unittest.TestCase):
         cell = self.cell("claude", "untrusted")
         self.assertEqual(self.record_module.effective_policy_failures(
             cell, self.effective_doc(cell)), [])
-        doc = self.effective_doc(cell, omit_denies=("code.claude.com",))
+        doc = self.effective_doc(cell, omit_denies=("dhi.io:80",))
         self.assertTrue(self.record_module.effective_policy_failures(cell, doc))
 
     # --- the proven allow set is typed and PASS-only ----------------------------------------------
@@ -1231,13 +1265,16 @@ class G4Recorder(unittest.TestCase):
         for line in scoped:
             self.assertIn("--sandbox", line, line)
 
-        # Mountless, skill-less sandboxes, removed one at a time by name.
-        self.assertEqual(body.count("--skills off"), 2)
+        # Mountless, skill-less sandboxes from the pinned workload (gates/sbx_create.sh defaults
+        # to --skills off and adds no mount), removed one at a time by name.
+        self.assertEqual(body.count("create_pinned "), 2)
+        self.assertNotIn("--skills", body)
         self.assertNotIn("--mount", body)
+        self.assertNotIn("run_sbx create", body)
         self.assertIn('run_sbx rm --force "$name"', body)
 
         # The bindings are established before any sandbox exists.
-        first_create = body.index("run_sbx create")
+        first_create = body.index("create_pinned ")
         self.assertLess(body.index("record.py --preflight"), first_create)
         self.assertLess(body.index("record.py --inputs"), first_create)
 
