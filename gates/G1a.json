@@ -1,19 +1,19 @@
 {
   "gate": "G1a",
   "status": "PASS",
-  "run_at": "2026-09-27T06:13:38Z",
+  "run_at": "2026-11-13T07:41:53Z",
   "versions": {
-    "sbx": "v0.43.0"
+    "sbx": "v0.53.0"
   },
   "provenance": {
-    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+    "runtime_versions_digest": "sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1"
   },
   "criteria": [
     {
       "id": "G1a.0a",
       "description": "sbx client and server still match the pinned exact version and the server is running",
       "result": "PASS",
-      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 running"
+      "evidence_ref": "pin v0.53.0, client v0.53.0, server v0.53.0 running"
     },
     {
       "id": "G1a.0b",
@@ -41,15 +41,15 @@
     },
     {
       "id": "G1a.base",
-      "description": "both sandboxes were created with the exact digest-qualified pinned Claude base; the image sbx resolved for each creation matches that immutable reference",
+      "description": "both sandboxes were created from the exact digest-qualified pinned Claude workload, and sbx's inspect record of each shows that workload and the G6 kit and nothing else",
       "result": "PASS",
-      "evidence_ref": "pinned docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2; requested docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2; login resolved docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2; fresh resolved docker/sandbox-templates:claude-code-docker@sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2"
+      "evidence_ref": "requested docker.io/sbx/claude@sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9; inspect records for ['dca-g1a-login', 'dca-g1a-fresh']; pinned docker.io/sbx/claude@sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9; 2 sandbox record(s); every composition matches"
     },
     {
       "id": "G1a.policy",
       "description": "every sandbox ran under the accepted G4 claude/trusted network policy: the allow set is the one G4 proved, and the built-in kit's non-permitted hosts are neutralized by explicit sandbox-scoped denies",
       "result": "PASS",
-      "evidence_ref": "12 allow (api.anthropic.com, registry.npmjs.org, pypi.org, files.pythonhosted.org, proxy.golang.org, crates.io, static.crates.io, github.com, codeload.github.com, objects.githubusercontent.com, code.claude.com, docs.claude.com); 5 explicit deny (bridge.claudeusercontent.com, claude.com, downloads.claude.ai, mcp-proxy.anthropic.com, platform.claude.com)"
+      "evidence_ref": "12 allow (api.anthropic.com, registry.npmjs.org, pypi.org, files.pythonhosted.org, proxy.golang.org, crates.io, static.crates.io, github.com, codeload.github.com, objects.githubusercontent.com, code.claude.com, docs.claude.com); 7 explicit deny (bridge.claudeusercontent.com, claude.com, deb.debian.org:80, dhi.io:80, downloads.claude.ai, mcp-proxy.anthropic.com, platform.claude.com)"
     },
     {
       "id": "G1a.step1",
@@ -91,7 +91,7 @@
       "id": "G1a.versions",
       "description": "the Docker Agent artifact the G6 kit installed is the pinned one, and the Claude Code build the pinned base ships is recorded verbatim as evidence rather than assumed",
       "result": "PASS",
-      "evidence_ref": "docker_agent v1.136.0 (pinned v1.136.0); claude_code in the pinned base 2.1.246 (runtime/versions.yaml pins the host CLI at 2.1.278)"
+      "evidence_ref": "docker_agent v1.160.0 (pinned v1.160.0); claude_code in the pinned base 2.1.322 (runtime/versions.yaml pins the host CLI at 2.1.323)"
     },
     {
       "id": "G1a.fingerprint",
@@ -117,7 +117,7 @@
     "subscription_type_reported_by_fresh_sandbox": null,
     "proven_without_login": true,
     "proven_without_api_key": true,
-    "claude_code_version": "2.1.246",
-    "docker_agent_version": "v1.136.0"
+    "claude_code_version": "2.1.322",
+    "docker_agent_version": "v1.160.0"
   }
 }

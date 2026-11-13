@@ -228,7 +228,8 @@ class GateReview(unittest.TestCase):
         text = (self.gates / "SUMMARY.md").read_text(encoding="utf-8")
         self.assertIn("runtime eligible on both backends", text)
         self.assertIn("token-file-trusted-only", text)
-        self.assertIn("gpt-5.5", text)
+        # The model is whatever G3 proved the backend accepts, never a literal restated here.
+        self.assertIn(f"`{self._evidence('G3')['codex_backend']['selected_model']}`", text)
 
     def test_16_no_credential_material_reaches_either_output(self):
         import re
