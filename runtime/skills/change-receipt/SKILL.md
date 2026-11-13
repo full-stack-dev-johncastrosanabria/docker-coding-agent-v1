@@ -56,9 +56,16 @@ single direct→planned escalation actually happened.
   is `satisfied`. On a planned task it additionally needs `plan_ref`, `review.performed: true` and
   `review.identical: true`.
 - **`outcome: failed`** when a required check conclusively failed and you know the change does not
-  work.
+  work, or when you have shown, with evidence, that the requested behavior is infeasible,
+  unsupported or contradictory to another requirement the task must keep.
 - **`outcome: blocked`** when something could not be established, executed, resolved or approved -
   including `verification.type: "none-adequate"`, for which the change set must be empty.
+- **Telling the two apart:** ask what would let the task succeed AS STATED. A fact someone can
+  supply, an approval someone can grant, a limit someone can raise: `blocked`, and say what is
+  needed. Nothing short of changing something the task or the repository declares fixed - a stated
+  constraint, a test or file you are told to leave alone, two requirements that cannot both hold:
+  `failed`. Asking for permission to change the task is not a blocker; name the requirement that
+  cannot be met and the evidence for it.
 - **`after_last_change`** is `false` for any check that ran before your last edit. Marking stale
   evidence as fresh is the one error the launcher's own re-execution will contradict directly.
 - **`baseline` and `checks` are different lists.** `baseline` holds the runs made before your
