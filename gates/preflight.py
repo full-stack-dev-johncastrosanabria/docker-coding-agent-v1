@@ -160,42 +160,27 @@ def ssh_agent_isolation_failures(probe):
 
 
 # --- sandbox base identity ----------------------------------------------------------------------
+#
+# sbx >= 0.53 creates every sandbox from a digest-qualified v3 workload kit, and `sbx inspect
+# --json` is its own record of what it composed (gates/sbx_create.sh saves it as
+# inspect-<sandbox>.json). The template store is NOT consulted: it reports what a mutable tag maps
+# to today, which can neither prove nor disprove what booted.
 
-def template_image(templates, repository, tag):
-    """The cached template with this exact repository and tag from `sbx template ls --json`.
-
-    A tag alone doesn't identify a template: the repository must match too (the store reports it
-    fully qualified, for example docker.io/docker/sandbox-templates).
-    """
-    if not isinstance(templates, dict) or not isinstance(templates.get("images"), list):
+def pinned_reference(versions, backend):
+    """`<repository>@<digest>` for `backend`'s pinned workload, or None."""
+    base = ((versions or {}).get("sandbox_bases") or {}).get(backend) or {}
+    if not base.get("base") or not base.get("version"):
         return None
-    for image in templates["images"]:
-        if (
-            isinstance(image, dict)
-            and image.get("tag") == tag
-            and image.get("repository") in (repository, f"docker.io/{repository}")
-        ):
-            return image
+    return f"{base['base']}@{base['version']}"
+
+
+def composition_problem(inspected, reference, kit=None):
+    """Why sbx's record does NOT show exactly `reference` (+ the absolute `kit`), or None."""
+    if not reference:
+        return "no pinned workload reference"
+    if not isinstance(inspected, dict):
+        return "no sbx inspect record"
+    expected = [reference] + ([kit] if kit else [])
+    if inspected.get("kits") != expected:
+        return f"composed of {inspected.get('kits')!r}, not exactly {expected!r}"
     return None
-
-
-def template_identity_matches(cached, image, digest):
-    """True when the cached template is this exact repository and tag and its image id prefixes
-    the full digest.
-
-    The short image id is not a digest on its own. The identity is the combination: the
-    sbx-resolved reference, the cached repository/tag/id, and the full digest.
-    """
-    repository, _, tag = (image or "").rpartition(":")
-    identifier = cached.get("id") if isinstance(cached, dict) else None
-    return (
-        bool(repository)
-        and bool(tag)
-        and isinstance(cached, dict)
-        and cached.get("tag") == tag
-        and cached.get("repository") in (repository, f"docker.io/{repository}")
-        and isinstance(identifier, str)
-        and len(identifier) >= 12
-        and isinstance(digest, str)
-        and digest.startswith(f"sha256:{identifier}")
-    )

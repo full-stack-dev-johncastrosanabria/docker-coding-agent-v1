@@ -35,6 +35,36 @@ def sandbox_inventory(document):
     return listing
 
 
+VERSIONS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), "runtime", "versions.yaml")
+
+
+def kit_build_pins(versions_path=VERSIONS):
+    """runtime/versions.yaml's `kit_build`: the buildx builder, its BuildKit image, the frontend."""
+    with open(versions_path, encoding="utf-8") as handle:
+        return json.load(handle)["kit_build"]
+
+
+def kit_builder(versions_path=VERSIONS):
+    return kit_build_pins(versions_path)["builder"]
+
+
+def composition_problem(record, base, kit):
+    """Why `sbx inspect --json` does NOT prove the sandbox is exactly `base` + `kit`, or None.
+
+    The sandbox's own record must list EXACTLY the pinned workload reference and the DCA mixin,
+    in that order: an extra kit (a shortcut, an injected mixin) or a workload resolved from a
+    tag is a different composition, and an unprovable composition is refused like a wrong one.
+    """
+    if not isinstance(record, dict):
+        return "sbx inspect returned no sandbox record"
+    kits = record.get("kits")
+    expected = [base, os.path.abspath(str(kit))]
+    if kits != expected:
+        return f"the sandbox is composed of {kits!r}, not exactly {expected!r}"
+    return None
+
+
 class SbxError(RuntimeError):
     """An `sbx` invocation failed. The caller decides whether that is exit 3 or exit 4."""
 
@@ -66,6 +96,9 @@ class Sbx:
 
     def _environment(self):
         environment = dict(os.environ)
+        # sbx builds the v3 mixin with the host's buildx, and the default `docker` driver cannot
+        # export it: the pinned docker-container builder is selected per process, never `--use`d.
+        environment["BUILDX_BUILDER"] = kit_builder()
         environment.update(self._env)
         # FR-029b / precondition 5: the VM never inherits a host SSH agent.
         environment.pop("SSH_AUTH_SOCK", None)
@@ -134,22 +167,27 @@ class Sbx:
 
     # --- per-sandbox lifecycle -------------------------------------------------------------------
 
-    def create(self, template, name, kit, base):
+    def create(self, name, kit, base):
         """A mountless sandbox with shared skills OFF, the V1 kit and the EXACT pinned base.
 
-        `base` is the immutable, digest-qualified reference - `<repository>:<tag>@sha256:<hex>` -
-        and it is REQUIRED. Passing it with `--template` makes the image a creation-time input
-        rather than something resolved from the agent's default tag and audited afterwards, so an
-        upstream tag that moves can no longer decide which image boots. It is not defaulted: a
-        caller that has no pin must refuse to create, because falling back to the agent default
-        would silently select whatever the mutable tag points at today.
+        `base` is the immutable, digest-qualified v3 workload kit - `<repository>@sha256:<hex>` -
+        and it is REQUIRED. sbx >= 0.53 resolves a bare agent name (`claude`) to that kit's
+        mutable `:latest`, so the pinned reference is passed as the AGENT itself: the digest is a
+        creation-time input, never something resolved from a tag and audited afterwards. `kit` is
+        the absolute path of the DCA v3 mixin directory; sbx builds it with the host's buildx, so
+        the builder named in the environment (BUILDX_BUILDER) decides how it is built.
+        `--static-mcp none` gives the sandbox an empty static MCP set: V1 has no MCP.
         """
-        if not base:
+        if not base or "@sha256:" not in base:
             raise ValueError("a pinned, digest-qualified base reference is required to create a "
                              "sandbox; the agent default would follow a mutable tag")
-        _, out, _ = self.run("create", template, "--template", base,
-                             "--name", name, "--skills", "off", "--kit", kit)
+        _, out, _ = self.run("create", base, "--name", name, "--skills", "off",
+                             "--static-mcp", "none", "--kit", kit)
         return out
+
+    def inspect(self, name):
+        """`sbx inspect <name> --json`: the sandbox's own record of what it was composed from."""
+        return self._json("inspect", name, "--json")
 
     def allow_network(self, name, hosts):
         if not hosts:

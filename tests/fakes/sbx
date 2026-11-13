@@ -89,7 +89,7 @@ def main(argv):
 
     if command == "ls":
         record(argv, 0)
-        print(json.dumps({"sandboxes": state.get("sandboxes", [])}))
+        print(json.dumps(state.get("sandboxes", [])))  # sbx 0.53: a bare array
         return 0
 
     if command == "settings":
@@ -122,21 +122,27 @@ def main(argv):
     if command == "create":
         record(argv, 0)
         name = args[args.index("--name") + 1] if "--name" in args else "unnamed"
-        state.setdefault("sandboxes", []).append({"name": name})
+        # sbx >= 0.53: the first positional is the workload (a digest-qualified kit reference) and
+        # every --kit is a mixin. `sbx inspect --json` later reports exactly that composition, so
+        # the launcher's "this sandbox is the pinned base plus the DCA kit" check is meaningful in
+        # tests. A test that needs a DIFFERENT record sets `inspect_kits` and that wins.
+        kits = [args[1]] if len(args) > 1 else []
+        kits += [args[i + 1] for i, value in enumerate(args) if value == "--kit"]
+        state.setdefault("sandboxes", []).append({"name": name, "kits": kits})
         save_state(state)
-        # The real `sbx create` reports the image it resolved, on an `image <reference>` line, and
-        # with `--template` that is exactly the reference it was handed. Echoing it here is what
-        # makes the launcher's "this sandbox booted the pinned digest" check meaningful in tests
-        # instead of something each harness has to hand-write. A test that needs a DIFFERENT record
-        # - a wrong digest, a bare tag, no image line - sets `create_output` and that wins.
-        if "create_output" in state:
-            print(state["create_output"])
-        else:
-            requested = args[args.index("--template") + 1] if "--template" in args else "(none)"
-            print("\u2500\u2500 RESOLVE SETUP")
-            print(f"     image      {requested}")
-            print("   \u2713 configuration resolved")
-            print(f"   \u2713 Created sandbox {name}")
+        print(state.get("create_output", f"  \u2713 Created sandbox {name}"))
+        return 0
+
+    if command == "inspect":
+        record(argv, 0)
+        name = args[1] if len(args) > 1 else ""
+        entry = next((s for s in state.get("sandboxes", []) if s.get("name") == name), None)
+        if entry is None:
+            print(f"error: sandbox '{name}' not found", file=sys.stderr)
+            return 1
+        kits = state.get("inspect_kits", entry.get("kits", []))
+        print(json.dumps({"name": name, "kits": kits, "host_mounts": [], "runtime_mounts": [],
+                          "created_version": "v0.53.0"}))
         return 0
 
     if command == "cp":

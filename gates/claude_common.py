@@ -91,56 +91,37 @@ def claude_base(versions):
     return base.get("base"), base.get("version")
 
 
-def base_identity_row(gate, obs, work, versions, observed_key="sbx_resolved_base"):
-    """The gate created its sandboxes from the exact pinned Claude base, read back from sbx.
+def base_identity_row(gate, obs, work, versions, observed_key=None):
+    """Every sandbox this gate created is exactly the pinned sandbox_bases.claude workload.
 
-    Identity is the combination the store actually exposes: the sbx-resolved reference, the
-    cached template's repository/tag/id, and the full pinned digest. A tag alone identifies
-    nothing, and the short image id is not a digest, so neither is accepted on its own.
+    gates/sbx_create.sh creates each sandbox from the digest-qualified workload and saves sbx's
+    own composition record as inspect-<sandbox>.json. Every such record must list the pinned
+    reference first and nothing but the G6 probe kit after it. No record at all fails: a gate
+    whose base cannot be shown is treated like one that used the wrong base.
     """
-    image, digest = claude_base(versions)
-    resolved = obs.get(observed_key)
-    repository, _, tag = (image or "").rpartition(":")
-    cached = preflight_module.template_image(read_json(work, "templates.json"), repository, tag)
-    holds = (
-        bool(image)
-        and bool(digest)
-        and resolved == image
-        and preflight_module.template_identity_matches(cached, image, digest)
-    )
+    reference = preflight_module.pinned_reference(versions, "claude")
+    kit = os.path.join(ROOT, "gates", "G6", "work", "kit")
+    records = sorted(name for name in (os.listdir(work) if os.path.isdir(work) else [])
+                     if name.startswith("inspect-") and name.endswith(".json"))
+    problems = []
+    for name in records:
+        inspected = read_json(work, name)
+        kits = inspected.get("kits") if isinstance(inspected, dict) else None
+        problem = preflight_module.composition_problem(
+            inspected, reference, kit if isinstance(kits, list) and len(kits) == 2 else None)
+        if problem:
+            problems.append(f"{name[len('inspect-'):-len('.json')]}: {problem}")
+    holds = bool(reference) and bool(records) and not problems
     return (
         f"{gate}.base",
-        "every sandbox in this gate came from the exact pinned sandbox_bases.claude base: the "
-        "reference sbx resolved, the cached template's repository, tag and image id, and the "
-        "pinned digest all agree; no base was discovered or substituted",
+        "every sandbox in this gate was created from the exact pinned sandbox_bases.claude "
+        "workload, by digest, and sbx's own inspect record shows that composition and nothing "
+        "else; no base was discovered or substituted",
         holds,
-        f"pinned {image} {digest}; sbx resolved {resolved or 'not reported'}; cached template "
-        f"{cached.get('repository') + ':' + cached.get('tag') + ' id ' + str(cached.get('id')) if isinstance(cached, dict) else 'not found in the template store'}",
+        f"pinned {reference}; {len(records)} sandbox record(s); "
+        + ("; ".join(problems) if problems else "every composition matches" if records
+           else "no sbx inspect record was captured"),
     )
-
-
-# --- the accepted G4 policy this block runs under -------------------------------------------------
-
-def claude_policy(profile="trusted"):
-    """(allow hosts, explicit deny hosts) for the Claude profile, as accepted G4 defines it.
-
-    The policy is not restated here. It is the same cell G4 derived from the committed T014
-    inventory and trusted-allowlist draft and then proved, so a Claude gate cannot run under a
-    policy that merely resembles the verified one. The denies are the built-in kit's hosts this
-    profile does not permit: the kit rule is editable:false, so they are neutralized rather than
-    removed.
-    """
-    with open(g4_module.INVENTORY_FILE, encoding="utf-8") as fh:
-        inventory = json.load(fh)
-    with open(g4_module.DRAFT_FILE, encoding="utf-8") as fh:
-        draft = json.load(fh)
-    for cell in g4_module.cells(inventory, draft):
-        if cell["backend"] == "claude" and cell["profile"] == profile:
-            return list(cell["allow_rules"]), list(cell["deny_rules"])
-    raise ValueError(f"accepted G4 defines no claude/{profile} cell")
-
-
-LOGIN_PURPOSE = "host-oauth-login"
 
 
 def claude_login_hosts():

@@ -62,6 +62,7 @@ try:
     from . import source as source_module
     from . import taskid as taskid_module
     from .errors import InfraAbort, PreconditionError, UsageError
+    from . import sbx as sbx_module
     from .sbx import Sbx, SbxError
 except ImportError:  # loaded by path in tests
     eligibility_module = _sideload("dca_eligibility", "eligibility.py")
@@ -74,7 +75,7 @@ except ImportError:  # loaded by path in tests
     _errors = _sideload("dca_errors", "errors.py")
     InfraAbort, PreconditionError, UsageError = (
         _errors.InfraAbort, _errors.PreconditionError, _errors.UsageError)
-    _sbx = _sideload("dca_sbx", "sbx.py")
+    _sbx = sbx_module = _sideload("dca_sbx", "sbx.py")
     Sbx, SbxError = _sbx.Sbx, _sbx.SbxError
 
 # --- fixed in-VM geography -------------------------------------------------------------------
@@ -92,7 +93,6 @@ HOST_CONFIG_DIR = os.path.expanduser("~/.config/cagent")
 
 #: The sbx template name per backend. The exact base image and digest are pinned in
 #: runtime/versions.yaml and checked against what sbx resolved; the launcher never substitutes one.
-BACKEND_TEMPLATE = {"claude": "claude", "codex": "docker-agent"}
 BACKENDS = ("claude", "codex")
 TRUST_LEVELS = ("trusted", "untrusted")
 
@@ -556,7 +556,6 @@ class Launcher:
             raise InfraAbort(f"the sandbox kit could not be built: {exc}") from exc
 
         name = f"dca-{request.run_id}"
-        template = BACKEND_TEMPLATE[request.backend]
         # The base is chosen by its immutable digest BEFORE the sandbox exists. Refusing here,
         # before `sbx create` runs, is what keeps the agent default - a mutable tag - from ever
         # being the image that boots.
@@ -576,8 +575,8 @@ class Launcher:
             # sandbox behind, and that one must be removed.
             self.sandbox = name
             # Step 2: a MOUNTLESS sandbox with shared skills off, from the pinned base DIGEST.
-            created = self.sbx.create(template, self.sandbox, self.kit_dir, pinned_base)
-            self._check_resolved_base(created)
+            self.sbx.create(self.sandbox, self.kit_dir, pinned_base)
+            self._check_resolved_base()
 
             # Step 3: the strict per-sandbox network policy, plus host-authoritative grants.
             allow, deny = self.network_cell()
@@ -603,34 +602,26 @@ class Launcher:
         self._report_progress("sandbox", "READY", self.sandbox)
         return self.sandbox
 
-    def _check_resolved_base(self, created_output):
-        """Prove THIS sandbox booted the exact pinned digest, from sbx's own creation record.
+    def _check_resolved_base(self):
+        """Prove THIS sandbox is exactly the pinned workload kit plus the DCA mixin.
 
-        The sandbox is created from the digest-qualified reference, and `sbx create` states the
-        image it resolved for that sandbox on an `image <reference>` line. The pinned reference must
-        EQUAL one of those lines. A substring search over the whole output would not do: the same
-        reference also appears in the progress line that pulls it, and would appear in an echoed
-        invocation or a "did you mean" hint, so a create that resolved something else could satisfy
-        it while exiting 0. Only the resolved-image line states what the sandbox was built from.
-
-        The template store is deliberately NOT consulted. `sbx template ls` reports what the
-        MUTABLE tag currently maps to, so once upstream moves that tag the store names a newer
-        digest even on a run that correctly booted the pinned one: consulting it would fail a
-        correct run, and it could never prove more than this record already does. There is
-        therefore no fallback. If no resolved-image line names the pinned reference, the run is
-        aborted: an unprovable base is treated exactly like a wrong one.
+        The sandbox is created from the digest-qualified workload reference, and `sbx inspect
+        --json` is sbx's own record of the kits it composed. That list must EQUAL the pinned
+        reference followed by this run's mixin: an extra kit or a workload resolved from a tag is
+        a different sandbox. The template store is deliberately NOT consulted - it reports what a
+        mutable tag maps to today, which can neither prove nor disprove what booted. There is no
+        fallback: an unprovable composition aborts the run exactly like a wrong one.
         """
         reference, _, pinned = pinned_base_reference(self.versions, self.request.backend)
         if not pinned:
             raise InfraAbort(f"there is no pinned sandbox base for {self.request.backend}")
-        resolved = _resolved_image_lines(created_output)
-        if pinned in resolved:
-            return
-        raise InfraAbort(
-            f"sbx did not report creating the sandbox from the pinned base {pinned}, so this "
-            f"sandbox cannot be shown to have booted the pinned image. The launcher never accepts "
-            f"a base resolved from the mutable tag {reference} instead. What sbx reported it "
-            f"resolved: {', '.join(resolved) if resolved else '(no image line)'}")
+        problem = sbx_module.composition_problem(self.sbx.inspect(self.sandbox), pinned,
+                                                 self.kit_dir)
+        if problem:
+            raise InfraAbort(
+                f"the sandbox cannot be shown to be the pinned base {pinned} plus the DCA kit "
+                f"({problem}). The launcher never accepts a base resolved from the mutable "
+                f"{reference} tag instead.")
 
     def _deliver(self, bundle):
         request = self.request
@@ -1266,11 +1257,6 @@ def pinned_base_reference(versions, backend):
     if not reference or not digest:
         return None, None, None
     return reference, digest, f"{reference}@{digest}"
-
-
-def _resolved_image_lines(output):
-    """The `image <reference>` lines `sbx create` prints, so a refusal can say what it did resolve."""
-    return [found.strip() for found in re.findall(r"^\s*image\s+(.+)$", output or "", re.M)]
 
 
 def _evidence_predates_limit(analysis, host_stop, launcher_checks):

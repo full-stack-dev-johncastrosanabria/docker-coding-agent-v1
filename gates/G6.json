@@ -1,7 +1,7 @@
 {
   "gate": "G6",
-  "status": "FAIL",
-  "run_at": "2026-11-13T05:57:06Z",
+  "status": "PASS",
+  "run_at": "2026-11-13T07:03:48Z",
   "versions": {
     "sbx": "v0.53.0",
     "docker_agent": "v1.160.0"
@@ -11,16 +11,16 @@
       "docker_agent_artifact_sha256": "7ff167391f6f1267d8a1d3ef62856c1a8b7bb99713ffc5bc3702c3b3fcd082ef",
       "sandbox_bases": {
         "claude": {
-          "base": "docker/sandbox-templates:claude-code-docker",
-          "version": "sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2"
+          "base": "docker.io/sbx/claude",
+          "version": "sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9"
         },
         "codex": {
-          "base": "docker/sandbox-templates:docker-agent-docker",
-          "version": "sha256:6a1b26c279bb74321e8cf9599e8d19732a3354814a6ca446a5251702c58ea90b"
+          "base": "docker.io/sbx/shell",
+          "version": "sha256:89ed5d63def6bfb2373d408e3ab6ad55aa5c010f884a182a78299fcf85ea42d1"
         }
       }
     },
-    "runtime_versions_digest": "sha256:7e568cd933fab9b143693e42febcde785327342758606b5c40156274aab4ef70"
+    "runtime_versions_digest": "sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1"
   },
   "criteria": [
     {
@@ -55,89 +55,83 @@
     },
     {
       "id": "G6.2",
-      "description": "the probe kit validates and stages only host-provided files (no sandbox egress)",
+      "description": "the probe kit is a v3 mixin from host-provided files only, built by the pinned builder",
       "result": "PASS",
-      "evidence_ref": "sbx kit validate exit 0; kit declares no permissions.network and no remote kit source (kit.allowLocalKits default)"
+      "evidence_ref": "frontend line '# syntax=docker/sandbox-kit:3@sha256:adbc0d1ea63451871d5d78111120bb29f2fd2b265e63d39c664ae2c3d722c805'; network-policy capabilities 0; recipe 'FROM scratch;COPY payload/ /;'; buildx builder dca-kit inspect exit 0, BuildKit image moby/buildkit@sha256:c5f8862f52499773af85bc07695b2379ef08e8002352b0df2c4864c91d78dabe"
     },
     {
       "id": "G6.claude.create",
       "description": "claude: mountless sandbox from the claude base, shared skills off",
-      "result": "FAIL",
-      "evidence_ref": "create exit 1, probe exit 125, sbx resolved workspace 'not reported', mounts at the workspace path -, workspace entries -, mounts at the shared skills path -, other host-backed mounts (microVM plumbing) -, os -"
+      "result": "PASS",
+      "evidence_ref": "create exit 0, probe exit 0, sbx inspect host_mounts [], mounts at the workspace path 0, workspace entries 0, mounts at the shared skills path 0, other host-backed mounts (microVM plumbing) /etc/resolv.conf, os Docker Hardened Images/Debian GNU/Linux 13 (trixie)"
     },
     {
       "id": "G6.claude.kit",
       "description": "claude: kit files installed (artifact, probe file, manifest, managed settings, two skills)",
-      "result": "NOT-RUN",
-      "evidence_ref": "an earlier step did not hold, so the gate stopped before this one (fail-closed)"
+      "result": "PASS",
+      "evidence_ref": "docker-agent v1.160.0 sha256 matches the host artifact, probe file yes, manifest yes, managed settings yes, skills yes/yes"
     },
     {
       "id": "G6.claude.python",
       "description": "claude: /usr/bin/python3 exists and is >= 3.11",
-      "result": "NOT-RUN",
-      "evidence_ref": "an earlier step did not hold, so the gate stopped before this one (fail-closed)"
+      "result": "PASS",
+      "evidence_ref": "/usr/bin/python3 version 3.14.10, version check exit 0"
     },
     {
       "id": "G6.claude.base",
-      "description": "claude: the exact sandbox base is recorded and the cached template matches it",
-      "result": "NOT-RUN",
-      "evidence_ref": "an earlier step did not hold, so the gate stopped before this one (fail-closed)"
+      "description": "claude: the sandbox is exactly the workload kit at the gate-time digest plus the probe kit",
+      "result": "PASS",
+      "evidence_ref": "registry digest of docker.io/sbx/claude:latest at gate time sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9; sbx inspect kits ['docker.io/sbx/claude@sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9', '/Users/johnbenjamincastrosanabria/Developer/docker-coding-agent-v1/gates/G6/work/kit']; composition proven"
     },
     {
       "id": "G6.claude.cleanup",
       "description": "claude: the probe sandbox was removed by name",
-      "result": "NOT-RUN",
-      "evidence_ref": "an earlier step did not hold, so the gate stopped before this one (fail-closed)"
+      "result": "PASS",
+      "evidence_ref": "sbx rm --force dca-g6-claude exit 0"
     },
     {
       "id": "G6.codex.create",
       "description": "codex: mountless sandbox from the codex base, shared skills off",
-      "result": "NOT-RUN",
-      "evidence_ref": "an earlier step did not hold, so the gate stopped before this one (fail-closed)"
+      "result": "PASS",
+      "evidence_ref": "create exit 0, probe exit 0, sbx inspect host_mounts [], mounts at the workspace path 0, workspace entries 0, mounts at the shared skills path 0, other host-backed mounts (microVM plumbing) /etc/resolv.conf, os Docker Hardened Images/Debian GNU/Linux 13 (trixie)"
     },
     {
       "id": "G6.codex.kit",
       "description": "codex: kit files installed (artifact, probe file, manifest, managed settings, two skills)",
-      "result": "NOT-RUN",
-      "evidence_ref": "an earlier step did not hold, so the gate stopped before this one (fail-closed)"
+      "result": "PASS",
+      "evidence_ref": "docker-agent v1.160.0 sha256 matches the host artifact, probe file yes, manifest yes, managed settings yes, skills yes/yes"
     },
     {
       "id": "G6.codex.python",
       "description": "codex: /usr/bin/python3 exists and is >= 3.11",
-      "result": "NOT-RUN",
-      "evidence_ref": "an earlier step did not hold, so the gate stopped before this one (fail-closed)"
+      "result": "PASS",
+      "evidence_ref": "/usr/bin/python3 version 3.14.10, version check exit 0"
     },
     {
       "id": "G6.codex.base",
-      "description": "codex: the exact sandbox base is recorded and the cached template matches it",
-      "result": "NOT-RUN",
-      "evidence_ref": "an earlier step did not hold, so the gate stopped before this one (fail-closed)"
+      "description": "codex: the sandbox is exactly the workload kit at the gate-time digest plus the probe kit",
+      "result": "PASS",
+      "evidence_ref": "registry digest of docker.io/sbx/shell:latest at gate time sha256:89ed5d63def6bfb2373d408e3ab6ad55aa5c010f884a182a78299fcf85ea42d1; sbx inspect kits ['docker.io/sbx/shell@sha256:89ed5d63def6bfb2373d408e3ab6ad55aa5c010f884a182a78299fcf85ea42d1', '/Users/johnbenjamincastrosanabria/Developer/docker-coding-agent-v1/gates/G6/work/kit']; composition proven"
     },
     {
       "id": "G6.codex.cleanup",
       "description": "codex: the probe sandbox was removed by name",
-      "result": "NOT-RUN",
-      "evidence_ref": "an earlier step did not hold, so the gate stopped before this one (fail-closed)"
-    },
-    {
-      "id": "G6.templates",
-      "description": "the local sbx template store was read (read-only) to identify the bases",
-      "result": "NOT-RUN",
-      "evidence_ref": "an earlier step did not hold, so the gate stopped before this one (fail-closed)"
+      "result": "PASS",
+      "evidence_ref": "sbx rm --force dca-g6-codex exit 0"
     },
     {
       "id": "G6.clean",
       "description": "no G6 sandbox remains",
-      "result": "NOT-RUN",
-      "evidence_ref": "an earlier step did not hold, so the gate stopped before this one (fail-closed)"
+      "result": "PASS",
+      "evidence_ref": "sbx ls --json after cleanup: 0 sandboxes"
     },
     {
       "id": "G6.pins",
       "description": "docker_agent_artifact and both sandbox_bases written into runtime/versions.yaml",
-      "result": "NOT-RUN",
-      "evidence_ref": "an earlier step did not hold, so the gate stopped before this one (fail-closed)"
+      "result": "PASS",
+      "evidence_ref": "written"
     }
   ],
   "fallback_applied": null,
-  "notes": "Observed by gates/G6/run.sh. Both sandboxes were mountless (no workspace path), created with --skills off, explicitly named and removed by name; sbx rm --all was never used. The probe kit is a local directory kit that stages the host-fetched docker-agent artifact, so it declares no network permission and the sandboxes needed no egress under the G0 deny-all bootstrap policy. The artifact pin is verified against the digest the official GitHub release metadata publishes for the asset (release-asset-digest): release-hosting integrity, not a Docker signature or attestation, of which none is published for this artifact. Fail-closed: no pin was written for a gate that did not pass."
+  "notes": "Observed by gates/G6/run.sh. Both sandboxes were mountless (no workspace path), created with --skills off, explicitly named and removed by name; sbx rm --all was never used. The probe kit is a local directory kit that stages the host-fetched docker-agent artifact, so it declares no network permission and the sandboxes needed no egress under the G0 deny-all bootstrap policy. The artifact pin is verified against the digest the official GitHub release metadata publishes for the asset (release-asset-digest): release-hosting integrity, not a Docker signature or attestation, of which none is published for this artifact."
 }

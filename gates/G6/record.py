@@ -1,8 +1,9 @@
 """Evaluate the G6 observations and write gates/G6.json (tasks.md T009).
 
 Standard library only. It reads what gates/G6/run.sh captured and decides every criterion from
-machine-readable output plus exit status. Shapes come from the sbx v0.43.0 pinned by G0; they
-are empirically observed, not a promised schema, and an sbx upgrade re-runs the gates (R27).
+machine-readable output plus exit status. Shapes come from the sbx pinned by G0 (v0.53.0, v3
+kits); they are empirically observed, not a promised schema, and an sbx upgrade re-runs the gates
+(R27).
 
 Fail-closed: a missing file, malformed JSON, an unexpected shape, an absent field or an
 unsuccessful command fails its criterion, and the pins G6 owns are written only when every
@@ -37,10 +38,11 @@ def _load_module(name, path):
 preflight_module = _load_module("dca_preflight", os.path.join(ROOT, "gates", "preflight.py"))
 BOOTSTRAP_RULE = preflight_module.BOOTSTRAP_RULE
 bootstrap_rule_matches = preflight_module.bootstrap_rule_matches
-template_identity_matches = preflight_module.template_identity_matches
+sbx_module = _load_module("dca_sbx", os.path.join(ROOT, "src", "dca", "sbx.py"))
 
 with open(VERSIONS, encoding="utf-8") as _pins_file:
-    DOCKER_AGENT_VERSION = json.load(_pins_file)["docker_agent"]
+    PINS = json.load(_pins_file)
+DOCKER_AGENT_VERSION = PINS["docker_agent"]
 SSH_KEY = "ssh.agentForwardingEnabled"
 BACKENDS = (("claude", "dca-g6-claude"), ("codex", "dca-g6-codex"))
 PREFLIGHT = ("G6.0a", "G6.0b", "G6.0c")
@@ -53,10 +55,8 @@ ARTIFACT_URL = (
 #   release-asset-digest       the digest the official release metadata publishes for the asset
 #   recorded-reproducibility-pin  only the hash this gate computed
 ARTIFACT_VERIFICATION = "release-asset-digest"
-# `sbx ls --json` carries no base image (observed: name, id, agent, status, last_used_at), so
-# the base comes from the RESOLVE SETUP block sbx prints on create, and its exact version from
-# the registry digest that tag pointed at when the gate ran.
-NO_WORKSPACE_MOUNT = "no workspace bind mount"
+KIT = os.path.join(WORK, "kit")
+KIT_RECIPE = "FROM scratch;COPY payload/ /;"
 
 
 def load_rules():
@@ -113,11 +113,10 @@ def parse_version(text):
 
 def sandboxes(listing):
     """The sandbox entries of an `sbx ls --json` document, or None for an unexpected shape."""
-    if isinstance(listing, list):
-        return listing
-    if isinstance(listing, dict) and set(listing) == {"sandboxes"} and isinstance(listing["sandboxes"], list):
-        return listing["sandboxes"]
-    return None
+    try:
+        return sbx_module.sandbox_inventory(listing)
+    except (ValueError, TypeError, KeyError):
+        return None
 
 
 def sandbox_entry(work, name, sandbox_name):
@@ -129,19 +128,17 @@ def sandbox_entry(work, name, sandbox_name):
 
 
 def base_identifier(obs, sandbox, work=None):
-    """(reference sbx resolved, registry digest, cached template image) for a sandbox.
+    """(workload repository, registry digest at gate time, sbx inspect record) for a sandbox.
 
-    The reference comes from sbx's own RESOLVE SETUP block, the digest from the registry at
-    gate time, and the cached image from `sbx template ls --json`, whose short id ties the
-    image sbx actually used to that digest.
+    The sandbox is created from `<repository>@<digest>`, and `sbx inspect --json` is sbx's own
+    record of the kits it composed - the proof that THAT digest booted.
     """
     image = obs.get(f"image_{sandbox}") or None
     digest = obs.get(f"base_digest_{sandbox}") or None
     if digest and not (digest.startswith("sha256:") and len(digest) == 71):
         digest = None
-    repository, _, tag = (image or "").rpartition(":")
-    cached = template_image(work, repository, tag) if (work and repository and tag) else None
-    return image, digest, cached
+    record = read_json(work, f"inspect-{sandbox}.json") if work else None
+    return image, digest, record
 
 
 def release_asset(work):
@@ -151,11 +148,6 @@ def release_asset(work):
         if isinstance(asset, dict) and asset.get("name") == ARTIFACT_ASSET:
             return asset
     return None
-
-
-def template_image(work, repository, tag):
-    """The cached sbx template with this exact repository and tag, or None (shared rule)."""
-    return preflight_module.template_image(read_json(work, "templates.json"), repository, tag)
 
 
 def preflight(obs, work):
@@ -239,18 +231,24 @@ def evaluate(obs, work):
     rows.append(
         (
             "G6.2",
-            "the probe kit validates and stages only host-provided files (no sandbox egress)",
-            obs.get("kit_validate_exit") == "0",
-            f"sbx kit validate exit {obs.get('kit_validate_exit', '-')}; kit declares no "
-            "permissions.network and no remote kit source (kit.allowLocalKits default)",
+            "the probe kit is a v3 mixin from host-provided files only, built by the pinned builder",
+            obs.get("kit_frontend") == "# syntax=" + PINS["kit_build"]["frontend"]
+            and obs.get("kit_network_capabilities") == "0"
+            and obs.get("kit_recipe") == KIT_RECIPE
+            and obs.get("builder_inspect_exit") == "0"
+            and obs.get("builder_image") == PINS["kit_build"]["buildkit_image"],
+            f"frontend line {obs.get('kit_frontend', '-')!r}; network-policy capabilities "
+            f"{obs.get('kit_network_capabilities', '-')}; recipe {obs.get('kit_recipe', '-')!r}; "
+            f"buildx builder {PINS['kit_build']['builder']} inspect exit "
+            f"{obs.get('builder_inspect_exit', '-')}, BuildKit image {obs.get('builder_image', '-')}",
         )
     )
 
     for backend, sandbox in BACKENDS:
         probe = read_env(work, f"probe-{sandbox}.env")
         entry = sandbox_entry(work, f"ls-{sandbox}.json", sandbox)
-        base, base_version, cached = base_identifier(obs, sandbox, work)
-        workspace_line = obs.get(f"workspace_line_{sandbox}", "")
+        base, base_version, inspected = base_identifier(obs, sandbox, work)
+        mounts = (inspected or {}).get("host_mounts") if isinstance(inspected, dict) else None
         created = obs.get(f"create_{sandbox}_exit") == "0"
         probed = obs.get(f"probe_{sandbox}_exit") == "0"
         python_version = parse_version(probe.get("python3_version", ""))
@@ -262,13 +260,13 @@ def evaluate(obs, work):
                 created
                 and probed
                 and entry is not None
-                and NO_WORKSPACE_MOUNT in workspace_line
+                and mounts == []
                 and probe.get("workspace_mounted") == "0"
                 and probe.get("workspace_entries") == "0"
                 and probe.get("skills_store_mounted") == "0",
                 f"create exit {obs.get(f'create_{sandbox}_exit', '-')}, probe exit "
-                f"{obs.get(f'probe_{sandbox}_exit', '-')}, sbx resolved workspace "
-                f"'{workspace_line or 'not reported'}', mounts at the workspace path "
+                f"{obs.get(f'probe_{sandbox}_exit', '-')}, sbx inspect host_mounts "
+                f"{mounts!r}, mounts at the workspace path "
                 f"{probe.get('workspace_mounted', '-')}, workspace entries "
                 f"{probe.get('workspace_entries', '-')}, mounts at the shared skills path "
                 f"{probe.get('skills_store_mounted', '-')}, other host-backed mounts "
@@ -308,20 +306,17 @@ def evaluate(obs, work):
                 f"version check exit {probe.get('python3_min_exit', '-')}",
             )
         )
+        pinned = f"{base}@{base_version}" if base and base_version else None
+        problem = (sbx_module.composition_problem(inspected, pinned, KIT) if pinned
+                   else "no workload digest was resolved")
         rows.append(
             (
                 f"G6.{backend}.base",
-                f"{backend}: the exact sandbox base is recorded and the cached template matches it",
-                bool(base) and bool(base_version) and template_identity_matches(cached, base, base_version),
-                f"sbx_resolved_base {base}; registry_digest_at_gate_time {base_version}; "
-                f"cached template repository {cached.get('repository')} tag {cached.get('tag')} "
-                f"image id {cached.get('id')} (sbx template ls --json; a short image id, not a "
-                "digest on its own), whose id prefixes that registry digest, so the three "
-                "together name the image sbx actually used"
-                if base and base_version and template_identity_matches(cached, base, base_version)
-                else f"sbx_resolved_base {base or 'not reported'}; registry_digest_at_gate_time "
-                f"{base_version or 'not resolved'}; cached template "
-                f"{cached.get('id') if cached else 'not found in sbx template ls --json'}",
+                f"{backend}: the sandbox is exactly the workload kit at the gate-time digest plus the probe kit",
+                obs.get(f"inspect_{sandbox}_exit") == "0" and problem is None,
+                f"registry digest of {base or '-'}:latest at gate time {base_version or 'not resolved'}; "
+                f"sbx inspect kits {(inspected or {}).get('kits') if isinstance(inspected, dict) else None}; "
+                f"{'composition proven' if problem is None else problem}",
             )
         )
         rows.append(
@@ -332,16 +327,6 @@ def evaluate(obs, work):
                 f"sbx rm --force {sandbox} exit {obs.get(f'rm_{sandbox}_exit', '-')}",
             )
         )
-
-    rows.append(
-        (
-            "G6.templates",
-            "the local sbx template store was read (read-only) to identify the bases",
-            obs.get("template_ls_exit") == "0" and isinstance(read_json(work, "templates.json"), dict),
-            f"sbx template ls --json exit {obs.get('template_ls_exit', '-')}, "
-            f"{len((read_json(work, 'templates.json') or {}).get('images', []))} cached templates",
-        )
-    )
 
     remaining = sandboxes(read_json(work, "ls-after.json"))
     rows.append(

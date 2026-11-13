@@ -183,8 +183,12 @@ def build_seed(seed_dir, destination):
 
 
 def oracle_image(versions):
-    """The pinned Claude sandbox base, by digest: one oracle environment for every backend."""
-    base = (versions.get("sandbox_bases") or {}).get("claude") or {}
+    """The pinned oracle image, by digest: one oracle environment for every backend.
+
+    It is its own pin, not a sandbox base: the v3 workload kits carry no `node`, and the oracle
+    environment must not change just because the agents' bases did.
+    """
+    base = versions.get("oracle_image") or {}
     if not base.get("base") or not base.get("version"):
         return None
     return f"{base['base']}@{base['version']}"
