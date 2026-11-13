@@ -46,30 +46,31 @@ criteria_rows = _shared.criteria_rows
 
 BACKEND = "codex"
 # The provider and model this block runs under. The model is not hard-coded as a requirement: G3
-# reads the provider's actual list and records what it selected, applying T019's documented
-# non-deprecated GPT-5.x fallback only if the preferred one is genuinely unavailable.
+# probes the candidates against the real endpoint and records what the backend accepted, applying
+# T019's documented non-deprecated GPT-6.x fallback only if the preferred one is unavailable.
 PROVIDER = "chatgpt"
-PREFERRED_MODEL = "gpt-5.6"
-# THE LISTING IS NOT THE AVAILABILITY AUTHORITY. `docker agent models --provider chatgpt` lists
-# gpt-5.6 and marks it default, but the Codex backend rejects it for a ChatGPT-account sign-in with
-# HTTP 400 "The 'gpt-5.6' model is not supported when using Codex with a ChatGPT account". So G3
+# The family moved once already. On 2026-11-13 the ChatGPT backend answered every GPT-5.x candidate
+# with HTTP 400 "The '<model>' model is not supported when using Codex with a ChatGPT account"
+# (recorded in gates/G3.json at 161f5fa), so the family the developer chose is GPT-6.x and the
+# preferred model is the one their own Codex CLI runs. A NEWER family replacing a retired one is
+# an owner decision; an older family is never selected to make the gate pass.
+PREFERRED_MODEL = "gpt-6.1-sol"
+# THE LISTING IS NOT THE AVAILABILITY AUTHORITY. `docker agent models --provider chatgpt` on the
+# pinned artifact still lists only gpt-5.6 and marks it default, and the backend rejects it. So G3
 # enumerates candidates against the RUNTIME and selects the first one the backend actually accepts.
 #
-# The candidate set is not invented: these are the GPT-5.x model identifiers present as literals in
-# the pinned docker_agent_artifact, the same evidence method T014 used for control-plane hosts. They
-# are ordered by T019's rule - the preferred model first, then descending GPT-5.x, with a plain
-# model before its -codex sibling at the same version - so the first acceptance is the highest
-# available non-deprecated GPT-5.x. Enumeration stops at that first acceptance, so the cost is a
-# couple of trivial calls, not one per candidate.
+# The candidate set is not invented: these are GPT-6.x model identifiers present as literals in the
+# pinned docker_agent_artifact, the same evidence method T014 used for control-plane hosts. They
+# are ordered by T019's rule - the preferred model first, then descending version. Within one
+# version the order after the preferred variant carries no ranking claim. Tier-suffixed variants
+# (-fast, -pro) are left out: they are other price points, not fallbacks. Enumeration stops at the
+# first acceptance, so the cost is a couple of trivial calls, not one per candidate.
 MODEL_CANDIDATES = (
-    "gpt-5.6",
-    "gpt-5.5",
-    "gpt-5.4",
-    "gpt-5.3-codex",
-    "gpt-5.2-codex",
-    "gpt-5.1-codex-max",
-    "gpt-5.1-codex",
-    "gpt-5-codex",
+    "gpt-6.1-sol",
+    "gpt-6.1-terra",
+    "gpt-6-sol",
+    "gpt-6-astra",
+    "gpt-6-luna",
 )
 # The credential FILE NAME the trusted fallback may copy, and nothing else from the config dir.
 CREDENTIAL_FILE = "chatgpt-auth.json"

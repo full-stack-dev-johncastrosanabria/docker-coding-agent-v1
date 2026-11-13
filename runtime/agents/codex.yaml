@@ -213,7 +213,7 @@ agents:
       Root coding agent for one bounded task. It classifies the task, builds context, edits,
       verifies, delegates investigation to the researcher and independent review to the reviewer.
     instruction_file: instructions/root.md
-    model: chatgpt/gpt-5.5
+    model: chatgpt/gpt-6.1-sol
     safety: strict
     max_iterations: 150
     max_consecutive_tool_calls: 25
@@ -257,7 +257,7 @@ agents:
       nothing.
     instruction_file: instructions/researcher.md
     readonly: true
-    model: chatgpt/gpt-5.5
+    model: chatgpt/gpt-6.1-sol
     safety: strict
     max_iterations: 150
     max_consecutive_tool_calls: 25
@@ -292,7 +292,7 @@ agents:
       Independent adversarial reviewer. It reads the candidate and three fixed git commands, and
       must leave the candidate byte-identical.
     instruction_file: instructions/reviewer.md
-    model: chatgpt/gpt-5.5
+    model: chatgpt/gpt-6.1-sol
     safety: strict
     max_iterations: 150
     max_consecutive_tool_calls: 25

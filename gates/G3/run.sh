@@ -272,7 +272,7 @@ for slot in a b; do
 
     # --- which model the BACKEND actually accepts, enumerated in the first sandbox -------------------
     # `docker agent models` lists gpt-5.6 and marks it default, but the Codex backend rejects it for
-    # a ChatGPT account. So the candidates - the GPT-5.x identifiers present in the pinned artifact,
+    # a ChatGPT account. So the candidates - the GPT-6.x identifiers present in the pinned artifact,
     # in T019's preference order - are tried against the real endpoint and the FIRST acceptance wins.
     # Enumeration stops there, so this costs a couple of trivial calls rather than one per candidate.
     if [ "$slot" = a ]; then

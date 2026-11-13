@@ -39,7 +39,7 @@ def _load(name, path):
     return module
 
 
-def run_capture(answer=MARKER, include_answer=True, provider="chatgpt", model="gpt-5.5"):
+def run_capture(answer=MARKER, include_answer=True, provider="chatgpt", model="gpt-6.1-sol"):
     events = [{"type": "team_info", "agent_name": "root",
                "available_agents": [{"name": "root", "provider": provider, "model": model}]},
               {"type": "user_message", "message": f"Reply with exactly the token {MARKER}"},
@@ -109,7 +109,7 @@ class G2Recorder(unittest.TestCase):
         (self.work / name).write_text(
             document if isinstance(document, str) else json.dumps(document), encoding="utf-8")
 
-    def _write_g3(self, status="PASS", model="gpt-5.5", versions=None):
+    def _write_g3(self, status="PASS", model="gpt-6.1-sol", versions=None):
         document = {
             "gate": "G3", "status": status,
             "run_at": "2026-09-21T02:17:28Z",
@@ -185,7 +185,7 @@ class G2Recorder(unittest.TestCase):
             "sbx_resolved_base": self.common.codex_base(self.versions)[0],
             "policy_allow": ",".join(self.allow), "policy_deny": ",".join(self.deny),
             "policy_rules_exit": "0", "safety_flag": "strict", "secrets_exit": "0",
-            "selected_model": "gpt-5.5",
+            "selected_model": "gpt-6.1-sol",
         }
         for slot in ("a", "b"):
             obs.update({
@@ -233,7 +233,7 @@ class G2Recorder(unittest.TestCase):
         backend = evidence["codex_backend"]
         self.assertEqual(backend["credential_mechanism"], "proxy-managed")
         self.assertIs(backend["proxy_managed_token_readable"], False)
-        self.assertEqual(backend["selected_model"], "gpt-5.5")
+        self.assertEqual(backend["selected_model"], "gpt-6.1-sol")
         self.assertIn("G9", backend["untrusted_implication"])
         self.assertIsNone(evidence["fallback_applied"])
 
@@ -300,7 +300,7 @@ class G2Recorder(unittest.TestCase):
         self.assertEqual(self._results()["G2.proxy-execution"], "FAIL")
 
     def test_10_a_run_on_a_model_g3_did_not_verify_fails(self):
-        self._write("task-b.json", run_capture(model="gpt-5.6"))
+        self._write("task-b.json", run_capture(model="gpt-6.1-terra"))
         self.assertEqual(self._results()["G2.proxy-execution"], "FAIL")
 
     def test_11_two_sandboxes_live_at_once_fails(self):

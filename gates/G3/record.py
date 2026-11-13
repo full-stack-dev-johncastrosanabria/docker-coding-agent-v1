@@ -10,7 +10,7 @@ Three properties:
   AVAILABILITY - the developer's ChatGPT sign-in drives the NATIVE Docker Agent chatgpt provider,
   with no harness and no provider API key. The model is not asserted from documentation: the gate
   reads the provider's own list and records what it selected. T019's fallback allows a different
-  model only if it is a non-deprecated GPT-5.x; an older family never satisfies this gate.
+  model only if it is a non-deprecated GPT-6.x; an older family never satisfies this gate.
 
   TRUSTED FALLBACK PROVISIONING - both of two CONSECUTIVE completely fresh sandboxes ran the task
   from a config directory holding ONLY chatgpt-auth.json. "Minimal" is checked, not asserted: the
@@ -65,8 +65,8 @@ SANDBOXES = {"a": "dca-g3-a", "b": "dca-g3-b"}
 MARKER = "DCA-G3-OK"
 WRITE_MARKER = "DCA-G3-WRITE"
 
-# T019's fallback is a NON-DEPRECATED GPT-5.x model. Nothing older, and never another provider.
-GPT5_PATTERN = re.compile(r"^gpt-5(?:\.\d+)*(?:-[a-z0-9.]+)*$")
+# T019's fallback is a NON-DEPRECATED GPT-6.x model. Nothing older, and never another provider.
+FAMILY_PATTERN = re.compile(r"^gpt-6(?:\.\d+)*(?:-[a-z0-9.]+)*$")
 DEPRECATED_HINTS = ("deprecated", "legacy", "retired", "sunset")
 
 # The approval matrix. `writes` is what the pipeline must actually do to the workspace file.
@@ -144,13 +144,13 @@ def parse_models(text):
 
 
 def acceptable_models(models):
-    """The models T019 permits: the GPT-5.x family, with any deprecated marking rejected."""
+    """The models T019 permits: the GPT-6.x family, with any deprecated marking rejected."""
     out = []
     for provider, model, is_default in models:
         lowered = model.lower()
         if any(hint in lowered for hint in DEPRECATED_HINTS):
             continue
-        if GPT5_PATTERN.match(lowered):
+        if FAMILY_PATTERN.match(lowered):
             out.append((provider, model, is_default))
     return out
 
@@ -159,7 +159,7 @@ def select_model(text):
     """(model, fallback_applied, why) - or (None, ...) when nothing acceptable is offered.
 
     The preferred model wins when the provider lists it. Otherwise T019's documented fallback picks
-    the highest available non-deprecated GPT-5.x. A non-GPT-5 family is never selected just to let
+    the highest available non-deprecated GPT-6.x. Another family is never selected just to let
     the gate pass, and no second provider is ever introduced.
     """
     models = parse_models(text)
@@ -171,14 +171,14 @@ def select_model(text):
     usable = acceptable_models(models)
     if not usable:
         return None, None, (f"the provider lists {names}, none of which is a non-deprecated "
-                            f"GPT-5.x model, so T019's fallback has nothing to select")
+                            f"GPT-6.x model, so T019's fallback has nothing to select")
 
     def version_key(name):
         return [int(p) for p in re.findall(r"\d+", name)]
 
     chosen = sorted((m for _, m, _ in usable), key=version_key)[-1]
     return chosen, True, (f"the preferred {common.PREFERRED_MODEL} is not listed; the documented "
-                          f"fallback selected the non-deprecated GPT-5.x model {chosen} from "
+                          f"fallback selected the non-deprecated GPT-6.x model {chosen} from "
                           f"{names}")
 
 
@@ -203,7 +203,7 @@ def select_runtime_model(work):
     """(model, fallback_applied, why) decided by what the BACKEND accepted, not by the listing.
 
     The candidates are tried in T019's preference order and enumeration stops at the first
-    acceptance, so the first accepted candidate IS the highest available non-deprecated GPT-5.x.
+    acceptance, so the first accepted candidate IS the highest available non-deprecated GPT-6.x.
     """
     probed = runtime_models(work)
     if not probed:
@@ -212,11 +212,11 @@ def select_runtime_model(work):
     rejected = [c for c in common.MODEL_CANDIDATES if c in probed and probed.get(c) != "0"]
     if not accepted:
         return None, None, (f"the backend rejected every candidate it was asked about ({rejected}), "
-                            "so no non-deprecated GPT-5.x model is usable")
+                            "so no non-deprecated GPT-6.x model is usable")
     chosen = accepted[0]
     lowered = chosen.lower()
-    if not GPT5_PATTERN.match(lowered) or any(h in lowered for h in DEPRECATED_HINTS):
-        return None, None, (f"the backend accepted {chosen!r}, which is not a non-deprecated GPT-5.x "
+    if not FAMILY_PATTERN.match(lowered) or any(h in lowered for h in DEPRECATED_HINTS):
+        return None, None, (f"the backend accepted {chosen!r}, which is not a non-deprecated GPT-6.x "
                             "model, and T019 never selects an older family to make the gate pass")
     if chosen == common.PREFERRED_MODEL:
         return chosen, False, "the backend accepted the preferred model"
@@ -293,7 +293,7 @@ def evaluate(obs, work, versions=None, g4_path=common.G4_EVIDENCE):
         f"{GATE}.model",
         "the model this gate ran is one the BACKEND actually accepts, not merely one the provider "
         "lists: candidates from the pinned artifact are tried against the real endpoint in T019's "
-        "preference order, the first acceptance is taken, it is a non-deprecated GPT-5.x, and both "
+        "preference order, the first acceptance is taken, it is a non-deprecated GPT-6.x, and both "
         "runs reported that exact model and the native chatgpt provider. An older family is never "
         "selected to make the gate pass and no second provider is introduced",
         not model_problems,
@@ -622,7 +622,7 @@ def record(obs_path, work=WORK, versions_path=VERSIONS, evidence_path=EVIDENCE):
             "exact pinned sandbox_bases.codex base, under the network policy accepted G4 proved for "
             "codex/trusted, with only one sandbox live at a time. The model is the one the "
             "signed-in plan actually lists, read from the provider rather than asserted; T019's "
-            "fallback would accept only a non-deprecated GPT-5.x. Provisioning copies ONLY "
+            "fallback would accept only a non-deprecated GPT-6.x. Provisioning copies ONLY "
             "chatgpt-auth.json, never the full ~/.config/cagent: the staged directory and the "
             "in-VM config directory each hold exactly that one file and the markers of a full copy "
             "are absent. The credential is staged in a mode-0700 directory OUTSIDE the repository "

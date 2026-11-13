@@ -1,7 +1,7 @@
 # gates/G3/probe.yaml - Gate G3 approval-pipeline probe (tasks.md T019 step 3, research R20/E18).
 #
-# The model is gpt-5.5, for the reason G3 records: the Codex backend rejects gpt-5.6 for a
-# ChatGPT-account sign-in even though the provider lists it.
+# The model is gpt-6.1-sol, for the reason G3 records: the Codex backend rejects the gpt-5.6 the
+# provider lists, and every other GPT-5.x model, for a ChatGPT-account sign-in.
 #
 # One filesystem toolset, so the model has a real write tool to be approved or blocked, and one
 # `pre_tool_use` hook at a FIXED path. The four approval cases differ only in what the script at
@@ -22,7 +22,7 @@ agents:
       Approval-pipeline probe for gate G3. It is asked to write one harmless file, so the gate can
       record whether the native pipeline honors an explicit hook allow, an exit-2 block, and the
       absence of any decision, and whether a weaker user config can defeat the command line.
-    model: chatgpt/gpt-5.5
+    model: chatgpt/gpt-6.1-sol
     safety: strict
     toolsets:
       - type: filesystem

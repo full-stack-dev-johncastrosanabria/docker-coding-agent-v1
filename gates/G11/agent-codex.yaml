@@ -1,6 +1,6 @@
 # gates/G11/agent-codex.yaml - Gate G11 part A probe agent, Codex backend (tasks.md T020).
 #
-# The native Docker Agent chatgpt provider at gpt-5.5 - the model accepted G3 proved the backend
+# The native Docker Agent chatgpt provider at gpt-6.1-sol - the model accepted G3 proved the backend
 # actually accepts for a ChatGPT-account sign-in, NOT the gpt-5.6 the provider lists and the
 # backend rejects. Config version 15 is what V1 pins (E1).
 #
@@ -21,7 +21,7 @@ agents:
       Event-stream probe for gate G11 part A. It performs a fixed, known number of real file tool
       calls so the prototype parser can be checked against a ground truth established before
       parsing.
-    model: chatgpt/gpt-5.5
+    model: chatgpt/gpt-6.1-sol
     safety: strict
     toolsets:
       - type: filesystem

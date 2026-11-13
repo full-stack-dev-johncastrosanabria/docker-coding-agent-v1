@@ -4,7 +4,7 @@
 # ChatGPT Codex backend responses API on chatgpt.com - through the legitimate authenticated path,
 # so a completion here proves the capability is reachable and mediated rather than simply absent.
 #
-# Model gpt-5.5, which accepted G3 proved the backend actually accepts for a ChatGPT-account
+# Model gpt-6.1-sol, which accepted G3 proved the backend actually accepts for a ChatGPT-account
 # sign-in; gpt-5.6 is listed by the provider and rejected by the backend. No toolset is declared:
 # the control only has to prove the control-plane call succeeds.
 #
@@ -21,5 +21,5 @@ agents:
     description: >
       Positive control for gate G9. It answers one trivial prompt, which is only possible from an
       authenticated result on the Codex backend endpoint the workload probes.
-    model: chatgpt/gpt-5.5
+    model: chatgpt/gpt-6.1-sol
     safety: strict
