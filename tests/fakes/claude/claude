@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stand-in for the claude CLI on hosts without it (CI): the launcher only checks it is on PATH.
+echo "fake claude: the tests never run the real CLI" >&2
+exit 1
