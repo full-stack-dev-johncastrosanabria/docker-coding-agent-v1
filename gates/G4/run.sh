@@ -181,7 +181,7 @@ for name in $(awk '/^cell /{print $2}' "$PLAN"); do
     # The explicit denies go in WITH the create (--deny-network, sandbox-scoped): the v3 claude
     # kit's startup hook reaches its kit-allowed apt mirrors while the VM boots, before a later
     # `sbx policy deny` could land.
-    denies=$(printf '%s' "$deny" | tr ',' '\n' | awk 'NF {printf " --deny-network %s", $0}')
+    denies=$(deny_flags "$deny")
     if [ "$agent" = docker-agent ]; then
         # shellcheck disable=SC2086
         create_pinned codex "$name" "$KIT" $denies

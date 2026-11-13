@@ -20,6 +20,12 @@ pinned_base_ref() {
     python3 -c 'import json,sys; b=json.load(open("runtime/versions.yaml"))["sandbox_bases"][sys.argv[1]]; print(b["base"] + "@" + b["version"] if b.get("base") and b.get("version") else "")' "$1"
 }
 
+deny_flags() {
+    # $1 = comma-separated hosts. Prints `--deny-network <host>` per host, for create_pinned: a
+    # creation-time deny holds while the VM boots, when a v3 kit's startup hook already runs.
+    printf '%s' "$1" | tr ',' '\n' | awk 'NF {printf " --deny-network %s", $0}'
+}
+
 create_pinned() {
     # $1 = backend, $2 = sandbox name, $3 = kit directory relative to ROOT (optional),
     # further arguments go to `sbx create` unchanged (e.g. --skills readonly for a control).
