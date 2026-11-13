@@ -9,15 +9,15 @@
     "sandbox_bases": {
       "claude": {
         "base": "synthetic.invalid/claude-base",
-        "version": "0.0.0-synthetic"
+        "version": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
       },
       "codex": {
         "base": "synthetic.invalid/codex-base",
-        "version": "0.0.0-synthetic"
+        "version": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
       }
     }
   },
-  "runtime_versions_digest": "sha256:6de1e99468d95a33eb781355cad2440c508f3690a08ef41198e4a048582e3c59",
+  "runtime_versions_digest": "sha256:b57d8c517fca96be17a1bef4512f5baa61407c011decc53cc6b2fb31ab2b9643",
   "common_gates": {
     "G0": "PASS",
     "G4": "PASS",

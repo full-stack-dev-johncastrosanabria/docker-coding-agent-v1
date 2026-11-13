@@ -125,7 +125,8 @@ def main(argv):
         # sbx >= 0.53: the first positional is the workload (a digest-qualified kit reference) and
         # every --kit is a mixin. `sbx inspect --json` later reports exactly that composition, so
         # the launcher's "this sandbox is the pinned base plus the DCA kit" check is meaningful in
-        # tests. A test that needs a DIFFERENT record sets `inspect_kits` and that wins.
+        # tests. A test that needs a DIFFERENT record sets `inspect_kits` (the whole list),
+        # `inspect_base` (the workload only) or `inspect_extra_kits` (appended).
         kits = [args[1]] if len(args) > 1 else []
         kits += [args[i + 1] for i, value in enumerate(args) if value == "--kit"]
         state.setdefault("sandboxes", []).append({"name": name, "kits": kits})
@@ -141,6 +142,10 @@ def main(argv):
             print(f"error: sandbox '{name}' not found", file=sys.stderr)
             return 1
         kits = state.get("inspect_kits", entry.get("kits", []))
+        if isinstance(kits, list) and kits and "inspect_base" in state:
+            kits = [state["inspect_base"]] + kits[1:]
+        if isinstance(kits, list):
+            kits = kits + state.get("inspect_extra_kits", [])
         print(json.dumps({"name": name, "kits": kits, "host_mounts": [], "runtime_mounts": [],
                           "created_version": "v0.53.0"}))
         return 0

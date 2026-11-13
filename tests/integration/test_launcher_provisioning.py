@@ -118,7 +118,7 @@ class ProvisioningCase(unittest.TestCase):
 
     def stub_kit(self, path, backend):
         os.makedirs(path, exist_ok=True)
-        with open(os.path.join(path, "spec.yaml"), "w", encoding="utf-8") as handle:
+        with open(os.path.join(path, "dca-runtime.yaml"), "w", encoding="utf-8") as handle:
             handle.write(f"# stub kit for {backend}\n")
         return path
 
@@ -138,14 +138,9 @@ class ProvisioningCase(unittest.TestCase):
         instance.provision()
         return instance
 
-    def resolved_image(self, backend="claude", reference=None):
-        """A creation record shaped like sbx's own: the `image` line naming what it resolved."""
-        if reference is None:
-            pinned = self.versions["sandbox_bases"][backend]
-            reference = f"{pinned['base']}@{pinned['version']}"
-        return ("\u2500\u2500 RESOLVE SETUP\n"
-                f"     image      {reference}\n"
-                "   \u2713 configuration resolved\n")
+    def pinned_reference(self, backend="claude"):
+        pinned = self.versions["sandbox_bases"][backend]
+        return f"{pinned['base']}@{pinned['version']}"
 
     def calls(self):
         log = self.state_dir / "calls.jsonl"
@@ -184,11 +179,13 @@ class TestHappyPath(ProvisioningCase):
         self.assertEqual(create[create.index("--name") + 1], f"dca-{instance.request.run_id}")
 
     def test_04_the_template_matches_the_backend(self):
-        for backend, template in (("claude", "claude"), ("codex", "docker-agent")):
+        # sbx >= 0.53: the AGENT argument is the backend's pinned workload, by digest - a bare
+        # agent name would resolve to the workload kit's mutable :latest.
+        for backend in ("claude", "codex"):
             with self.subTest(backend=backend):
                 self.setUp()
                 self.provisioned(backend=backend)
-                self.assertEqual(self.first("create")[1], template)
+                self.assertEqual(self.first("create")[1], self.pinned_reference(backend))
 
     def test_05_the_bundle_exists_before_any_sandbox_is_created(self):
         instance = self.make()
@@ -196,9 +193,9 @@ class TestHappyPath(ProvisioningCase):
         order = []
         original = self.sbx.create
 
-        def watched(template, name, kit, base):
+        def watched(*args, **kwargs):
             order.append("create")
-            return original(template, name, kit, base)
+            return original(*args, **kwargs)
 
         self.sbx.create = watched
         original_bundle = launcher.source_module.create_source_bundle
@@ -402,7 +399,7 @@ class TestCleanupAccounting(ProvisioningCase):
 
     def test_32_a_sandbox_left_by_a_failed_creation_is_still_removed(self):
         """A create that fails partway can leave a sandbox, so the name is claimed before the call."""
-        self.state["create_output"] = "Created sandbox but resolved nothing\n"
+        self.state["inspect_kits"] = []          # created, but its composition cannot be shown
         self.write_state()
         instance = self.make(backend="claude")
         instance.preconditions()
@@ -510,16 +507,17 @@ class TestImmutableBase(ProvisioningCase):
         reference, digest = self.CLAUDE if backend == "claude" else self.CODEX
         return reference, digest, f"{reference}@{digest}"
 
-    def provision_with(self, record, backend="claude"):
-        self.state["create_output"] = record
+    def provision_with(self, backend="claude", **inspect):
+        """Provision with sbx's inspect record as created, or with the given `inspect_*` overrides."""
+        self.state.update(inspect)
         self.write_state()
         instance = self.make(backend=backend)
         instance.preconditions()
         instance.provision()
         return instance
 
-    def assert_aborts_before_policy(self, record, backend="claude", *fragments):
-        self.state["create_output"] = record
+    def assert_aborts_before_policy(self, inspect, backend="claude", *fragments):
+        self.state.update(inspect)
         self.write_state()
         instance = self.make(backend=backend)
         instance.preconditions()
@@ -545,19 +543,18 @@ class TestImmutableBase(ProvisioningCase):
             with self.subTest(backend=backend):
                 self.setUp()
                 _, _, reference = self.pinned(backend)
-                self.provision_with(self.resolved_image(reference=reference), backend)
+                self.provision_with(backend)
                 create = self.first("create")
-                self.assertIn("--template", create)
-                self.assertEqual(create[create.index("--template") + 1], reference)
+                self.assertEqual(create[1], reference)
+                self.assertNotIn("--template", create)
 
     def test_41_each_backend_requests_its_own_pinned_base(self):
         requested = {}
         for backend in ("claude", "codex"):
             self.setUp()
             _, _, reference = self.pinned(backend)
-            self.provision_with(self.resolved_image(reference=reference), backend)
-            create = self.first("create")
-            requested[backend] = create[create.index("--template") + 1]
+            self.provision_with(backend)
+            requested[backend] = self.first("create")[1]
         self.assertEqual(requested, {"claude": self.pinned("claude")[2],
                                      "codex": self.pinned("codex")[2]})
         self.assertNotEqual(requested["claude"], requested["codex"])
@@ -569,9 +566,8 @@ class TestImmutableBase(ProvisioningCase):
         self.versions_path.write_text(json.dumps(self.versions, indent=2, sort_keys=True),
                                       encoding="utf-8")
         self.write_eligibility()
-        self.provision_with(self.resolved_image(reference=moved))
-        create = self.first("create")
-        self.assertEqual(create[create.index("--template") + 1], moved)
+        self.provision_with()
+        self.assertEqual(self.first("create")[1], moved)
 
     def test_43_no_digest_or_image_name_is_written_into_the_product(self):
         # Every base identity must come from runtime/versions.yaml. A literal digest or image name
@@ -591,7 +587,7 @@ class TestImmutableBase(ProvisioningCase):
         reference, digest, pinned = self.pinned("claude")
         self.state["templates"] = {"images": [self.image(reference, self.MOVED),
                                               self.image(*self.CODEX)]}
-        instance = self.provision_with(self.resolved_image(reference=pinned))
+        instance = self.provision_with()
         self.assertTrue(instance.sandbox_settings["mountless"])
         self.assertEqual(instance.sandbox_settings["shared_skills"], "off")
         # And the pin itself was not touched to get there.
@@ -603,56 +599,45 @@ class TestImmutableBase(ProvisioningCase):
         """It reports the mutable tag's mapping, so it can neither prove nor disprove the pin."""
         _, _, pinned = self.pinned("claude")
         self.state["fail"] = {"template": 1}      # any read of it would abort the run
-        self.provision_with(self.resolved_image(reference=pinned))
+        self.provision_with()
         self.assertNotIn("template", [argv[0] for argv in self.calls()])
 
     # --- fail closed --------------------------------------------------------------------------
 
     def test_46_a_record_naming_only_the_mutable_tag_is_refused(self):
         reference, _, pinned = self.pinned("claude")
-        message = self.assert_aborts_before_policy(
-            self.resolved_image(reference=reference), "claude", pinned)
+        message = self.assert_aborts_before_policy({"inspect_base": reference}, "claude", pinned)
         self.assertIn(reference, message)
 
     def test_47_a_record_naming_a_different_digest_is_refused(self):
         reference, _, pinned = self.pinned("claude")
         moved = f"{reference}@{self.MOVED}"
-        message = self.assert_aborts_before_policy(self.resolved_image(reference=moved),
-                                                   "claude", pinned)
+        message = self.assert_aborts_before_policy({"inspect_base": moved}, "claude", pinned)
         self.assertIn(self.MOVED, message)
 
-    def test_47a_the_reference_must_be_on_a_resolved_image_line(self):
-        """The pinned string appearing ANYWHERE in the output is not proof it was resolved.
+    def test_47a_the_composition_must_be_exactly_the_pin_and_the_dca_kit(self):
+        """sbx's own record must list the pinned workload and this run's kit, and nothing else.
 
-        It legitimately appears in the line that pulls it, and would appear in an echoed invocation
-        or a "did you mean" hint. A create that resolved a different image can therefore print it
-        and still exit 0, so only the resolved-image line may decide.
+        A reference that merely STARTS with the pin is a different image, and a third kit - a
+        shortcut, an injected mixin - is a different sandbox even when the first two are right.
         """
-        reference, _, pinned = self.pinned("claude")
-        moved = f"{reference}@{self.MOVED}"
-        for record in (
-            # the pin named only in a pull/progress line, while a different image was resolved
-            f"   \u2192 pull {pinned}\n     image      {moved}\n",
-            # the pin named in a hint, with nothing resolved at all
-            f"   ! {pinned} not found, did you mean it?\n   \u2713 Created sandbox dca-x\n",
-            # the pin only as part of a longer reference on the image line
-            f"     image      {pinned}-patched\n",
-        ):
-            with self.subTest(record=record.strip()[:48]):
+        _, _, pinned = self.pinned("claude")
+        for inspect in ({"inspect_base": f"{pinned}-patched"},
+                        {"inspect_extra_kits": ["docker.io/sbx/other@sha256:" + "d" * 64]},
+                        {"inspect_kits": [pinned]}):
+            with self.subTest(inspect=str(inspect)[:48]):
                 self.setUp()
-                self.assert_aborts_before_policy(record, "claude", pinned)
+                self.assert_aborts_before_policy(inspect, "claude", pinned)
 
     def test_48_the_other_backends_pinned_base_is_refused(self):
         self.assert_aborts_before_policy(
-            self.resolved_image(reference=self.pinned("codex")[2]), "claude",
-            self.pinned("claude")[2])
+            {"inspect_base": self.pinned("codex")[2]}, "claude", self.pinned("claude")[2])
 
-    def test_49_a_record_with_no_image_line_is_refused(self):
-        message = self.assert_aborts_before_policy("Created sandbox dca-x\n", "claude")
-        self.assertIn("(no image line)", message)
+    def test_49_a_record_with_no_kit_list_is_refused(self):
+        self.assert_aborts_before_policy({"inspect_kits": None}, "claude", "cannot be shown")
 
     def test_50_an_empty_record_is_refused(self):
-        self.assert_aborts_before_policy("", "claude", "cannot be shown")
+        self.assert_aborts_before_policy({"inspect_kits": []}, "claude", "cannot be shown")
 
     def test_51_an_incomplete_pin_is_refused_before_anything_is_created(self):
         """Both halves of the pin are required, at the precondition AND at the creation guard."""
@@ -683,7 +668,7 @@ class TestImmutableBase(ProvisioningCase):
         for base in (None, ""):
             with self.subTest(base=base):
                 with self.assertRaises(ValueError) as caught:
-                    self.sbx.create("claude", "dca-x", str(self.dir), base)
+                    self.sbx.create("dca-x", str(self.dir), base)
                 self.assertIn("mutable tag", str(caught.exception))
 
     def test_53_a_missing_pin_still_fails_closed_in_the_verification_itself(self):
@@ -691,14 +676,14 @@ class TestImmutableBase(ProvisioningCase):
         instance = self.make(backend="claude")
         instance.versions = self.versions
         with self.assertRaises(errors.InfraAbort) as caught:
-            instance._check_resolved_base(self.resolved_image(reference=self.pinned("claude")[2]))
+            instance._check_resolved_base()
         self.assertIn("no pinned sandbox base", str(caught.exception))
 
     # --- everything else unchanged -------------------------------------------------------------
 
     def test_54_network_mountless_skills_and_ssh_behaviour_are_unchanged(self):
         _, _, pinned = self.pinned("claude")
-        instance = self.provision_with(self.resolved_image(reference=pinned))
+        instance = self.provision_with()
         self.assertTrue(instance.sandbox_settings["mountless"])
         self.assertEqual(instance.sandbox_settings["shared_skills"], "off")
         self.assertFalse(instance.sandbox_settings["ssh_agent_forwarding"])

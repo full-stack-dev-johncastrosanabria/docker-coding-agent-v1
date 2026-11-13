@@ -18,16 +18,16 @@
   },
   "oracle_image": {
     "base": "synthetic.invalid/oracle-base",
-    "version": "0.0.0-synthetic"
+    "version": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
   },
   "sandbox_bases": {
     "claude": {
       "base": "synthetic.invalid/claude-base",
-      "version": "0.0.0-synthetic"
+      "version": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
     },
     "codex": {
       "base": "synthetic.invalid/codex-base",
-      "version": "0.0.0-synthetic"
+      "version": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
     }
   },
   "sbx": {
