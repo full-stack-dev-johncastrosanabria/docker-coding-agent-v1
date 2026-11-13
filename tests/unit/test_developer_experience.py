@@ -420,7 +420,10 @@ class TestRepositoryContentHasNoAuthority(Case):
         ref, commit = source.resolve_branch(self.repo, None)
         source.create_source_bundle(self.repo, ref, commit, bundle)
         clone = self.tmp / "clone"
-        git(self.tmp, "clone", "--quiet", str(bundle), str(clone))
+        # The bundle advertises only the branch, no HEAD: an older git (CI's) checks nothing out
+        # unless the branch is named.
+        git(self.tmp, "clone", "--quiet", "--branch", ref.removeprefix("refs/heads/"),
+            str(bundle), str(clone))
         delivered = git(clone, "ls-tree", "-r", "--name-only", "HEAD").split()
         self.assertEqual(delivered, ["src/app.py"])
         self.assertFalse(Path(clone, ".git", "dca").exists())
