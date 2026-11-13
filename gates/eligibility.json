@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-13T08:02:32Z",
+  "generated_at": "2026-11-13T08:04:53Z",
   "pinned_versions": {
     "docker_agent": "v1.160.0",
     "docker_agent_config_version": 15,
@@ -47,14 +47,14 @@
     },
     "codex": {
       "available": true,
-      "trusted_eligible": false,
+      "trusted_eligible": true,
       "untrusted_eligible": false,
       "credential_mechanism": "token-file-trusted-only",
       "gate_status": {
         "G3": "PASS",
         "G2": "FAIL",
         "G9": "PASS",
-        "G11": "PARTIAL"
+        "G11": "PASS"
       },
       "production_conformance": "PASS",
       "fallbacks_applied": [
