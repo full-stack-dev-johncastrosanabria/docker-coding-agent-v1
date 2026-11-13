@@ -1,0 +1,11 @@
+diff --git a/ledger/display.py b/ledger/display.py
+index 997de65..9f9bab7 100644
+--- a/ledger/display.py
++++ b/ledger/display.py
+@@ -7,4 +7,5 @@ def format_amount(cents):
+     """123450 -> '1234.50'. Every amount the ledger accepts."""
+     if not MIN_CENTS <= cents <= MAX_CENTS:
+         raise ValueError(f"{cents} cents is outside the accepted range")
+-    return f"{cents // 100}.{cents % 100:02d}"
++    grouped = f"{cents // 100:,}.{cents % 100:02d}"
++    return grouped if len(grouped) <= 12 else f"{cents // 100}.{cents % 100:02d}"

@@ -73,6 +73,10 @@ POLICY_UNINITIALIZED_STDERR = (
     "Initialize it with:\n"
     "  sbx policy init <allow-all|balanced|deny-all>\n"
 )
+POLICY_UNINITIALIZED_STDERR_053 = (
+    "error: global network policy has not been initialized\n"
+    "  try: sbx policy init <allow-all|balanced|deny-all>\n"
+)
 MISSING = object()
 
 # The order G0 executes in. Step 1 is observed in one go; each later criterion is reached only
@@ -144,15 +148,16 @@ def diagnose_status(diagnose, name):
     return None
 
 
-def sandbox_count(listing):
+def sandbox_count(listing, client=None):
     """How many sandboxes sbx ls --json reports, or None when the shape isn't one G0 accepts.
 
     T008 requires that no sandbox is *running* during the global setting change.
 
-    The authenticated `sbx ls --json` of the observed v0.43.0 candidate emits exactly
-    {"sandboxes": [...]}, captured read-only on this host. Only that shape is accepted:
+    The authenticated v0.43.0 client emits {"sandboxes": [...]}; the v0.53.0 client emits
+    a bare array. Both were captured read-only on this host. The bare array is accepted only
+    when the separately observed client is exactly v0.53.0:
 
-    - a bare array, a wrapper holding some other list such as {"warnings": []} or
+    - a bare array from a legacy or unknown client, a wrapper such as {"warnings": []} or
       {"errors": []}, and a document with any additional top-level key are all unknown. Reading
       one of those as "zero sandboxes" would treat an unrelated or changed document as proof
       that nothing is running, so they return None and block the change.
@@ -161,6 +166,10 @@ def sandbox_count(listing):
       no JSON field name, and guessing one would be fabrication. Once an entry is observed
       with a reliable status field, this narrows to running sandboxes as T008 states.
     """
+    # Authenticated v0.53.0 was observed returning a bare array. Accept it only for that
+    # observed client; legacy and unknown clients retain the original shape guard.
+    if client == (0, 53, 0) and isinstance(listing, list):
+        return len(listing)
     if isinstance(listing, dict) and set(listing) == {"sandboxes"} and isinstance(listing["sandboxes"], list):
         return len(listing["sandboxes"])
     return None
@@ -195,10 +204,14 @@ def policy_uninitialized(work, obs):
     the one-time global `sbx policy init`. Anything else (a 401, a reworded message, extra
     output, a different exit code) returns False and leaves the policy untouched.
     """
+    version = read_json(work, "version.json") or {}
+    client = parse_version((version.get("client") or {}).get("version", ""))
+    expected = (POLICY_UNINITIALIZED_STDERR_053 if client == (0, 53, 0)
+                else POLICY_UNINITIALIZED_STDERR)
     return (
         obs.get("policy_before_exit") == POLICY_UNINITIALIZED_EXIT
         and read_text(work, "policy-before.json") == ""
-        and read_text(work, "policy-before.err") == POLICY_UNINITIALIZED_STDERR
+        and read_text(work, "policy-before.err") == expected
     )
 
 
@@ -254,7 +267,7 @@ def evaluate(obs, work=WORK):
     ]
     step1 = all(result for _, _, result, _ in rows)
 
-    count = sandbox_count(read_json(work, "ls.json")) if "ls_exit" in obs else None
+    count = sandbox_count(read_json(work, "ls.json"), client) if "ls_exit" in obs else None
     before = setting_value(read_json(work, "settings-before.json"), SSH_KEY)
     after = setting_value(read_json(work, "settings-after.json"), SSH_KEY)
     daemon_after = diagnose_status(read_json(work, "diagnose-after.json"), "Daemon")
@@ -411,7 +424,7 @@ def record(obs_path, work=WORK, versions_path=VERSIONS, evidence_path=EVIDENCE):
         "fallback_applied": None,
         "notes": (
             "Observed by gates/G0/run.sh from the documented sbx JSON surfaces, against the "
-            "observed sbx v0.43.0 candidate (it becomes the V1 pin only once G0 passes and "
+            "observed sbx candidate recorded above (it becomes the V1 pin only once G0 passes and "
             "runtime/versions.yaml records it). No credential value is read or recorded. G0 initializes the "
             f"global network policy to the conservative {BOOTSTRAP_PRESET} bootstrap preset only "
             "when sbx reports it uninitialized, because a preset is required before the first "

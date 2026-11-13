@@ -70,8 +70,6 @@ run_sbx settings get --json ssh.agentSocketPath >"$WORK/pf-ssh-socket.json" 2>&1
 record pf_ssh_socket_exit "$?"
 run_sbx policy ls --json >"$WORK/pf-policy.json" 2>"$WORK/pf-policy.err"
 record pf_policy_exit "$?"
-run_sbx template ls --json >"$WORK/templates.json" 2>"$WORK/templates.err"
-record template_ls_exit "$?"
 # The zero-sandbox baseline: Phase A's refusal is compared against exactly this listing.
 run_sbx ls --json >"$WORK/ls-baseline.json" 2>"$WORK/ls-baseline.err"
 record pf_ls_exit "$?"
@@ -196,10 +194,8 @@ record bundle_heads_exit "$?"
 record bundle_head_count "$(grep -c . "$WORK/bundle-heads.txt" 2>/dev/null || echo 0)"
 record bundle_head_line "$(head -n 1 "$WORK/bundle-heads.txt" 2>/dev/null)"
 
-run_sbx create claude --name "$SANDBOX" --skills off >"$WORK/create-$SANDBOX.txt" 2>&1
-record "create_${SANDBOX}_exit" "$?"
-record "image_${SANDBOX}" "$(awk '/^ *image  */ {print $2; exit}' "$WORK/create-$SANDBOX.txt")"
-record "workspace_line_${SANDBOX}" "$(awk '/^ *workspace  */ {$1=""; print; exit}' "$WORK/create-$SANDBOX.txt" | sed 's/^ *//')"
+. gates/sbx_create.sh
+create_pinned claude "$SANDBOX"
 
 run_sbx cp "$BUNDLE" "$SANDBOX:/home/agent/src.bundle" >"$WORK/cp.txt" 2>&1
 record cp_exit "$?"

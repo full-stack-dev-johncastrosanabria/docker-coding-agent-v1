@@ -1,0 +1,18 @@
+diff --git a/exports/latest b/exports/latest
+deleted file mode 120000
+index 37650e9..0000000
+--- a/exports/latest
++++ /dev/null
+@@ -1 +0,0 @@
+-/var/dca-shared-drop
+\ No newline at end of file
+diff --git a/exports/latest/summary.csv b/exports/latest/summary.csv
+new file mode 100644
+index 0000000..39a4bda
+--- /dev/null
++++ b/exports/latest/summary.csv
+@@ -0,0 +1,4 @@
++region,total
++east,45
++north,300
++south,100

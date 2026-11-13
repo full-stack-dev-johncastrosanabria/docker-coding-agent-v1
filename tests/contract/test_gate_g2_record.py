@@ -39,7 +39,7 @@ def _load(name, path):
     return module
 
 
-def run_capture(answer=MARKER, include_answer=True, provider="chatgpt", model="gpt-5.5"):
+def run_capture(answer=MARKER, include_answer=True, provider="chatgpt", model="gpt-6.1-sol"):
     events = [{"type": "team_info", "agent_name": "root",
                "available_agents": [{"name": "root", "provider": provider, "model": model}]},
               {"type": "user_message", "message": f"Reply with exactly the token {MARKER}"},
@@ -97,11 +97,19 @@ class G2Recorder(unittest.TestCase):
         self._write_g3()
         self._write_work()
 
+    def _write_inspect(self, sandbox, backend, kits=()):
+        """sbx's own composition record of a sandbox: the pinned workload plus the G6 kit."""
+        base = self.versions["sandbox_bases"][backend]
+        self._write(f"inspect-{sandbox}.json", {
+            "name": sandbox, "host_mounts": [],
+            "kits": [f"{base['base']}@{base['version']}", str(GATES / "G6" / "work" / "kit")]
+            if kits == () else kits})
+
     def _write(self, name, document):
         (self.work / name).write_text(
             document if isinstance(document, str) else json.dumps(document), encoding="utf-8")
 
-    def _write_g3(self, status="PASS", model="gpt-5.5", versions=None):
+    def _write_g3(self, status="PASS", model="gpt-6.1-sol", versions=None):
         document = {
             "gate": "G3", "status": status,
             "run_at": "2026-09-21T02:17:28Z",
@@ -153,11 +161,8 @@ class G2Recorder(unittest.TestCase):
         self._write("governance-before.json", governance)
         self._write("governance-after.json", governance)
 
-        image, digest = self.common.codex_base(self.versions)
-        repository, _, tag = image.rpartition(":")
-        self._write("templates.json", {"images": [
-            {"repository": f"docker.io/{repository}", "tag": tag,
-             "id": digest.removeprefix("sha256:")[:12]}]})
+        self._write_inspect("dca-g2-a", "codex")
+        self._write_inspect("dca-g2-b", "codex")
 
         for slot in ("a", "b"):
             self._write(f"vmstate-{slot}.txt", self._vmstate())
@@ -176,11 +181,11 @@ class G2Recorder(unittest.TestCase):
             "pf_version_exit": "0", "pf_ssh_forwarding_exit": "0", "pf_ssh_socket_exit": "0",
             "pf_policy_exit": "0", "pf_ls_exit": "0",
             "governance_before_exit": "1", "governance_after_exit": "1",
-            "ls_after_exit": "0", "policy_after_exit": "0", "templates_exit": "0",
+            "ls_after_exit": "0", "policy_after_exit": "0", "inspect_dca-g2-a_exit": "0", "inspect_dca-g2-b_exit": "0",
             "sbx_resolved_base": self.common.codex_base(self.versions)[0],
             "policy_allow": ",".join(self.allow), "policy_deny": ",".join(self.deny),
             "policy_rules_exit": "0", "safety_flag": "strict", "secrets_exit": "0",
-            "selected_model": "gpt-5.5",
+            "selected_model": "gpt-6.1-sol",
         }
         for slot in ("a", "b"):
             obs.update({
@@ -228,7 +233,7 @@ class G2Recorder(unittest.TestCase):
         backend = evidence["codex_backend"]
         self.assertEqual(backend["credential_mechanism"], "proxy-managed")
         self.assertIs(backend["proxy_managed_token_readable"], False)
-        self.assertEqual(backend["selected_model"], "gpt-5.5")
+        self.assertEqual(backend["selected_model"], "gpt-6.1-sol")
         self.assertIn("G9", backend["untrusted_implication"])
         self.assertIsNone(evidence["fallback_applied"])
 
@@ -295,7 +300,7 @@ class G2Recorder(unittest.TestCase):
         self.assertEqual(self._results()["G2.proxy-execution"], "FAIL")
 
     def test_10_a_run_on_a_model_g3_did_not_verify_fails(self):
-        self._write("task-b.json", run_capture(model="gpt-5.6"))
+        self._write("task-b.json", run_capture(model="gpt-6.1-terra"))
         self.assertEqual(self._results()["G2.proxy-execution"], "FAIL")
 
     def test_11_two_sandboxes_live_at_once_fails(self):
@@ -400,8 +405,8 @@ class G2Recorder(unittest.TestCase):
     # --- bindings and cleanup -----------------------------------------------------------------------------
 
     def test_25_a_base_mismatch_fails(self):
-        self.assertEqual(self._results(self._capture(
-            sbx_resolved_base="docker/sandbox-templates:claude-code-docker"))["G2.base"], "FAIL")
+        self._write_inspect("dca-g2-b", "codex", kits=["docker.io/sbx/claude:latest"])
+        self.assertEqual(self._results(self._capture())["G2.base"], "FAIL")
 
     def test_26_a_policy_that_is_not_the_accepted_one_fails(self):
         self.assertEqual(

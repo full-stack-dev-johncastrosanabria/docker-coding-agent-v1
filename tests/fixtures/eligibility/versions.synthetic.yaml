@@ -11,14 +11,23 @@
   },
   "docker_agent_config_version": 15,
   "harness_module": "github.com/rumpl/harness@9376b9c76461",
+  "kit_build": {
+    "builder": "synthetic-builder",
+    "buildkit_image": "synthetic.invalid/buildkit@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "frontend": "synthetic.invalid/sandbox-kit:3@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "oracle_image": {
+    "base": "synthetic.invalid/oracle-base",
+    "version": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+  },
   "sandbox_bases": {
     "claude": {
       "base": "synthetic.invalid/claude-base",
-      "version": "0.0.0-synthetic"
+      "version": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
     },
     "codex": {
       "base": "synthetic.invalid/codex-base",
-      "version": "0.0.0-synthetic"
+      "version": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
     }
   },
   "sbx": {

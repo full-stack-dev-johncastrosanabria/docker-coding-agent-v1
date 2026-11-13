@@ -46,30 +46,31 @@ criteria_rows = _shared.criteria_rows
 
 BACKEND = "codex"
 # The provider and model this block runs under. The model is not hard-coded as a requirement: G3
-# reads the provider's actual list and records what it selected, applying T019's documented
-# non-deprecated GPT-5.x fallback only if the preferred one is genuinely unavailable.
+# probes the candidates against the real endpoint and records what the backend accepted, applying
+# T019's documented non-deprecated GPT-6.x fallback only if the preferred one is unavailable.
 PROVIDER = "chatgpt"
-PREFERRED_MODEL = "gpt-5.6"
-# THE LISTING IS NOT THE AVAILABILITY AUTHORITY. `docker agent models --provider chatgpt` lists
-# gpt-5.6 and marks it default, but the Codex backend rejects it for a ChatGPT-account sign-in with
-# HTTP 400 "The 'gpt-5.6' model is not supported when using Codex with a ChatGPT account". So G3
+# The family moved once already. On 2026-11-13 the ChatGPT backend answered every GPT-5.x candidate
+# with HTTP 400 "The '<model>' model is not supported when using Codex with a ChatGPT account"
+# (recorded in gates/G3.json at 161f5fa), so the family the developer chose is GPT-6.x and the
+# preferred model is the one their own Codex CLI runs. A NEWER family replacing a retired one is
+# an owner decision; an older family is never selected to make the gate pass.
+PREFERRED_MODEL = "gpt-6.1-sol"
+# THE LISTING IS NOT THE AVAILABILITY AUTHORITY. `docker agent models --provider chatgpt` on the
+# pinned artifact still lists only gpt-5.6 and marks it default, and the backend rejects it. So G3
 # enumerates candidates against the RUNTIME and selects the first one the backend actually accepts.
 #
-# The candidate set is not invented: these are the GPT-5.x model identifiers present as literals in
-# the pinned docker_agent_artifact, the same evidence method T014 used for control-plane hosts. They
-# are ordered by T019's rule - the preferred model first, then descending GPT-5.x, with a plain
-# model before its -codex sibling at the same version - so the first acceptance is the highest
-# available non-deprecated GPT-5.x. Enumeration stops at that first acceptance, so the cost is a
-# couple of trivial calls, not one per candidate.
+# The candidate set is not invented: these are GPT-6.x model identifiers present as literals in the
+# pinned docker_agent_artifact, the same evidence method T014 used for control-plane hosts. They
+# are ordered by T019's rule - the preferred model first, then descending version. Within one
+# version the order after the preferred variant carries no ranking claim. Tier-suffixed variants
+# (-fast, -pro) are left out: they are other price points, not fallbacks. Enumeration stops at the
+# first acceptance, so the cost is a couple of trivial calls, not one per candidate.
 MODEL_CANDIDATES = (
-    "gpt-5.6",
-    "gpt-5.5",
-    "gpt-5.4",
-    "gpt-5.3-codex",
-    "gpt-5.2-codex",
-    "gpt-5.1-codex-max",
-    "gpt-5.1-codex",
-    "gpt-5-codex",
+    "gpt-6.1-sol",
+    "gpt-6.1-terra",
+    "gpt-6-sol",
+    "gpt-6-astra",
+    "gpt-6-luna",
 )
 # The credential FILE NAME the trusted fallback may copy, and nothing else from the config dir.
 CREDENTIAL_FILE = "chatgpt-auth.json"
@@ -89,31 +90,38 @@ def codex_base(versions):
     return base.get("base"), base.get("version")
 
 
-def base_identity_row(gate, obs, work, versions, observed_key="sbx_resolved_base"):
-    """The gate created its sandboxes from the exact pinned Codex base, read back from sbx.
+def base_identity_row(gate, obs, work, versions, names=None):
+    """Every sandbox this gate created is exactly the pinned sandbox_bases.codex workload.
 
-    Identity is the combination the store actually exposes: the sbx-resolved reference, the cached
-    template's repository/tag/id, and the full pinned digest. A tag alone identifies nothing, and
-    the short image id is not a digest, so neither is accepted on its own.
+    gates/sbx_create.sh creates each sandbox from the digest-qualified workload and saves sbx's
+    own composition record as inspect-<sandbox>.json. Every such record must list the pinned
+    reference first and nothing but the G6 probe kit after it. No record at all fails: a gate
+    whose base cannot be shown is treated like one that used the wrong base. `names` restricts
+    the judgement to those sandboxes, for a gate that also creates the other backend's.
     """
-    image, digest = codex_base(versions)
-    resolved = obs.get(observed_key)
-    repository, _, tag = (image or "").rpartition(":")
-    cached = preflight_module.template_image(read_json(work, "templates.json"), repository, tag)
-    holds = (
-        bool(image)
-        and bool(digest)
-        and resolved == image
-        and preflight_module.template_identity_matches(cached, image, digest)
-    )
+    reference = preflight_module.pinned_reference(versions, "codex")
+    kit = os.path.join(ROOT, "gates", "G6", "work", "kit")
+    records = sorted(name for name in (os.listdir(work) if os.path.isdir(work) else [])
+                     if name.startswith("inspect-") and name.endswith(".json")
+                     and (names is None or name[len("inspect-"):-len(".json")] in names))
+    problems = []
+    for name in records:
+        inspected = read_json(work, name)
+        kits = inspected.get("kits") if isinstance(inspected, dict) else None
+        problem = preflight_module.composition_problem(
+            inspected, reference, kit if isinstance(kits, list) and len(kits) == 2 else None)
+        if problem:
+            problems.append(f"{name[len('inspect-'):-len('.json')]}: {problem}")
+    holds = bool(reference) and bool(records) and not problems
     return (
         f"{gate}.base",
-        "every sandbox in this gate came from the exact pinned sandbox_bases.codex base: the "
-        "reference sbx resolved, the cached template's repository, tag and image id, and the "
-        "pinned digest all agree; no base was discovered or substituted",
+        "every sandbox in this gate was created from the exact pinned sandbox_bases.codex "
+        "workload, by digest, and sbx's own inspect record shows that composition and nothing "
+        "else; no base was discovered or substituted",
         holds,
-        f"pinned {image} {digest}; sbx resolved {resolved or 'not reported'}; cached template "
-        f"{cached.get('repository') + ':' + cached.get('tag') + ' id ' + str(cached.get('id')) if isinstance(cached, dict) else 'not found in the template store'}",
+        f"pinned {reference}; {len(records)} sandbox record(s); "
+        + ("; ".join(problems) if problems else "every composition matches" if records
+           else "no sbx inspect record was captured"),
     )
 
 

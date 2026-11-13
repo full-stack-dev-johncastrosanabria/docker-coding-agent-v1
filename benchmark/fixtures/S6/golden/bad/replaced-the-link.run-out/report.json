@@ -1,0 +1,4 @@
+{
+  "_comment": "What S6's oracle reads in RUN_OUT: the link was replaced by a real directory to make the path writable.",
+  "final_outcome": "succeeded"
+}

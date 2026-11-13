@@ -79,16 +79,9 @@ class G7Recorder(unittest.TestCase):
             },
             "pf-ssh-socket.json": {"key": "ssh.agentSocketPath", "value": "", "source": "default"},
             "pf-policy.json": {"rules": [self.bootstrap_rule()]},
-            "templates.json": {
-                "images": [
-                    {
-                        "id": self.pinned_digest.removeprefix("sha256:")[:12],
-                        "repository": f"docker.io/{repository}",
-                        "tag": tag,
-                        "size": 936879795,
-                    }
-                ]
-            },
+            # sbx's own composition record of the sandbox (gates/sbx_create.sh saves it).
+            f"inspect-{SANDBOX}.json": {"name": SANDBOX, "host_mounts": [], "kits": [
+                f"{pins['sandbox_bases']['claude']['base']}@{pins['sandbox_bases']['claude']['version']}"]},
             "ls-after.json": {"sandboxes": []},
         }
         self.obs = {
@@ -247,27 +240,30 @@ class G7Recorder(unittest.TestCase):
         self.assertEqual(status, "PASS", results)
         self.assertEqual(results["G7.2"], "PASS")
 
-    def test_same_tag_with_a_different_digest_fails(self):
-        self.files["templates.json"]["images"][0]["id"] = "deadbeef1234"
+    def test_same_workload_with_a_different_digest_fails(self):
+        self.files[f"inspect-{SANDBOX}.json"]["kits"] = [
+            f"{self.pinned_base}@sha256:" + "d" * 64]
         self.assert_fails("G7.2")
 
-    def test_wrong_repository_or_tag_fails(self):
-        for label, change in (
-            ("wrong repository", {"repository": "docker.io/evil/sandbox-templates"}),
-            ("wrong tag", {"tag": "docker-agent-docker"}),
+    def test_wrong_repository_tag_or_an_extra_kit_fails(self):
+        pinned = f"{self.pinned_base}@{self.pinned_digest}"
+        for label, kits in (
+            ("wrong repository", [f"docker.io/evil/claude@{self.pinned_digest}"]),
+            ("a mutable tag", [f"{self.pinned_base}:latest"]),
+            ("an extra kit", [pinned, "/tmp/some-other-kit"]),
         ):
             with self.subTest(case=label):
                 self.setUp()
-                self.files["templates.json"]["images"][0].update(change)
+                self.files[f"inspect-{SANDBOX}.json"]["kits"] = kits
                 self.assert_fails("G7.2")
 
     def test_missing_template_store_or_reference_fails(self):
         for label, break_it in (
-            ("template store unreadable", lambda: self.files.__setitem__("templates.json", {"x": []})),
-            ("template store empty", lambda: self.files["templates.json"].__setitem__("images", [])),
-            ("store read failed", lambda: self.obs.__setitem__("template_ls_exit", "1")),
-            ("sbx resolved another base", lambda: self.obs.__setitem__(
-                f"image_{SANDBOX}", "docker/sandbox-templates:docker-agent-docker")),
+            ("inspect record unreadable", lambda: self.files.__setitem__(
+                f"inspect-{SANDBOX}.json", {"x": []})),
+            ("inspect record lists no kit", lambda: self.files[f"inspect-{SANDBOX}.json"].__setitem__(
+                "kits", [])),
+            ("no inspect record at all", lambda: self.files.pop(f"inspect-{SANDBOX}.json")),
             ("workspace was bind mounted", lambda: self.obs.__setitem__(
                 f"workspace_line_{SANDBOX}", "/Users/dev/repo · bind mount")),
         ):

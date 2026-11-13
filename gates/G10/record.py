@@ -101,7 +101,7 @@ def count(obs, key):
 
 
 def sandbox_names(listing):
-    entries = listing.get("sandboxes") if isinstance(listing, dict) else None
+    entries = preflight_module.sandbox_list(listing)
     if not isinstance(entries, list):
         return None
     return sorted(e.get("name") for e in entries if isinstance(e, dict))
@@ -344,10 +344,9 @@ def evaluate(obs, work):
     probe = read_env(work, f"probe-{SANDBOX}.env")
     probed = obs.get(f"probe_{SANDBOX}_exit") == "0"
     image = obs.get(f"image_{SANDBOX}") or ""
-    pinned_base = pins["sandbox_bases"]["claude"]["base"]
-    pinned_digest = pins["sandbox_bases"]["claude"]["version"]
-    repository, _, tag = (pinned_base or "").rpartition(":")
-    cached = preflight_module.template_image(read_json(work, "templates.json"), repository, tag)
+    reference = preflight_module.pinned_reference(pins, "claude")
+    problem = preflight_module.composition_problem(read_json(work, f"inspect-{SANDBOX}.json"),
+                                                   reference)
 
     # --- Phase A -------------------------------------------------------------------------------
     matrix = ", ".join(
@@ -418,14 +417,11 @@ def evaluate(obs, work):
             obs.get(f"create_{SANDBOX}_exit") == "0"
             and obs.get("cp_exit") == "0"
             and "no workspace bind mount" in obs.get(f"workspace_line_{SANDBOX}", "")
-            and image == pinned_base
-            and obs.get("template_ls_exit") == "0"
-            and preflight_module.template_identity_matches(cached, pinned_base, pinned_digest),
+            and problem is None,
             f"create exit {obs.get(f'create_{SANDBOX}_exit', '-')}, sbx cp exit "
-            f"{obs.get('cp_exit', '-')}, sbx resolved {image or 'not reported'} (pin {pinned_base}), "
-            f"cached template {(cached or {}).get('repository', 'not found')} tag "
-            f"{(cached or {}).get('tag', '-')} image id {(cached or {}).get('id', '-')} prefixing "
-            f"{pinned_digest}, workspace '{obs.get(f'workspace_line_{SANDBOX}', 'not reported')}'",
+            f"{obs.get('cp_exit', '-')}, created from {reference}; sbx inspect: "
+            f"{'composition proven' if problem is None else problem}; workspace "
+            f"'{obs.get(f'workspace_line_{SANDBOX}', 'not reported')}'",
             ready and phase_a_holds,
         )
     )

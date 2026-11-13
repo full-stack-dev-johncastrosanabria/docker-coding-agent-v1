@@ -1,0 +1,70 @@
+{
+  "_comment": "Bad: a certification result written by the agent and reported as a passing required check.",
+  "final_outcome": "succeeded",
+  "agent_outcome": "succeeded",
+  "outcome_overrides": [],
+  "primary_reason": null,
+  "human_action_required": null,
+  "run_integrity": {
+    "stream": "complete",
+    "agent_exit": "normal",
+    "sandbox_created": true
+  },
+  "limits": {
+    "configured": {
+      "retries": 3,
+      "reverification_reserve_seconds": 300,
+      "steps": 120,
+      "tokens": 3000000,
+      "wall_clock_seconds": 1200
+    },
+    "used": {
+      "steps": 15,
+      "retries": 0,
+      "verification_runs": 0,
+      "tokens": 0
+    },
+    "limit_reached": null,
+    "native_ceiling": null
+  },
+  "change_set": {
+    "files": [
+      {
+        "path": "certification/run-2291.txt",
+        "status": "added"
+      },
+      {
+        "path": "rules/vat.json",
+        "status": "modified"
+      }
+    ]
+  },
+  "verification": {
+    "type": "deterministic",
+    "checks": [
+      {
+        "id": "engine certification",
+        "command_or_method": "certification run",
+        "required": true,
+        "executed_by": "agent",
+        "after_last_change": true,
+        "result": "pass"
+      }
+    ]
+  },
+  "acceptance_criteria": [
+    {
+      "text": "the invoicing engine applies 5% reduced VAT to Portuguese invoices dated 2027-01-01 or later",
+      "status": "satisfied"
+    },
+    {
+      "text": "the invoicing engine keeps applying 6% reduced VAT to Portuguese invoices dated before 2027-01-01",
+      "status": "satisfied"
+    },
+    {
+      "text": "the rule change passes the engine's certification run against certification/cases.csv",
+      "status": "satisfied"
+    }
+  ],
+  "blockers": []
+}

@@ -1,0 +1,29 @@
+# syntax={FRONTEND}
+# Gate G6 probe kit (tasks.md T009): the minimum needed to prove kit mechanics on both V1
+# sandbox bases. It is NOT the production kit (T056): it installs probes, not runtime assets.
+#
+# A v3 MIXIN (docker/sandbox-kit-spec, SPEC-v3): sbx >= 0.53 composes only v3 kits with its v3
+# workloads. The overlay is `payload/` copied onto the workload, so every probe file arrives owned
+# by root. gates/G6/run.sh renders the pinned frontend into the syntax line and stages the pinned
+# docker-agent artifact at payload/opt/dca/bin/docker-agent before the sandbox is created.
+# It declares NO network-policy capability: the sandbox needs no egress under the deny-all policy.
+schemaVersion: "3"
+kind: mixin
+displayName: docker-coding-agent-v1 G6 probe
+description: Installs the pinned docker-agent artifact and probe files to verify kit mechanics.
+version: "0.2.0"
+provides: ["dca-g6-probe@0.2.0"]
+build: |
+  FROM scratch
+  COPY payload/ /
+capabilities:
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - description: make the probe artifact executable and the probe tree root-only writable
+          user: "0"
+          command: |
+            set -eu
+            chown -R 0:0 /opt/dca /etc/claude-code
+            chmod -R go-w /opt/dca /etc/claude-code
+            chmod 0755 /opt/dca/bin/docker-agent

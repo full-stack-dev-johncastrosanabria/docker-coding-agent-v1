@@ -23,6 +23,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = Path(__file__).resolve().parent / "work" / "bench"
@@ -49,7 +50,12 @@ rules = _load("dca_eligibility_rules", ROOT / "gates" / "eligibility_rules.py")
 
 EXPECTED_IDS = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
 SMALL_ACCEPTANCE_IDS = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8"]
-MEDIUM_ACCEPTANCE_IDS = ["M1", "M2", "M4", "M6"]
+MEDIUM_ACCEPTANCE_IDS = ["M1", "M2", "M3", "M4", "M5", "M6"]
+FAILURE_RECOVERY_IDS = ["F1", "F2", "F3", "F4", "F5", "F6"]
+#: The US3 fixtures whose correct change set is EMPTY: nothing can be verified (F2), essential
+#: information is missing (F3), or the request cannot be satisfied (F4, F5).
+SAFETY_IDS = ["S1", "S2", "S3", "S4", "S5a", "S5b", "S6", "S7", "S8"]
+EMPTY_REFERENCE_IDS = {"F2", "F3", "F4", "F5", "S4", "S5a", "S6", "S8"}
 
 
 def reliability_suite():
@@ -74,7 +80,8 @@ class TestFixtureSuite(unittest.TestCase):
     def test_01_every_fixture_is_discovered_in_natural_order_and_is_schema_valid(self):
         fixtures = bench.discover()
         self.assertEqual([f["id"] for f in fixtures],
-                         SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS + EXPECTED_IDS)
+                         FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS
+                         + EXPECTED_IDS + SAFETY_IDS)
 
     def test_02_small_fixtures_are_direct_and_medium_fixtures_are_planned(self):
         for fixture in reliability_suite():
@@ -357,6 +364,113 @@ class TestBenchRuns(unittest.TestCase):
         for forbidden in ("--allow-drift", "--ignore-uncommitted", "--approve"):
             self.assertNotIn(forbidden, argv)
 
+    def test_51a_a_model_choice_reaches_every_dca_run(self):
+        fixture = bench.discover(selection="R1")[0]
+        runner = bench.Bench(["claude"], fixtures=[fixture], repo_root=str(ROOT), sbx=self.sbx,
+                             dca_command=["dca"], work_root=str(self.dir / "work"),
+                             results_root=str(self.dir / "results"), log=self.logs.append,
+                             choice={"model": "claude-sonnet-5-5", "effort": "high"})
+        seen = []
+        runner._invoke = lambda argv, base: (seen.append(argv), (3, "refused"))[1]
+        runner.run_one("claude", fixture, 1)
+        self.assertEqual(seen[0][seen[0].index("--model") + 1], "claude-sonnet-5-5")
+        self.assertEqual(seen[0][seen[0].index("--effort") + 1], "high")
+        self.assertNotIn("--autocompact", seen[0])
+
+    def test_51b_one_model_id_is_never_sent_to_both_backends(self):
+        options = mock.Mock(model="claude-opus-5-5", effort=None, autocompact=None)
+        with self.assertRaises(errors.UsageError):
+            bench._choice(options, ["claude", "codex"])
+        shared = mock.Mock(model=None, effort="high", autocompact="off")
+        self.assertEqual(bench._choice(shared, ["claude", "codex"]),
+                         {"choice": {"effort": "high", "autocompact": "off"}})
+
+    def test_51c_a_glob_runs_only_the_s5_variant_the_backend_is_eligible_for(self):
+        fixtures = bench.discover(selection="S5*")
+        self.assertEqual([f["id"] for f in fixtures], ["S5a", "S5b"])
+        runner = bench.Bench(["codex"], fixtures=fixtures, repo_root=str(ROOT), sbx=self.sbx,
+                             dca_command=["dca"], work_root=str(self.dir / "work"),
+                             results_root=str(self.dir / "results"), log=self.logs.append)
+        seen = []
+        runner._invoke = lambda argv, base: (seen.append(argv), (3, "refused"))[1]
+        runner.run()
+        # Neither backend is untrusted-eligible today, so the fail-closed variant is the one.
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(seen[0][seen[0].index("--trust") + 1], "untrusted")
+        self.assertIn("dca bench: codex S5b is not applicable (untrusted-eligible); skipped",
+                      self.logs)
+
+    def test_51d_a_run_cut_short_by_the_provider_quota_is_waited_out_and_run_again(self):
+        import datetime
+        fixture = bench.discover(selection="R1")[0]
+        now = datetime.datetime(2026, 11, 13, 17, 26, tzinfo=datetime.timezone.utc)
+        slept = []
+        runner = bench.Bench(["claude"], fixtures=[fixture], repo_root=str(ROOT), sbx=self.sbx,
+                             dca_command=["dca"], work_root=str(self.dir / "work"),
+                             results_root=str(self.dir / "results"), log=self.logs.append,
+                             sleep=slept.append, now=lambda: now)
+        notice = {"type": "agent_choice", "agent_name": "root",
+                  "content": "You've hit your 5-hour limit · resets 7:50pm (UTC)"}
+        attempts = []
+
+        def invoke(argv, base):
+            attempts.append(argv)
+            out = Path(argv[argv.index("--out") + 1])
+            out.mkdir(parents=True, exist_ok=True)
+            if len(attempts) == 1:      # the first attempt hits the quota; the second does not
+                (out / "events.jsonl").write_text(json.dumps(notice) + "\n")
+            return 3, "refused"
+
+        runner._invoke = invoke
+        record = runner.run_one("claude", fixture, 1)
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(slept, [(19 * 60 + 50 - (17 * 60 + 26)) * 60 + bench.QUOTA_MARGIN_SECONDS])
+        self.assertEqual(record["quota_waits"], [{"at": "2026-11-13T17:26:00Z",
+                                                  "resets_at": "2026-11-13T19:50:00Z"}])
+
+    def test_51e_only_the_providers_own_notice_counts_as_quota(self):
+        import datetime
+        now = datetime.datetime(2026, 11, 13, 23, 30, tzinfo=datetime.timezone.utc)
+        path = self.dir / "events.jsonl"
+
+        def reset(content, kind="agent_choice"):
+            path.write_text("not json\n" + json.dumps({"type": kind, "content": content}) + "\n")
+            return bench.quota_reset(str(path), now)
+
+        self.assertEqual(reset("You've hit your session limit - resets 1am (UTC)"),
+                         now.replace(day=14, hour=1, minute=0))
+        self.assertEqual(reset("You've hit your 5-hour limit · resets 12:05am (UTC)"),
+                         now.replace(day=14, hour=0, minute=5))
+        self.assertIsNone(reset("The log says: You've hit your 5-hour limit · resets 7pm (UTC)"))
+        self.assertIsNone(reset("You've hit your 5-hour limit · resets 7pm (UTC)",
+                                kind="tool_call_response"))
+        self.assertIsNone(reset("You've hit your weekly limit · resets Nov 20, 7pm (UTC)"))
+        self.assertIsNone(bench.quota_reset(str(self.dir / "absent.jsonl"), now))
+
+    def test_51f_a_quota_that_does_not_come_back_fails_the_run_and_names_the_cause(self):
+        import datetime
+        fixture = bench.discover(selection="R1")[0]
+        now = datetime.datetime(2026, 11, 13, 17, 26, tzinfo=datetime.timezone.utc)
+        slept = []
+        runner = bench.Bench(["claude"], fixtures=[fixture], repo_root=str(ROOT), sbx=self.sbx,
+                             dca_command=["dca"], work_root=str(self.dir / "work"),
+                             results_root=str(self.dir / "results"), log=self.logs.append,
+                             sleep=slept.append, now=lambda: now)
+
+        def invoke(argv, base):
+            out = Path(argv[argv.index("--out") + 1])
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "events.jsonl").write_text(json.dumps(
+                {"type": "agent_choice",
+                 "content": "You've hit your 5-hour limit · resets 6pm (UTC)"}) + "\n")
+            return 3, "refused"
+
+        runner._invoke = invoke
+        record = runner.run_one("claude", fixture, 1)
+        self.assertEqual(len(slept), bench.QUOTA_MAX_WAITS)
+        self.assertEqual(record["result"], bench.FAILED)
+        self.assertIn("provider's quota is exhausted", record["reasons"][0])
+
     def test_52_a_wrong_answer_is_caught_by_the_oracle(self):
         fixture = bench.discover(selection="R1")[0]
         bad = os.path.join(fixture["_dir"], fixture["golden"]["bad"][0])
@@ -419,6 +533,39 @@ class TestBenchRuns(unittest.TestCase):
         document = runner.run()
         self.assertEqual([r["repeat"] for r in document["runs"]], [1, 2])
         self.assertEqual(len({r["seed_commit"] for r in document["runs"]}), 1)
+
+    def test_58a_an_unreadable_initial_sandbox_list_refuses_before_running(self):
+        failure = sbx_module.SbxError(["sbx", "ls"], 1, "not signed in to Docker")
+        with mock.patch.object(self.sbx, "list_sandboxes", side_effect=failure):
+            with self.assertRaises(errors.PreconditionError) as caught:
+                self.run_bench()
+        self.assertIn("not signed in to Docker", str(caught.exception))
+        self.assertEqual(list(self.dir.rglob("dca.stdout")), [], "a fixture ran without a baseline")
+
+    def test_58b_an_unreadable_final_list_cannot_count_as_successful_cleanup(self):
+        failure = sbx_module.SbxError(["sbx", "ls"], 1, "daemon disconnected")
+        with mock.patch.object(self.sbx, "list_sandboxes", side_effect=[[], failure]):
+            runner, document = self.run_bench()
+        run = document["runs"][0]
+        self.assertEqual((run["result"], run["cleanup"]), (bench.FAILED, "unknown"))
+        self.assertIn("daemon disconnected", run["cleanup_detail"])
+        self.assertTrue(any("could not be verified" in reason for reason in run["reasons"]))
+        self.assertEqual(document["summary"]["cleanup_failures"], 1)
+        self.assertTrue(Path(runner.results_dir, "benchmark.json").is_file())
+
+    def test_58c_a_malformed_initial_list_is_not_an_empty_baseline(self):
+        for listing in ({}, [None], [{}], [{"name": None}]):
+            with self.subTest(listing=listing), \
+                    mock.patch.object(self.sbx, "list_sandboxes", return_value=listing):
+                with self.assertRaises(errors.PreconditionError):
+                    self.run_bench()
+
+    def test_58d_unverifiable_cleanup_also_fails_an_acceptance_fixture(self):
+        failure = sbx_module.SbxError(["sbx", "ls"], 1, "daemon disconnected")
+        with mock.patch.object(self.sbx, "list_sandboxes", side_effect=[[], failure]):
+            run, _ = self.run_acceptance_fixture()
+        self.assertEqual((run["result"], run["cleanup"]), (bench.FAILED, "unknown"))
+        self.assertTrue(any("could not be verified" in reason for reason in run["reasons"]))
 
 
     def run_acceptance_fixture(self, **script):
@@ -582,15 +729,16 @@ class TestReliabilityNamespace(unittest.TestCase):
         self.assertEqual([f["id"] for f in reliability_suite()],
                          [f"R{i}" for i in range(1, 11)])
         self.assertEqual([f["id"] for f in bench.acceptance_fixtures(bench.discover())],
-                         SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS,
-                         "no reliability fixture counts as acceptance")
+                         FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS
+                         + SAFETY_IDS, "no reliability fixture counts as acceptance")
 
     def test_91_the_committed_acceptance_fixtures_are_exactly_the_ones_created_so_far(self):
-        # T079/T080 created K1-K8 and T082 created M1, M2, M4 and M6; M3, M5, F* and S* arrive
-        # with T084-T094, never under an R name.
+        # T079/T080 created K1-K8, T082 created M1, M2, M4 and M6, T084/T085 created F1-F6 and
+        # T087-T089 created S*; M3 and M5 arrive with T092/T094, never under an R name.
         names = sorted(d.name for d in (ROOT / "benchmark" / "fixtures").iterdir() if d.is_dir())
         self.assertEqual([n for n in names if not re.fullmatch(r"R([1-9]|10)", n)],
-                         sorted(SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS))
+                         sorted(FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS
+                                + MEDIUM_ACCEPTANCE_IDS + SAFETY_IDS))
 
     def test_92_the_baseline_keeps_its_historical_ids_and_maps_them(self):
         baseline = json.loads(self.BASELINE.read_text())
@@ -1276,7 +1424,8 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
 
     def test_170_k1_to_k8_are_small_direct_fixtures_that_always_apply(self):
         self.assertEqual(list(self.fixtures),
-                         SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS)
+                         FAILURE_RECOVERY_IDS + SMALL_ACCEPTANCE_IDS + MEDIUM_ACCEPTANCE_IDS
+                         + SAFETY_IDS)
         for fid in SMALL_ACCEPTANCE_IDS:
             fixture = self.fixtures[fid]
             with self.subTest(fixture=fid):
@@ -1293,6 +1442,8 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
             with self.subTest(fixture=fid):
                 if fid == "K5":     # FR-014a: alternative verification, nothing to re-execute
                     self.assertEqual(fixture["verification"], {"type": "alternative"})
+                elif fid == "F2":   # FR-014a: no adequate approach exists, which is F2's point
+                    self.assertEqual(fixture["verification"], {"type": "none-adequate"})
                 else:
                     self.assertEqual(fixture["verification"]["type"], "deterministic")
                     self.assertTrue(fixture["verification"]["commands"])
@@ -1323,15 +1474,39 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
                 self.assertEqual(self.seed(fid, f"{fid}-b"), commits[fid])
         self.assertEqual(len(set(commits.values())), len(commits))
 
+    #: The US3 fixtures whose required check FAILS on the seed by design: F1's canary until the
+    #: rollout is done, F4's impossible round trip, F5's contradiction, F6's unfinished backfill.
+    FAILING_BY_DESIGN = {"F1", "F4", "F5", "F6", "S1", "S3", "S5a", "S5b", "S8"}
+    #: S5b's probes measure the SANDBOX (egress, the control plane). Run on a developer machine
+    #: they would report on that machine and send real requests to a provider, so they never are.
+    SANDBOX_PROBES = {"python3 tools/egress_probe.py", "python3 tools/control_plane_probe.py"}
+    #: Checks that pass on a seed whose test suite fails by design.
+    PASSING_PROBES = {"python3 tools/access_probe.py"}
+
     def test_174_every_required_check_runs_on_the_seed(self):
         for fid, fixture in self.fixtures.items():
             for command in fixture["verification"].get("commands") or []:
+                if command in self.SANDBOX_PROBES:
+                    continue
                 with self.subTest(fixture=fid, command=command):
+                    shutil.rmtree(self.dir / fid, ignore_errors=True)
                     self.seed(fid, fid)
+                    environment = {k: v for k, v in os.environ.items() if k != "SSH_AUTH_SOCK"}
                     run = subprocess.run(command, shell=True, cwd=self.dir / fid,
                                          capture_output=True, text=True,
-                                         env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
-                    self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                                         env=dict(environment, PYTHONDONTWRITEBYTECODE="1"))
+                    if fid in self.FAILING_BY_DESIGN and command not in self.PASSING_PROBES:
+                        # It must RUN - a check that cannot start is a different fixture (F2) - and
+                        # fail on its assertions, not on an import or a missing file.
+                        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+                        if command.startswith("node"):
+                            self.assertIn("fail 1", run.stdout)
+                            continue
+                        self.assertRegex(run.stderr, r"Ran \d+ tests? in")
+                        self.assertNotIn("ImportError", run.stderr)
+                        self.assertNotIn("ModuleNotFoundError", run.stderr)
+                    else:
+                        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
 
     def test_175_k1_starts_with_exactly_one_unrelated_failing_test(self):
         # FR-019: the pre-existing failure the baseline must record is there before any change.
@@ -1348,15 +1523,50 @@ class TestSmallAcceptanceFixtures(unittest.TestCase):
             with self.subTest(fixture=fid):
                 patch = (Path(fixture["_dir"]) / fixture["golden"]["good"]).read_text()
                 paths = re.findall(r"^diff --git a/\S+ b/(\S+)$", patch, re.M)
+                if fid in EMPTY_REFERENCE_IDS:
+                    self.assertEqual(paths, [], "the correct change set here is empty")
+                    continue
                 self.assertTrue(paths)
                 self.assertEqual(bench.out_of_scope([{"path": p} for p in paths],
                                                     fixture["allowed_change_scope"]), [])
 
-    def test_177_the_acceptance_count_now_holds_every_small_and_planned_fixture(self):
-        # The full protocol stays refused until T084-T094 add the other 16 applicable fixtures.
-        with self.assertRaises(errors.PreconditionError) as caught:
-            bench.acceptance_plan(bench.discover(), "trusted", False, THRESHOLDS)
-        self.assertIn("'small': 8, 'medium': 4", str(caught.exception))
+    def test_176a_m5_accepts_a_correct_run_whose_review_found_nothing(self):
+        # Developer decision 2026-11-13: getting it right the first time is not a failure.
+        fixture = self.fixtures["M5"]
+        repo = self.dir / "m5"
+        self.seed("M5", "m5")
+        subprocess.run(["git", "-C", str(repo), "apply", "--index",
+                        str(Path(fixture["_dir"]) / fixture["golden"]["good"])], check=True)
+        verdict, detail = bench.run_oracle_on_host(
+            fixture, str(repo),
+            run_out=str(Path(fixture["_dir"]) / "golden" / "good-no-finding.run-out"))
+        self.assertEqual(verdict, "pass", detail)
+
+    def test_176b_m3_accepts_a_correct_run_that_did_not_delegate_but_not_an_unbounded_one(self):
+        # Developer decision 2026-11-13: delegation is measured by T093, not required to pass.
+        fixture = self.fixtures["M3"]
+        golden = Path(fixture["_dir"]) / "golden"
+        repo = self.dir / "m3"
+        self.seed("M3", "m3")
+        subprocess.run(["git", "-C", str(repo), "apply", "--index", str(golden / "good.patch")],
+                       check=True)
+        verdict, detail = bench.run_oracle_on_host(
+            fixture, str(repo), run_out=str(golden / "good-no-delegation.run-out"))
+        self.assertEqual(verdict, "pass", detail)
+        verdict, detail = bench.run_oracle_on_host(
+            fixture, str(repo), run_out=str(golden / "bad" / "unbounded-research.run-out"))
+        self.assertEqual(verdict, "fail")
+        self.assertIn("the investigation was not bounded", detail)
+
+    def test_177_the_acceptance_suite_is_complete_28_applicable_of_29(self):
+        # T092 added M3, the last one: the plan is no longer refused for a missing fixture.
+        plan = bench.acceptance_plan(bench.discover(), "trusted", False, THRESHOLDS)
+        self.assertEqual(len(plan), 29)
+        skipped = [f["id"] for f, applicability, _ in plan if applicability != bench.APPLICABLE]
+        self.assertEqual(skipped, ["S5b"], "neither backend is untrusted-eligible today")
+        eligible = bench.acceptance_plan(bench.discover(), "trusted", True, THRESHOLDS)
+        self.assertEqual([f["id"] for f, applicability, _ in eligible
+                          if applicability != bench.APPLICABLE], ["S5a"])
 
     def test_178_m1_m2_m4_and_m6_are_medium_planned_fixtures_that_always_apply(self):
         """T082: the US2 contract fields, checked before any provider run."""

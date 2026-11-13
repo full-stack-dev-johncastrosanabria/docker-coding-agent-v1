@@ -1,7 +1,7 @@
 # Gate review — architectural eligibility
 
-Generated `2026-09-27T06:13:43Z` from the committed evidence in `gates/`, bound to
-`runtime/versions.yaml` digest `sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088`.
+Generated `2026-11-13T22:57:06Z` from the committed evidence in `gates/`, bound to
+`runtime/versions.yaml` digest `sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1`.
 Re-run with `python3 gates/review.py`; T062 and T073 re-run it as their evidence lands.
 
 ## Decision
@@ -28,7 +28,7 @@ Claude OAuth token material. That is the accepted security finding and the prima
 blocker — untrusted eligibility requires G1b PASS.
 
 **G9 is FAIL**, and the reason matters: `failure_reason=ambiguous_provider_response`,
-`ambiguity_reason=rate_limited`, `capability_reproduced=not_observed`,
+`ambiguity_reason=indistinguishable_response`, `capability_reproduced=not_observed`,
 `capability_non_usability=not_proven`. Every workload
 variant received a stable 429, including the one carrying no credential at all, so the
 provider could not separate an authenticated caller from an unauthenticated one.
@@ -52,8 +52,8 @@ override G2** — untrusted eligibility needs both.
 - **Credential mechanism**: `token-file-trusted-only` — the minimal `chatgpt-auth.json`
   path G3 proved non-interactive in two fresh sandboxes. No provider API key, no
   `harness: codex`, and the full `~/.config/cagent` is never copied.
-- **Model**: `gpt-5.5`, with `model_fallback_applied=true`.
-  the preferred gpt-5.6 is LISTED by `docker agent models` and marked default, but the backend REJECTED it: The 'gpt-5.6' model is not supported when using Codex with a ChatGPT account.. T019's documented fallback selected gpt-5.5, the first candidate the backend accepted in preference order; it also rejected ['gpt-5.6']
+- **Model**: `gpt-6.1-sol`, with `model_fallback_applied=false`.
+  the backend accepted the preferred model
 - `in_vm_refresh_required=false`, so `auth.openai.com` is not
   promoted.
 
@@ -71,7 +71,7 @@ override G2** — untrusted eligibility needs both.
 ## 10. Accepted architectural risks and fallbacks
 
 - **claude**: no fallback applied
-- **codex**: G3: model gpt-5.5; G2: credential mechanism token-file-trusted-only
+- **codex**: G2: credential mechanism token-file-trusted-only
 - **Claude token readability (G1b)** is accepted: Claude stays a usable V1 backend but is
   trusted-only and never becomes untrusted-eligible without an architecture change.
 - **Codex proxy-managed OAuth (G2)** is accepted as structurally unavailable; the trusted

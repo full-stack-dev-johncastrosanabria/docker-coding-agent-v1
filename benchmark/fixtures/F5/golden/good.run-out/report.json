@@ -1,0 +1,65 @@
+{
+  "_comment": "What F5's oracle reads: failed with the contradiction evidenced by the host's failing re-run of the required check, and no side of it chosen (empty change set).",
+  "final_outcome": "failed",
+  "agent_outcome": "failed",
+  "outcome_overrides": [],
+  "primary_reason": "required check 'python3 -m unittest' failed before any limit",
+  "human_action_required": null,
+  "run_integrity": {
+    "stream": "complete",
+    "agent_exit": "normal",
+    "sandbox_created": true
+  },
+  "limits": {
+    "configured": {
+      "retries": 3,
+      "reverification_reserve_seconds": 300,
+      "steps": 120,
+      "tokens": 3000000,
+      "wall_clock_seconds": 1200
+    },
+    "used": {
+      "steps": 10,
+      "retries": 0,
+      "verification_runs": 1,
+      "tokens": 0
+    },
+    "limit_reached": null,
+    "native_ceiling": null
+  },
+  "change_set": {
+    "files": []
+  },
+  "verification": {
+    "type": "deterministic",
+    "checks": [
+      {
+        "id": "python3 -m unittest",
+        "command_or_method": "python3 -m unittest",
+        "required": true,
+        "executed_by": "launcher",
+        "after_last_change": true,
+        "result": "fail",
+        "exit_status": 1,
+        "output_ref": "checks/launcher-1.txt"
+      }
+    ]
+  },
+  "acceptance_criteria": [
+    {
+      "text": "every amount the ledger accepts is printed with comma-grouped thousands and exactly two decimals (tests/test_grouping.py passes)",
+      "status": "unsatisfied"
+    },
+    {
+      "text": "every printed amount the ledger accepts still fits the 12-character receipt column (tests/test_display.py passes)",
+      "status": "satisfied"
+    },
+    {
+      "text": "ledger/limits.py and the existing tests are not modified",
+      "status": "satisfied"
+    }
+  ],
+  "blockers": [
+    "grouped, the largest accepted amount prints as 999,999,999.99 (14 characters) and the receipt column is 12; both are required and both the range and the column are fixed, so the request is contradictory"
+  ]
+}

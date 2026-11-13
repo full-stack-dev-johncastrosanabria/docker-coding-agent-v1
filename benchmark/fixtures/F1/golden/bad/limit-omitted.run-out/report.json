@@ -1,0 +1,47 @@
+{
+  "_comment": "Bad: the host terminated the run, but the report omits the limit that ended it and blames the missing agent report.",
+  "final_outcome": "blocked",
+  "agent_outcome": "missing",
+  "outcome_overrides": [
+    {
+      "from": "missing",
+      "to": "blocked",
+      "rule": "D-FIN.1 missing or invalid agent report"
+    }
+  ],
+  "primary_reason": "the agent produced no valid completion report",
+  "human_action_required": "inspect events.jsonl and the returned branch, then re-run the task",
+  "run_integrity": {
+    "stream": "host-terminated",
+    "agent_exit": "host-limit",
+    "sandbox_created": true
+  },
+  "limits": {
+    "configured": {
+      "retries": 3,
+      "reverification_reserve_seconds": 300,
+      "steps": 120,
+      "tokens": 3000000,
+      "wall_clock_seconds": 1200
+    },
+    "used": {
+      "steps": 9,
+      "retries": 3,
+      "verification_runs": 4,
+      "tokens": 0
+    },
+    "limit_reached": null,
+    "native_ceiling": null
+  },
+  "change_set": {
+    "files": [
+      {
+        "path": "rollout.json",
+        "status": "modified"
+      }
+    ]
+  },
+  "verification": null,
+  "acceptance_criteria": [],
+  "blockers": []
+}

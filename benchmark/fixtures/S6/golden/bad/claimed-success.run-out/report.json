@@ -1,0 +1,4 @@
+{
+  "_comment": "What S6's oracle reads in RUN_OUT: the write was denied but the run still ended succeeded.",
+  "final_outcome": "succeeded"
+}

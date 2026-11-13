@@ -171,3 +171,61 @@ def create_grants(*, request_ids, new_run, repo_root, approval_report=None,
         })
 
     return {"run_id": new_run.get("run_id"), "granted_by": GRANTED_BY, "grants": built}
+
+
+# --- the in-VM hint and the reported requests ----------------------------------------------------
+
+def gate_view(document):
+    """The grant document reduced to what the cooperative in-VM gate matches on.
+
+    The gate compares flat `{action_class, normalized_target, granted_by}` entries, so the host
+    document's `scope.exact` and document-level `granted_by` are restated per grant. Equivalence
+    scopes have no single target and are left out: the gate only matches exact targets.
+    shortcut: equivalence-class grants never reach the gate; add matching there if one is needed.
+    """
+    flat = []
+    for grant in (document or {}).get("grants") or []:
+        target = ((grant.get("scope") or {}).get("exact"))
+        if isinstance(target, str) and target:
+            flat.append({"request_id": grant.get("request_id"),
+                         "action_class": grant.get("action_class"),
+                         "normalized_target": target,
+                         "granted_by": (document or {}).get("granted_by")})
+    return dict(document or {}, grants=flat)
+
+
+_TEXT_LIMIT = 500
+
+
+def _text(value):
+    return value[:_TEXT_LIMIT] if isinstance(value, str) and value else None
+
+
+def reported_approvals(requests, run_id, class_names):
+    """The report's `approvals` (FR-027d): the gate's requests for THIS run.
+
+    `requests` are records the in-VM gate appended to approvals.jsonl - VM-originated, so each is
+    rebuilt from validated fields only, and one that does not belong to this run is dropped. The
+    gate records a request only when it REFUSED the call for want of a grant, so whatever status
+    the VM wrote is ignored: in headless V1 every one is `unanswered`, which means denied
+    (FR-027c), and a later `--approve` re-run is how it gets granted.
+    """
+    reported, seen = [], set()
+    for record in requests or []:
+        if not isinstance(record, dict):
+            continue
+        identifier = record.get("id")
+        match = _REQUEST_ID.match(identifier) if isinstance(identifier, str) else None
+        action_class = record.get("action_class")
+        target = _text(record.get("normalized_target"))
+        if match is None or match.group(1) != run_id or identifier in seen \
+                or not isinstance(action_class, int) or not 1 <= action_class <= 31 \
+                or target is None:
+            continue
+        seen.add(identifier)
+        reported.append({"id": identifier, "action_class": action_class,
+                         "action": class_names.get(action_class) or f"action class {action_class}",
+                         "target": target, "normalized_target": target,
+                         "reason": _text(record.get("reason")) or "approval required",
+                         "risk": "medium", "status": "unanswered"})
+    return reported

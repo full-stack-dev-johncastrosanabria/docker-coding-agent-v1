@@ -94,7 +94,7 @@
         "cookie"
       ],
       "body": {
-        "model": "gpt-5.5",
+        "model": "gpt-6.1-sol",
         "input": [],
         "stream": false
       },
@@ -135,7 +135,7 @@
         "pinned runtime source: the pinned docker_agent v1.136.0 artifact contains the literals 'https://chatgpt.com/backend-api/codex', 'chatgpt-account-id', 'OpenAI-Beta', 'originator', 'codex_cli_rs' and 'CHATGPT_OAUTH_TOKEN', so the endpoint base, the credential position and the client identity headers are the pinned client's own",
         "committed inventory evidence: gates/inventory/control-plane-hosts.json records chatgpt.com as the codex runtime-control-plane host, corroborated from the same pinned artifact by T014",
         "provider behaviour, observed once during probe DEFINITION with no credential attached: POST /backend-api/codex/responses returns 401 application/json with the body object {\"detail\": \"Unauthorized\"}. The discriminator is that JSON shape, never the bare status code",
-        "captured legitimate agent-path evidence: the positive control in this gate, where the native chatgpt/gpt-5.5 provider under --safety strict completes a task in the same sandbox, which is only possible from an authenticated result on this same endpoint and request family, corroborated by the matching sbx policy log entry for chatgpt.com",
+        "captured legitimate agent-path evidence: the positive control in this gate, where the native chatgpt/gpt-6.1-sol provider under --safety strict completes a task in the same sandbox, which is only possible from an authenticated result on this same endpoint and request family, corroborated by the matching sbx policy log entry for chatgpt.com",
         "first live run plus paced characterisation with DUMMY non-credential values: the three 401 bodies (25, 84 and 231 bytes) are all `detail`-bearing provider rejections, so the unauthenticated class is 401 + a JSON detail body, not one exact message string"
       ]
     }

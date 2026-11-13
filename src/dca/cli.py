@@ -128,6 +128,12 @@ def build_parser():
     run.add_argument("--out", default=None, help="output directory (default: <repo>/../.dca-runs/)")
     run.add_argument("--allow-drift", action="store_true",
                      help="permit version drift; the run is then not acceptance-eligible")
+    run.add_argument("--model", default=None,
+                     help="model id for the backend (default: the backend's own default)")
+    run.add_argument("--effort", default=None,
+                     help="reasoning effort (claude: low..max; codex: none..max)")
+    run.add_argument("--autocompact", default=None, metavar="on|off|PCT",
+                     help="context auto-compaction: on, off, or the %% of context it triggers at")
 
     init = commands.add_parser(
         "init", help="create this checkout's local DCA config",
@@ -164,6 +170,12 @@ def build_parser():
                             "a clean tree, committed benchmark/thresholds.yaml, exact pins, "
                             "passed gates and --repeat 3; refused while the suite is "
                             "incomplete")
+    bench.add_argument("--model", default=None,
+                       help="model id for the backend (default: the backend's own default)")
+    bench.add_argument("--effort", default=None,
+                       help="reasoning effort (claude: low..max; codex: none..max)")
+    bench.add_argument("--autocompact", default=None, metavar="on|off|PCT",
+                       help="context auto-compaction: on, off, or the %% of context it triggers at")
     return parser
 
 
@@ -243,6 +255,9 @@ def command_run(options, launcher_factory=None, config_loader=None):
         ignore_uncommitted=options.ignore_uncommitted,
         out=options.out,
         allow_drift=options.allow_drift,
+        model=options.model,
+        effort=options.effort,
+        autocompact=options.autocompact,
     )
     display = console.RunDisplay()
     verify, verify_source = settings["verify"]
@@ -252,6 +267,7 @@ def command_run(options, launcher_factory=None, config_loader=None):
         ("Trust", request.trust, settings["trust"][1]),
         ("Verify", "; ".join(verify) if verify else "(none)",
          verify_source if verify else None),
+        *[(key.capitalize(), value, "--" + key) for key, value in request.choice.items()],
     ])
     if launcher_factory is None:
         launcher = launcher_module.Launcher(request, progress=display)

@@ -1,0 +1,28 @@
+{
+  "classification": {
+    "value": "planned",
+    "reason": "unclear root cause: the fee is charged in billing but the date comes from elsewhere"
+  },
+  "repository_map": {
+    "scope": "component",
+    "target_files": [
+      "billing/late_fees.py"
+    ],
+    "related_tests": [
+      "tests/test_late_fees.py"
+    ],
+    "conventions": [
+      "every due date and cut-off comes from core.timeutil.workdays; packages do not roll their own",
+      "shipping/calendar.py and reporting/business_days.py keep different calendars on purpose and must not change"
+    ],
+    "repo_wide_exploration": {
+      "performed": false
+    }
+  },
+  "verification_approach": {
+    "type": "deterministic",
+    "commands": [
+      "python3 -m unittest discover -s tests -t ."
+    ]
+  }
+}

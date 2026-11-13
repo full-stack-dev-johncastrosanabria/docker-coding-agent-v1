@@ -103,6 +103,16 @@ SEED_ENV = {
 #: A fixture's own ceiling on top of the run's wall-clock host limit: provisioning, retrieval and
 #: cleanup are outside the agent's clock but inside this one.
 RUN_TIMEOUT_SECONDS = 2400
+#: What Claude Code says, as its whole message, when the subscription window is spent (observed
+#: 2026-09-24 "session limit - resets" and 2026-11-13 "5-hour limit · resets 7:50pm (UTC)"). Such a
+#: run did no work: it is the provider's quota, never a result of the product or of the model.
+#: shortcut: Claude Code's wording only; add the Codex/ChatGPT message when one is observed.
+QUOTA_EXHAUSTED = re.compile(
+    r"You've hit your [\w -]*limit\b.{0,20}?resets (\d{1,2})(?::(\d{2}))?\s*([ap]m) \(UTC\)\.?")
+QUOTA_MARGIN_SECONDS = 120
+#: A window resets within five hours. A longer wait is a different limit (weekly), not waited for.
+QUOTA_MAX_WAIT_SECONDS = 6 * 3600
+QUOTA_MAX_WAITS = 2
 ORACLE_TIMEOUT_SECONDS = 300
 
 PASSED, FAILED, BLOCKED = "passed", "failed", "blocked"
@@ -165,10 +175,15 @@ def build_seed(seed_dir, destination):
         relative = os.path.relpath(current, seed_dir)
         target = os.path.normpath(os.path.join(destination, relative))
         os.makedirs(target, exist_ok=True)
-        for name in sorted(files):
+        links = [d for d in directories if os.path.islink(os.path.join(current, d))]
+        for name in sorted(files + links):
             if name == ".DS_Store":
                 continue
-            shutil.copyfile(os.path.join(current, name), os.path.join(target, name))
+            source = os.path.join(current, name)
+            if os.path.islink(source):      # a link is seed content (S6): it stays a link
+                os.symlink(os.readlink(source), os.path.join(target, name))
+            else:
+                shutil.copyfile(source, os.path.join(target, name))
     environment = dict(os.environ, **SEED_ENV)
     for argv in (["init", "--quiet", f"--initial-branch={SEED_BRANCH}"],
                  ["config", "core.autocrlf", "false"],
@@ -183,8 +198,12 @@ def build_seed(seed_dir, destination):
 
 
 def oracle_image(versions):
-    """The pinned Claude sandbox base, by digest: one oracle environment for every backend."""
-    base = (versions.get("sandbox_bases") or {}).get("claude") or {}
+    """The pinned oracle image, by digest: one oracle environment for every backend.
+
+    It is its own pin, not a sandbox base: the v3 workload kits carry no `node`, and the oracle
+    environment must not change just because the agents' bases did.
+    """
+    base = versions.get("oracle_image") or {}
     if not base.get("base") or not base.get("version"):
         return None
     return f"{base['base']}@{base['version']}"
@@ -265,6 +284,33 @@ def delegations(events_path):
     return found
 
 
+def quota_reset(events_path, now):
+    """When the provider's quota resets, if this run was cut short by it; else None.
+
+    Only an `agent_choice` event whose WHOLE content is the provider's notice counts, so an agent
+    that quotes the sentence inside its own prose, or a repository that contains it, is not one.
+    """
+    try:
+        with open(events_path, encoding="utf-8") as handle:
+            lines = handle.readlines()
+    except OSError:
+        return None
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict) or event.get("type") != "agent_choice":
+            continue
+        match = QUOTA_EXHAUSTED.fullmatch(str(event.get("content") or "").strip())
+        if match:
+            hour = int(match.group(1)) % 12 + (12 if match.group(3) == "pm" else 0)
+            reset = now.replace(hour=hour, minute=int(match.group(2) or 0), second=0,
+                                microsecond=0)
+            return reset if reset > now else reset + datetime.timedelta(days=1)
+    return None
+
+
 def verification_result(report):
     """The launcher's own re-execution on the final state; the agent's claims are not counted."""
     checks = [c for c in ((report.get("verification") or {}).get("checks") or [])
@@ -297,11 +343,17 @@ def score(fixture, record):
         if record.get("out_of_scope"):
             reasons.append("changes outside the allowed scope: " + ", ".join(record["out_of_scope"]))
     if record.get("cleanup") != "ok":
-        reasons.append("sandbox cleanup failed: " + ", ".join(record.get("leaked_sandboxes") or []))
+        reasons.append(_cleanup_problem(record))
     if not reasons:
         return PASSED, reasons
     refused = record.get("exit_status") == 3 or (outcome == "blocked" and expected != "blocked")
     return (BLOCKED if refused and record.get("cleanup") == "ok" else FAILED), reasons
+
+
+def _cleanup_problem(record):
+    if record.get("cleanup") == "unknown":
+        return "sandbox cleanup could not be verified: " + str(record.get("cleanup_detail") or "")
+    return "sandbox cleanup failed: " + ", ".join(record.get("leaked_sandboxes") or [])
 
 
 def metrics_from_report(report):
@@ -789,7 +841,7 @@ def acceptance_result(fixture, applicability, run_trust, record=None):
     if record.get("out_of_scope"):
         reasons.append("changes outside the allowed scope: " + ", ".join(record["out_of_scope"]))
     if record.get("cleanup") != "ok":
-        reasons.append("sandbox cleanup failed: " + ", ".join(record.get("leaked_sandboxes") or []))
+        reasons.append(_cleanup_problem(record))
     result.update({"reported_outcome": record.get("final_outcome"), "violations": violations,
                    "reasons": reasons, "pass": not reasons and not violations,
                    "run_id": record.get("run_id")})
@@ -926,8 +978,12 @@ class Bench:
 
     def __init__(self, backends, trust="trusted", fixtures=None, repeat=1, repo_root=None,
                  bench_id=None, sbx=None, oracle=None, dca_command=None, clock=time.monotonic,
-                 log=None, work_root=None, results_root=None, plans=None, thresholds=None):
+                 log=None, work_root=None, results_root=None, plans=None, thresholds=None,
+                 choice=None, sleep=time.sleep, now=None):
         self.backends = list(backends)
+        self.sleep = sleep
+        self.now = now or (lambda: datetime.datetime.now(datetime.timezone.utc))
+        self.choice = dict(choice or {})
         self.trust = trust
         self.fixtures = list(fixtures or [])
         self.repeat = repeat
@@ -955,7 +1011,8 @@ class Bench:
             return self.run_acceptance()
         started = _utc_now()
         plan = [(backend, fixture, index) for backend in self.backends
-                for fixture in self.fixtures for index in range(1, self.repeat + 1)]
+                for fixture in self.fixtures if self._applies(backend, fixture)
+                for index in range(1, self.repeat + 1)]
         for number, (backend, fixture, index) in enumerate(plan, 1):
             self.log(f"dca bench: [{number}/{len(plan)}] {backend} {fixture['id']} "
                      f"(run {index}/{self.repeat})")
@@ -967,6 +1024,20 @@ class Bench:
         document = self.document(started)
         self.write(document)
         return document
+
+    def _applies(self, backend, fixture):
+        """A glob such as 'S*' selects both S5 variants; only the one this backend's recorded
+        eligibility picks is run (R23), exactly as the acceptance plan does."""
+        if fixture.get("gate_condition", "always") == "always":
+            return True
+        document = eligibility_module.load(os.path.join(self.repo_root, "gates",
+                                                        "eligibility.json"))
+        eligible = not eligibility_module.untrusted_blockers(document, backend)
+        applies = resolve_trust(fixture, self.trust, eligible)[0] == APPLICABLE
+        if not applies:
+            self.log(f"dca bench: {backend} {fixture['id']} is not applicable "
+                     f"({fixture['gate_condition']}); skipped")
+        return applies
 
     def run_acceptance(self):
         """Backend by backend (sequentially), each repeat a complete pass over the plan."""
@@ -1015,6 +1086,32 @@ class Bench:
             return None
 
     def run_one(self, backend, fixture, index, run_trust=None, acceptance=False):
+        """One scored run. A run the provider's quota cut short is not a result: the campaign
+        waits for the reset the provider announced and runs it again, and says so in the record."""
+        events_path = os.path.join(self.work, f"{backend}-{fixture['id']}-{index}", "run",
+                                   "events.jsonl")
+        waits = []
+        while True:
+            record = self._run_once(backend, fixture, index, run_trust, acceptance)
+            now = self.now()
+            reset = quota_reset(events_path, now)
+            if reset is None:
+                break
+            seconds = (reset - now).total_seconds() + QUOTA_MARGIN_SECONDS
+            if len(waits) >= QUOTA_MAX_WAITS or seconds > QUOTA_MAX_WAIT_SECONDS:
+                record["result"] = FAILED
+                record["reasons"] = ["the provider's quota is exhausted and did not come back: "
+                                     "not a result of the product"] + list(record["reasons"])
+                break
+            waits.append({"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                          "resets_at": reset.strftime("%Y-%m-%dT%H:%M:%SZ")})
+            self.log(f"dca bench:   -> provider quota exhausted; waiting until "
+                     f"{reset.strftime('%H:%M')} UTC, then running {fixture['id']} again")
+            self.sleep(seconds)
+        record["quota_waits"] = waits
+        return record
+
+    def _run_once(self, backend, fixture, index, run_trust=None, acceptance=False):
         trust = run_trust or self._trust_for(fixture)
         base = os.path.join(self.work, f"{backend}-{fixture['id']}-{index}")
         shutil.rmtree(base, ignore_errors=True)
@@ -1030,12 +1127,21 @@ class Bench:
                 "--criteria", f"@{criteria_path}", "--out", out]
         for command in (fixture["verification"].get("commands") or []):
             argv += ["--verify", command]
+        for key, value in self.choice.items():
+            argv += [f"--{key}", value]
 
         before = self._sandbox_names()
         started = self.clock()
         exit_status, diagnostic = self._invoke(argv, base)
         duration = round(self.clock() - started, 1)
-        leaked = sorted(self._sandbox_names() - before)
+        cleanup_detail = None
+        try:
+            leaked = sorted(self._sandbox_names() - before)
+            cleanup = "failed" if leaked else "ok"
+        except PreconditionError as exc:
+            # The run's artifacts are still useful, but an unreadable list proves nothing about
+            # disposal. Preserve that uncertainty and fail this run in either scoring mode.
+            leaked, cleanup, cleanup_detail = [], "unknown", str(exc)
         for name in leaked:  # visible in the results, and not left to skew the next fixture
             self.sbx.remove(name)
 
@@ -1044,7 +1150,7 @@ class Bench:
             "repeat": index, "trust_level": trust, "seed_commit": seed_commit,
             "exit_status": exit_status, "expected_disposition": fixture["expected_disposition"],
             "expected_classification": fixture.get("expected_classification"),
-            "duration_seconds": duration, "cleanup": "failed" if leaked else "ok",
+            "duration_seconds": duration, "cleanup": cleanup, "cleanup_detail": cleanup_detail,
             "leaked_sandboxes": leaked, "report_path": None, "report_schema_valid": None,
             "run_id": None, "final_outcome": None, "oracle": "skipped", "oracle_detail": None,
             "out_of_scope": [], "researcher_invoked": None, "reviewer_invoked": None,
@@ -1122,10 +1228,15 @@ class Bench:
 
     def _sandbox_names(self):
         try:
-            return {entry.get("name") for entry in self.sbx.list_sandboxes()
-                    if isinstance(entry, dict) and str(entry.get("name", "")).startswith("dca-")}
-        except (SbxError, OSError):
-            return set()
+            listing = self.sbx.list_sandboxes()
+            if not isinstance(listing, list) or any(
+                    not isinstance(entry, dict) or not isinstance(entry.get("name"), str)
+                    or not entry["name"] for entry in listing):
+                raise ValueError("expected a list of sandboxes with nonempty names")
+            return {entry["name"] for entry in listing if entry["name"].startswith("dca-")}
+        except (SbxError, OSError, ValueError) as exc:
+            raise PreconditionError(f"the sandbox list could not be read, so benchmark cleanup "
+                                    f"cannot be verified: {exc}") from exc
 
     def document(self, started):
         return {
@@ -1262,14 +1373,34 @@ def command(options, repo_root=None, bench_factory=Bench, version_probe=None):
         raise UsageError(f"no fixture matches {options.fixtures!r}")
     backends = ["claude", "codex"] if options.backend == "both" else [options.backend]
     _require_eligible(backends, options.trust, repo_root)
+    choice = _choice(options, backends)
 
     bench = bench_factory(backends, trust=options.trust, fixtures=fixtures,
-                          repeat=options.repeat, repo_root=repo_root)
+                          repeat=options.repeat, repo_root=repo_root, **choice)
     document = bench.run()
     print(render(document))
     print(f"dca bench: results in {os.path.relpath(bench.results_dir, repo_root)}/", file=sys.stderr)
     summary = document["summary"]
     return 0 if summary["passed"] == summary["total"] else 1
+
+
+def _choice(options, backends):
+    """{"choice": ...} for the Bench, validated for every backend up front, or {} when nothing was
+    chosen - so a bench without the flags constructs exactly as before."""
+    picked = {key: getattr(options, key, None) for key in ("model", "effort", "autocompact")}
+    if not any(value is not None for value in picked.values()):
+        return {}
+    if picked["model"] is not None and len(backends) > 1:
+        raise UsageError("--model names one provider's model; run each backend on its own "
+                         "instead of --backend both")
+    try:
+        from . import launcher as launcher_module
+    except ImportError:  # loaded by path in tests
+        launcher_module = _sideload("dca_launcher", "launcher.py")
+    choice = {}
+    for backend in backends:
+        choice = launcher_module.agent_choice(backend, **picked)
+    return {"choice": choice} if choice else {}
 
 
 def _command_acceptance(options, repo_root, bench_factory, version_probe):
@@ -1290,7 +1421,7 @@ def _command_acceptance(options, repo_root, bench_factory, version_probe):
         thresholds, backend) for backend in backends}
     bench = bench_factory(backends, trust=options.trust, fixtures=fixtures,
                           repeat=options.repeat, repo_root=repo_root, plans=plans,
-                          thresholds=thresholds)
+                          thresholds=thresholds, **_choice(options, backends))
     result = bench.run()
     print(render(result))
     print(f"dca bench: results in {os.path.relpath(bench.results_dir, repo_root)}/", file=sys.stderr)

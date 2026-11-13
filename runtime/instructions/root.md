@@ -163,8 +163,10 @@ what the evidence supports:
 
 - `succeeded` only when every required check passes on the final state and every acceptance
   criterion is met;
-- `failed` when a required check conclusively fails;
-- `blocked` when something could not be established, resolved or approved.
+- `failed` when a required check conclusively fails, or when you have shown with evidence that the
+  task as stated is infeasible, unsupported or contradicts another requirement it must keep;
+- `blocked` when something could not be established, resolved or approved - a missing fact, a
+  refused approval, a limit - so that a person supplying it makes the task doable as stated.
 
 The host recomputes the final outcome from its own evidence and records every difference, so claim
 only what you proved.

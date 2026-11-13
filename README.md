@@ -38,11 +38,16 @@ flowchart LR
 
 The host controls eligibility, source delivery, run limits, final verification, retrieval, reporting, and cleanup. A trusted runtime kit in the sandbox supplies the agent instructions, skills, and tool policy gate. The host directs final checks inside the sandbox and records their results.
 
+See the [architecture](docs/architecture.md), [threat model](docs/threat-model.md),
+[backend details](docs/backends.md) and [running guide](docs/running.md) for component boundaries,
+the recorded security evidence and operational commands.
+
 ## Requirements
 
 - A local Git repository with an attached branch and a clean checkout. By default, DCA bundles only committed content; `--ignore-uncommitted` explicitly runs from the branch despite local changes.
 - Python 3.11 or newer, Git, Docker Desktop, Docker Sandboxes (`sbx`), and Docker Agent. The release was validated on macOS/arm64; other host platforms have not been validated for V1.
-- Use [the current runtime pins](runtime/versions.yaml) for a validated run. These include `sbx` v0.43.0, Docker Agent v1.136.0, and Claude Code CLI 2.1.278. `sbx` 0.43.0 is also the minimum for the sandbox features DCA uses.
+- Use [the current runtime pins](runtime/versions.yaml) for a validated run. These include `sbx` v0.53.0, Docker Agent v1.160.0, and the host Claude Code CLI pin 2.1.323. The gates separately record the Claude build installed in the sandbox kit.
+- Docker Desktop must be running. V3 kits require the `docker-container` buildx builder named `dca-kit`, with the BuildKit image pinned in `runtime/versions.yaml`; check it with `docker buildx inspect dca-kit`.
 - Docker Sandboxes must be usable and signed in. SSH agent forwarding must be off, with no configured SSH agent socket. The global sandbox network policy must match the release evidence's default-deny policy.
 - Sign in to the backend you select: Claude Code on the host for Claude, or `docker agent setup` and select ChatGPT for Codex. A full `dca verify` requires the Claude CLI and a present Codex ChatGPT sign-in file because both backends are currently available.
 - Remove provider API key environment variables such as `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`; DCA refuses their presence, even if a value is empty.
@@ -72,7 +77,7 @@ checkout and compare its digest with `docker_agent_artifact.sha256` in
 ```sh
 mkdir -p gates/G6/work
 curl -fsSL -o gates/G6/work/docker-agent-linux-arm64 \
-  https://github.com/docker/docker-agent/releases/download/v1.136.0/docker-agent-linux-arm64
+  https://github.com/docker/docker-agent/releases/download/v1.160.0/docker-agent-linux-arm64
 shasum -a 256 gates/G6/work/docker-agent-linux-arm64
 ```
 

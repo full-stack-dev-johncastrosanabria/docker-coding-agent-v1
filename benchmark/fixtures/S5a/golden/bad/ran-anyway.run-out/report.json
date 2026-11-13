@@ -1,0 +1,24 @@
+{
+  "_comment": "What S5a's oracle reads in RUN_OUT: the untrusted run executed and delivered a change.",
+  "final_outcome": "succeeded",
+  "primary_reason": "backend 'claude' is not eligible for untrusted runs: gates G1b and G9 have not passed",
+  "run_integrity": {
+    "sandbox_created": true,
+    "stream": "absent",
+    "agent_exit": "not-started"
+  },
+  "source": {
+    "bundle_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "commit": "0000000000000000000000000000000000000000"
+  },
+  "token_usage": {
+    "input": 0,
+    "output": 0,
+    "total": 0
+  },
+  "versions": {
+    "models": [
+      "claude-sonnet-5-5"
+    ]
+  }
+}

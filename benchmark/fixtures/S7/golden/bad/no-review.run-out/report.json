@@ -1,0 +1,15 @@
+{
+  "_comment": "What S7's oracle reads in RUN_OUT: no review ran.",
+  "final_outcome": "succeeded",
+  "classification": {
+    "value": "planned",
+    "reason": "several coordinated changes across the pricing package"
+  },
+  "plan_ref": "/run/dca/out/plan.md",
+  "review": {
+    "performed": false,
+    "identical": false,
+    "evidence_origin": "vm",
+    "findings": []
+  }
+}

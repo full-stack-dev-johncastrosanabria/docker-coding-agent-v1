@@ -83,6 +83,25 @@ def read_versions(path=VERSIONS):
         return json.load(fh)
 
 
+def prior_backend_evidence(path, gate, backend, versions, obs, fingerprint):
+    """Retain a deliberately unselected backend only under the same proven foundation."""
+    if not obs.get(f"skip_{backend}_reason") \
+            or f"create_dca-{gate.lower()}-{backend}_exit" in obs:
+        return None
+    previous = read_json(os.path.dirname(path), os.path.basename(path))
+    if not isinstance(previous, dict) or previous.get("gate") != gate:
+        return None
+    if rules_module.evidence_problems(previous, versions):
+        return None
+    if fingerprint is None or previous.get("network_policy_fingerprint") != fingerprint:
+        return None
+    if not previous.get("criteria") or any(
+            row.get("result") != "PASS" for row in previous["criteria"]):
+        return None
+    entry = (previous.get("backends") or {}).get(backend)
+    return previous if isinstance(entry, dict) and entry.get("status") else None
+
+
 # --- the pinned Claude base ----------------------------------------------------------------------
 
 def claude_base(versions):
@@ -91,31 +110,38 @@ def claude_base(versions):
     return base.get("base"), base.get("version")
 
 
-def base_identity_row(gate, obs, work, versions, observed_key="sbx_resolved_base"):
-    """The gate created its sandboxes from the exact pinned Claude base, read back from sbx.
+def base_identity_row(gate, obs, work, versions, names=None):
+    """Every sandbox this gate created is exactly the pinned sandbox_bases.claude workload.
 
-    Identity is the combination the store actually exposes: the sbx-resolved reference, the
-    cached template's repository/tag/id, and the full pinned digest. A tag alone identifies
-    nothing, and the short image id is not a digest, so neither is accepted on its own.
+    gates/sbx_create.sh creates each sandbox from the digest-qualified workload and saves sbx's
+    own composition record as inspect-<sandbox>.json. Every such record must list the pinned
+    reference first and nothing but the G6 probe kit after it. No record at all fails: a gate
+    whose base cannot be shown is treated like one that used the wrong base. `names` restricts
+    the judgement to those sandboxes, for a gate that also creates the other backend's.
     """
-    image, digest = claude_base(versions)
-    resolved = obs.get(observed_key)
-    repository, _, tag = (image or "").rpartition(":")
-    cached = preflight_module.template_image(read_json(work, "templates.json"), repository, tag)
-    holds = (
-        bool(image)
-        and bool(digest)
-        and resolved == image
-        and preflight_module.template_identity_matches(cached, image, digest)
-    )
+    reference = preflight_module.pinned_reference(versions, "claude")
+    kit = os.path.join(ROOT, "gates", "G6", "work", "kit")
+    records = sorted(name for name in (os.listdir(work) if os.path.isdir(work) else [])
+                     if name.startswith("inspect-") and name.endswith(".json")
+                     and (names is None or name[len("inspect-"):-len(".json")] in names))
+    problems = []
+    for name in records:
+        inspected = read_json(work, name)
+        kits = inspected.get("kits") if isinstance(inspected, dict) else None
+        problem = preflight_module.composition_problem(
+            inspected, reference, kit if isinstance(kits, list) and len(kits) == 2 else None)
+        if problem:
+            problems.append(f"{name[len('inspect-'):-len('.json')]}: {problem}")
+    holds = bool(reference) and bool(records) and not problems
     return (
         f"{gate}.base",
-        "every sandbox in this gate came from the exact pinned sandbox_bases.claude base: the "
-        "reference sbx resolved, the cached template's repository, tag and image id, and the "
-        "pinned digest all agree; no base was discovered or substituted",
+        "every sandbox in this gate was created from the exact pinned sandbox_bases.claude "
+        "workload, by digest, and sbx's own inspect record shows that composition and nothing "
+        "else; no base was discovered or substituted",
         holds,
-        f"pinned {image} {digest}; sbx resolved {resolved or 'not reported'}; cached template "
-        f"{cached.get('repository') + ':' + cached.get('tag') + ' id ' + str(cached.get('id')) if isinstance(cached, dict) else 'not found in the template store'}",
+        f"pinned {reference}; {len(records)} sandbox record(s); "
+        + ("; ".join(problems) if problems else "every composition matches" if records
+           else "no sbx inspect record was captured"),
     )
 
 
@@ -257,7 +283,7 @@ def preflight(gate, obs, work, versions=None, g4_path=G4_EVIDENCE):
     policy = read_json(work, "pf-policy.json")
     listing = read_json(work, "pf-ls.json")
     refusals = preflight_module.ssh_forwarding_refusals(forwarding, socket_path)
-    running = listing.get("sandboxes") if isinstance(listing, dict) else None
+    running = preflight_module.sandbox_list(listing)
 
     accepted, why_accepted = accepted_network_state(g4_path, versions)
     active, why_governance = governance_active(
@@ -361,9 +387,9 @@ def cleanup_row(gate, obs, work, names):
     """Every sandbox this gate created was removed by name and none remains."""
     remaining = read_json(work, "ls-after.json")
     left = (
-        [e for e in remaining.get("sandboxes", [])
-         if isinstance(e, dict) and e.get("name") in set(names)]
-        if isinstance(remaining, dict) else None
+        [e for e in preflight_module.sandbox_list(remaining)
+         if e.get("name") in set(names)]
+        if preflight_module.sandbox_list(remaining) is not None else None
     )
     attempted = [n for n in names if f"create_{n}_exit" in obs]
     removed = bool(attempted) and all(obs.get(f"rm_{n}_exit") == "0" for n in attempted)

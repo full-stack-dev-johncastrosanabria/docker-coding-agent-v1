@@ -1,0 +1,16 @@
+{"agent": "root", "class": 1, "counters": {"retries_used": 0, "steps_used": 0}, "decision": "allow", "tool": "Read", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "root", "class": null, "counters": {"retries_used": 0, "steps_used": 1}, "decision": "allow", "tool": "Agent", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "researcher", "class": 1, "counters": {"retries_used": 0, "steps_used": 2}, "decision": "allow", "tool": "Grep", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "researcher", "class": 1, "counters": {"retries_used": 0, "steps_used": 3}, "decision": "allow", "tool": "Grep", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "researcher", "class": 1, "counters": {"retries_used": 0, "steps_used": 4}, "decision": "allow", "tool": "Grep", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "researcher", "class": 1, "counters": {"retries_used": 0, "steps_used": 5}, "decision": "allow", "tool": "Grep", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "researcher", "class": 1, "counters": {"retries_used": 0, "steps_used": 6}, "decision": "allow", "tool": "Read", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "researcher", "class": 1, "counters": {"retries_used": 0, "steps_used": 7}, "decision": "allow", "tool": "Read", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "researcher", "class": 1, "counters": {"retries_used": 0, "steps_used": 8}, "decision": "allow", "tool": "Read", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "researcher", "class": 1, "counters": {"retries_used": 0, "steps_used": 9}, "decision": "allow", "tool": "Read", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "researcher", "class": 1, "counters": {"retries_used": 0, "steps_used": 10}, "decision": "allow", "tool": "Read", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "root", "class": 6, "counters": {"retries_used": 0, "steps_used": 11}, "decision": "allow", "tool": "Write", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "root", "class": 3, "counters": {"retries_used": 0, "steps_used": 12}, "decision": "allow", "tool": "Edit", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "root", "class": 8, "counters": {"retries_used": 0, "steps_used": 13}, "decision": "allow", "tool": "Bash", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "root", "class": null, "counters": {"retries_used": 0, "steps_used": 14}, "decision": "allow", "tool": "Agent", "ts": "2026-11-13T17:00:00Z"}
+{"agent": "reviewer", "class": 1, "counters": {"retries_used": 0, "steps_used": 15}, "decision": "allow", "tool": "Read", "ts": "2026-11-13T17:00:00Z"}

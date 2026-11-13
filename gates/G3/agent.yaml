@@ -1,8 +1,9 @@
 # gates/G3/agent.yaml - Gate G3 availability agent (tasks.md T019).
 #
-# The model is gpt-5.5, NOT the gpt-5.6 that `docker agent models` lists and marks default: the
-# Codex backend rejects gpt-5.6 for a ChatGPT-account sign-in (HTTP 400 "not supported when using
-# Codex with a ChatGPT account"). G3 proves that at runtime and records the fallback.
+# The model is gpt-6.1-sol, NOT the gpt-5.6 that `docker agent models` lists and marks default:
+# the Codex backend rejects every GPT-5.x model for a ChatGPT-account sign-in (HTTP 400 "not
+# supported when using Codex with a ChatGPT account"). G3 proves what the backend accepts at
+# runtime; this literal is only the default the probe overrides with `--model`.
 #
 # The minimum config that exercises the V1 Codex backend: the NATIVE Docker Agent chatgpt
 # provider, no harness. Config version 15 is what V1 pins (E1); the pinned binary's strict v15
@@ -25,5 +26,5 @@ agents:
       Availability probe for gate G3. It runs a single trivial non-repository task through the
       native Docker Agent chatgpt provider, in a completely fresh mountless sandbox that holds only
       the minimal chatgpt-auth.json trusted fallback credential.
-    model: chatgpt/gpt-5.5
+    model: chatgpt/gpt-6.1-sol
     safety: strict

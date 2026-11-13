@@ -65,7 +65,7 @@ MANAGED_ASSETS = MANAGED_DIR + "/.claude"
 MANAGED_SKILL_DIR = MANAGED_ASSETS + "/skills/verification"
 # The build the delivery representation was observed on. It is fixed by the pinned sandbox
 # base digest, is NOT a runtime/versions.yaml pin, and is never generalized to another build.
-PINNED_CLAUDE_BUILD = "2.1.246"
+PINNED_CLAUDE_BUILD = "2.1.322"
 
 PHASES = ("precedence", "lockout")
 CONTEXTS = ("root", "nested")
@@ -168,7 +168,7 @@ def evaluate(obs, work, versions=None, g4_path=common.G4_EVIDENCE):
     preflight_ok = all(row[2] for row in rows)
 
     base = common.base_identity_row(GATE, obs, work, versions)
-    rows.append((*base, preflight_ok and "templates_exit" in obs))
+    rows.append((*base, preflight_ok and f"inspect_{SANDBOX}_exit" in obs))
     policy = common.policy_row(GATE, obs, "trusted", g4_path)
     rows.append((*policy, preflight_ok and "policy_allow" in obs))
     bindings_ok = preflight_ok and base[2] and policy[2]

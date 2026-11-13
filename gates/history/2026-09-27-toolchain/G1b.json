@@ -1,0 +1,114 @@
+{
+  "gate": "G1b",
+  "status": "FAIL",
+  "run_at": "2026-09-20T22:57:12Z",
+  "versions": {
+    "sbx": "v0.43.0"
+  },
+  "provenance": {
+    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+  },
+  "criteria": [
+    {
+      "id": "G1b.0a",
+      "description": "sbx client and server still match the pinned exact version and the server is running",
+      "result": "PASS",
+      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 running"
+    },
+    {
+      "id": "G1b.0b",
+      "description": "the SSH-agent baseline still refuses nothing, and SSH_AUTH_SOCK is removed from every sbx call",
+      "result": "PASS",
+      "evidence_ref": "refusals none, SSH_AUTH_SOCK in the sbx environment: removed"
+    },
+    {
+      "id": "G1b.0c",
+      "description": "the global network policy is exactly the G0 bootstrap deny-all rule, which this gate evaluates rather than trusts",
+      "result": "PASS",
+      "evidence_ref": "1 network rule(s): ['default-deny-all']"
+    },
+    {
+      "id": "G1b.0d",
+      "description": "no sandbox exists before this gate creates one, so the fingerprint is read from a clean global state and nothing unrelated is running alongside it",
+      "result": "PASS",
+      "evidence_ref": "sbx ls --json: []"
+    },
+    {
+      "id": "G1b.0e",
+      "description": "the live global network-policy fingerprint still equals the one the accepted G4 evidence recorded, and that evidence is a current PASS: this gate proves its property under the policy G4 actually verified, not a drifted one",
+      "result": "PASS",
+      "evidence_ref": "network_policy_fingerprint sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697, matching accepted G4"
+    },
+    {
+      "id": "G1b.base",
+      "description": "every sandbox in this gate came from the exact pinned sandbox_bases.claude base: the reference sbx resolved, the cached template's repository, tag and image id, and the pinned digest all agree; no base was discovered or substituted",
+      "result": "PASS",
+      "evidence_ref": "pinned docker/sandbox-templates:claude-code-docker sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2; sbx resolved docker/sandbox-templates:claude-code-docker; cached template docker.io/docker/sandbox-templates:claude-code-docker id 94670d5b2a24"
+    },
+    {
+      "id": "G1b.policy",
+      "description": "every sandbox ran under the accepted G4 claude/trusted network policy: the allow set is the one G4 proved, and the built-in kit's non-permitted hosts are neutralized by explicit sandbox-scoped denies",
+      "result": "PASS",
+      "evidence_ref": "12 allow (api.anthropic.com, registry.npmjs.org, pypi.org, files.pythonhosted.org, proxy.golang.org, crates.io, static.crates.io, github.com, codeload.github.com, objects.githubusercontent.com, code.claude.com, docs.claude.com); 5 explicit deny (bridge.claudeusercontent.com, claude.com, downloads.claude.ai, mcp-proxy.anthropic.com, platform.claude.com)"
+    },
+    {
+      "id": "G1b.authenticates",
+      "description": "control: the agent still authenticates and executes in exactly the configuration the scan then runs against - a sandbox that could not log in at all would satisfy the scan trivially",
+      "result": "PASS",
+      "evidence_ref": "loggedIn=True, authMethod='claude.ai', apiProvider='firstParty'; the task returned DCA-G1B-OK"
+    },
+    {
+      "id": "G1b.privileged",
+      "description": "the scanning workload really does have sudo and resolves to root: T021 asks whether a PRIVILEGED process can read token material, and an unprivileged failure would not answer that",
+      "result": "PASS",
+      "evidence_ref": "workload user 'agent', sudo resolves to 'root'"
+    },
+    {
+      "id": "G1b.canary",
+      "description": "control: a clearly synthetic token with a real prefix, planted in the VM, IS detected by the scanner - so a negative result below is isolation rather than a scanner that cannot find anything",
+      "result": "PASS",
+      "evidence_ref": "the canary was detected by claude-oauth-access in tmp (1 match(es))"
+    },
+    {
+      "id": "G1b.unreadable",
+      "description": "a privileged workload process finds NO real Claude OAuth token material anywhere T021 names (home, etc, tmp, run, environment, proc-environ); only pattern ids, location ids and counts are recorded, never a value, an excerpt or a digest",
+      "result": "FAIL",
+      "evidence_ref": "token material IS readable at: home/claude-oauth-access x1, home/claude-oauth-refresh x1, home/claude-oauth-store x1, home/oauth-access-camel x1, home/oauth-refresh-camel x1, etc/authorization-bearer x1"
+    },
+    {
+      "id": "G1b.fingerprint",
+      "description": "the global network-policy fingerprint is unchanged and the governance status is observed as a typed boolean before and after: this gate added no global rule and changed no global setting",
+      "result": "PASS",
+      "evidence_ref": "fingerprint sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697 -> sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697; governance.active False -> False"
+    },
+    {
+      "id": "G1b.clean",
+      "description": "every sandbox this gate created was removed by name, none remains, and the global network baseline is intact afterwards",
+      "result": "PASS",
+      "evidence_ref": "removals [('dca-g1b', '0')], remaining [], global network rules after: ['default-deny-all']"
+    }
+  ],
+  "fallback_applied": null,
+  "notes": "Claude secret unreadability, probed from inside one mountless sandbox created with --skills off from the exact pinned sandbox_bases.claude base, under the network policy accepted G4 proved for claude/trusted. The scanning workload deliberately has SUDO and resolves to root, because in this architecture the agent already has sudo and full read access to the VM filesystem, so an unprivileged negative would answer the wrong question. Only pattern ids, location ids, found/not-found and match counts are recorded: never a token value, a partial value, a cookie, an Authorization header, the contents of a secret file, or a hash of a candidate - a hash of a guessable secret is itself a disclosure and of a real one a verifier. Two controls make a negative meaningful: a clearly synthetic canary with a real prefix is planted and must be DETECTED, and the agent must still authenticate and execute in the same configuration the scan runs against. A FAIL here does not make Claude unavailable; it makes Claude TRUSTED-ONLY for the later G9 and eligibility decisions, which is recorded as the typed claude_secret_isolation field rather than as prose. Every rule this gate added carried --sandbox; the global fingerprint is captured with zero sandboxes before and after; sbx policy init, sbx reset and sbx rm --all are never called. The sandbox was removed by name.",
+  "network_policy_fingerprint": "sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697",
+  "claude_secret_isolation": {
+    "token_material_readable_by_privileged_workload": true,
+    "locations_scanned": [
+      "home",
+      "etc",
+      "tmp",
+      "run",
+      "environment",
+      "proc-environ"
+    ],
+    "readable_findings": [
+      "etc/authorization-bearer x1",
+      "home/claude-oauth-access x1",
+      "home/claude-oauth-refresh x1",
+      "home/claude-oauth-store x1",
+      "home/oauth-access-camel x1",
+      "home/oauth-refresh-camel x1"
+    ],
+    "implication": "trusted-only"
+  }
+}

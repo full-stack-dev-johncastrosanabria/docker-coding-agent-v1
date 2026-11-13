@@ -15,6 +15,17 @@ extractor therefore pins the shape it expects and fails closed when the pinned b
 it, instead of guessing. It records the in-VM Claude Code version alongside every shape observation,
 so the evidence says which build the shape was proven against.
 
+TWO SHAPE FACTS OF THE PINNED BUILD, both observed on it rather than assumed:
+
+  * the session file also holds `api-request-blob` records, which MIRROR the content blocks of
+    the conversation (the same tool_use id appears there a second time). Only `user` and
+    `assistant` records are the conversation; a mirror is never counted as an invocation;
+  * a subagent may be launched in the BACKGROUND. The Agent tool result is then launch metadata
+    (`toolUseResult` {isAsync, status, agentId}), not the reply. The subagent's own words are in
+    its sidechain transcript, `<session>/subagents/agent-<agentId>.jsonl`, whose records carry
+    `isSidechain: true` and that `agentId`. The reply is read from there, linked to the exact
+    Agent invocation by the agentId its tool result recorded.
+
 SANITIZATION: a Claude Code transcript holds unrelated tool inputs and outputs. Nothing from the
 transcript body is emitted. Only identity fields (ids, the recorded cwd, the version), SHA-256
 digests, marker NAMES, byte counts and PASS/FAIL facts leave this process.
@@ -69,7 +80,11 @@ EXPECTED_RESULT_TEMPLATE = "Launching skill: {name}"
 # This is an UNDOCUMENTED, INTERNAL representation. It is pinned to the exact build below, which the
 # pinned sandbox base digest determines, and is NOT generalized to any other version: a transcript
 # reporting a different build fails closed rather than being matched against this shape.
-PINNED_CLAUDE_BUILD = "2.1.246"
+PINNED_CLAUDE_BUILD = "2.1.322"
+# The record types that ARE the conversation. Everything else in the session file - notably the
+# `api-request-blob` mirrors of the same content blocks - is bookkeeping and is not read as a tool
+# call, a tool result or a delivered skill body.
+CONVERSATION_TYPES = ("user", "assistant")
 MANAGED_SKILL_DIR = "/etc/claude-code/.claude/skills/verification"
 SKILL_HEADER_TEMPLATE = "Base directory for this skill: {directory}\n\n"
 
@@ -125,6 +140,49 @@ def load_records(path):
 def blocks_of(record):
     content = (record.get("message") or {}).get("content")
     return content if isinstance(content, list) else []
+
+
+def conversation(records):
+    """The conversation itself: `user` and `assistant` records, never a request mirror."""
+    return [r for r in records if r.get("type") in CONVERSATION_TYPES]
+
+
+def tool_use_metadata(records):
+    """tool_use_id -> the `toolUseResult` object of the record carrying its tool_result."""
+    out = {}
+    for record in records:
+        meta = record.get("toolUseResult")
+        if not isinstance(meta, dict):
+            continue
+        for block in blocks_of(record):
+            if isinstance(block, dict) and block.get("type") == "tool_result" \
+                    and isinstance(block.get("tool_use_id"), str):
+                out.setdefault(block["tool_use_id"], meta)
+    return out
+
+
+def sidechain_reply(transcript, agent_id):
+    """(reply text, raw records text) of a background subagent, or (None, "") when unprovable.
+
+    Read from the subagent's own sidechain transcript beside the session file. Fail-closed: the
+    id must be a plain token (it becomes a file name), the file must exist, and every record in it
+    must be a sidechain record of THAT agent - a file that mixes agents proves nothing about one.
+    """
+    if not isinstance(agent_id, str) or not agent_id.isalnum():
+        return None, ""
+    path = os.path.join(transcript[:-len(".jsonl")], "subagents", f"agent-{agent_id}.jsonl")
+    if not os.path.isfile(path):
+        return None, ""
+    records = load_records(path)
+    if not records or any(r.get("isSidechain") is not True or r.get("agentId") != agent_id
+                          for r in conversation(records)):
+        return None, ""
+    parts = [block["text"] for record in records if record.get("type") == "assistant"
+             for block in blocks_of(record)
+             if isinstance(block, dict) and block.get("type") == "text"
+             and isinstance(block.get("text"), str)]
+    raw = "\n".join(json.dumps(r, ensure_ascii=False) for r in records)
+    return ("".join(parts) or None), raw
 
 
 def tool_uses(records):
@@ -282,28 +340,44 @@ def classify(marker_names, label, failures):
     return "unclassified"
 
 
-def agent_calls(records, results):
-    """Every subagent delegation, classified by the markers its reply carried."""
-    out = []
+def agent_calls(records, results, metadata, transcript, failures, label):
+    """Every subagent delegation, classified by the markers its reply carried.
+
+    A foreground delegation's reply is its tool result. A BACKGROUND one's tool result is launch
+    metadata, so its reply is the subagent's own sidechain transcript, linked by the agentId that
+    tool result recorded. Returns (calls, the raw sidechain text read, for the hostile scan).
+    """
+    out, sidechains = [], []
     for _, block in tool_uses(records):
         name = block.get("name")
         if name not in AGENT_TOOLS:
             continue
         subagent, key = input_name(block, AGENT_INPUT_KEYS)
         identifier = block.get("id")
-        reply = results.get(identifier) if isinstance(identifier, str) else None
+        meta = metadata.get(identifier) if isinstance(identifier, str) else None
+        background = isinstance(meta, dict) and meta.get("isAsync") is True
+        if background:
+            reply, raw = sidechain_reply(transcript, meta.get("agentId"))
+            sidechains.append(raw)
+            if reply is None:
+                failures.append(
+                    f"{label}: the {subagent!r} subagent ran in the background and its sidechain "
+                    "transcript could not be read as that agent's own, so its reply is unproven")
+        else:
+            reply = results.get(identifier) if isinstance(identifier, str) else None
         found = markers_in(reply) if isinstance(reply, str) else []
         out.append({
             "tool": name,
             "subagent_input_key": key,
             "subagent_type": subagent,
             "tool_use_id": identifier,
+            "reply_channel": "sidechain-transcript" if background else "tool-result",
             "reply_present": isinstance(reply, str) and bool(reply),
             "reply_bytes": len(reply.encode("utf-8")) if isinstance(reply, str) else 0,
             "reply_sha256": sha256(reply) if isinstance(reply, str) else None,
             "markers": found,
         })
-    return out
+    return out, sidechains
 
 
 def extract(label, before_list, trusted_path, expected_skill, probe_skill=None):
@@ -328,16 +402,19 @@ def extract(label, before_list, trusted_path, expected_skill, probe_skill=None):
     transcript = fresh[0]
     out["transcript_basename"] = os.path.basename(transcript)
 
-    records = load_records(transcript)
-    out["records"] = len(records)
-    if not records:
+    everything = load_records(transcript)
+    out["records"] = len(everything)
+    if not everything:
         failures.append(f"{label}: the transcript is empty or unreadable")
         return out
+    # Structure is read from the conversation only; the hostile scan below reads EVERYTHING.
+    records = conversation(everything)
+    out["conversation_records"] = len(records)
 
     # Identity fields only: the session, the directory the session ran in, and the build whose
     # transcript shape this evidence is pinned to.
     for key, field in (("session_id", "sessionId"), ("cwd", "cwd"), ("claude_version", "version")):
-        values = {r.get(field) for r in records if isinstance(r.get(field), str)}
+        values = {r.get(field) for r in everything if isinstance(r.get(field), str)}
         out[key] = sorted(values)[0] if len(values) == 1 else sorted(values)[:3] or None
 
     # The delivery representation below is an undocumented internal shape, proven on ONE build.
@@ -407,10 +484,12 @@ def extract(label, before_list, trusted_path, expected_skill, probe_skill=None):
                             f"model, so the lockout did not hold")
 
     # --- the subagents ----------------------------------------------------------------------------
-    out["agent_calls"] = agent_calls(records, results)
+    out["agent_calls"], sidechains = agent_calls(records, results, tool_use_metadata(records),
+                                                 transcript, failures, label)
 
     # --- no hostile bytes anywhere in the run ------------------------------------------------------
-    raw = "\n".join(json.dumps(r, ensure_ascii=False) for r in records)
+    # Every record of the session file, mirrors included, and every sidechain that was read.
+    raw = "\n".join([json.dumps(r, ensure_ascii=False) for r in everything] + sidechains)
     present = [name for name in HOSTILE if MARKERS[name] in raw]
     out["hostile_markers_in_transcript"] = present
     if present:

@@ -139,6 +139,36 @@ class TestMissingAgentReport(ReportCase):
         self.assertTrue(built["primary_reason"])
         self.assertTrue(built["human_action_required"])
 
+    def test_07_a_host_limit_that_stopped_the_agent_before_it_reported_is_the_reason(self):
+        # The host kills the agent at the limit, so it usually never writes its report. The report
+        # is still missing - rule 1 still decides - but the reason the task did not finish is the
+        # limit, and FR-023a says a blocked outcome at a limit names it (FR-024, FR-035a).
+        for reason in events.HOST_LIMIT_REASONS:
+            with self.subTest(reason=reason):
+                built = self.build(agent={}, run=analysis(host_stop={"reason": reason}))
+                self.assertEqual(built["final_outcome"], "blocked")
+                self.assertEqual(built["agent_outcome"], "missing")
+                self.assertEqual(built["limits"]["limit_reached"], reason)
+                self.assertIn(f"{reason} limit", built["primary_reason"])
+                self.assertIn("host", built["primary_reason"])
+                self.assertIn(f"{reason} limit", built["human_action_required"])
+                self.assertEqual([o["rule"] for o in built["outcome_overrides"]],
+                                 ["D-FIN.1 missing or invalid agent report"])
+
+    def test_08_a_native_ceiling_that_stopped_the_agent_before_it_reported_is_the_reason(self):
+        run = events.analyze(
+            "\n".join([json.dumps({"type": "stream_started", "session_id": "s"}),
+                       json.dumps({"type": "max_iterations_reached", "agent_name": "root",
+                                   "max_iterations": 150})]) + "\n", exit_status=1)
+        built = self.build(agent={}, run=run)
+        self.assertEqual(built["final_outcome"], "blocked")
+        self.assertEqual(built["limits"]["limit_reached"], "native_ceiling")
+        self.assertIn("agents.root.max_iterations", built["primary_reason"])
+
+    def test_09_without_a_limit_a_missing_report_is_still_the_reason(self):
+        built = self.build(agent={})
+        self.assertEqual(built["primary_reason"], "the agent produced no valid completion report")
+
 
 # --- D-FIN rule 2: run integrity ------------------------------------------------------------------
 
@@ -598,6 +628,30 @@ class TestFailedVersusBlocked(ReportCase):
                            approvals=[approval])
         self.assertEqual(built["final_outcome"], "blocked")
         self.assertTrue(built["human_action_required"])
+
+    def test_73a_a_check_that_fails_for_want_of_an_approval_is_blocked_not_failed(self):
+        # Found live (S8): the install was refused, the agent stopped and said so, and the host
+        # called it `failed` because the test that needs the dependency still fails.
+        approval = {"id": f"apr-{RUN_ID}-1", "action_class": 15, "action": "Add a new dependency",
+                    "target": "npm:x", "normalized_target": "npm:x", "reason": "needed",
+                    "risk": "medium", "status": "unanswered"}
+        built = self.build(agent=agent_report(outcome="blocked", checks=[check(result="fail")]),
+                           approvals=[approval])
+        self.assertEqual(built["final_outcome"], "blocked")
+        self.assertIn(approval["id"], built["primary_reason"])
+        self.assertIn(f"--approve {approval['id']}", built["human_action_required"])
+        self.assertEqual(built["outcome_overrides"], [])
+
+    def test_73b_an_agent_that_went_on_and_failed_is_still_failed(self):
+        approval = {"id": f"apr-{RUN_ID}-1", "action_class": 21, "action": "External API call",
+                    "target": "example.invalid", "normalized_target": "example.invalid",
+                    "reason": "x", "risk": "medium", "status": "unanswered"}
+        for outcome in ("failed", "succeeded"):
+            with self.subTest(agent=outcome):
+                built = self.build(agent=agent_report(outcome=outcome,
+                                                      checks=[check(result="fail")]),
+                                   approvals=[approval])
+                self.assertEqual(built["final_outcome"], "failed")
 
     def test_74_every_override_names_the_rule_that_fired(self):
         built = self.build(agent=agent_report(checks=[check(result="fail")]))

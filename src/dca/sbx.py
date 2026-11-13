@@ -18,7 +18,81 @@ that are each a requirement rather than a convenience:
 
 import json
 import os
+import re
 import subprocess
+
+
+def sandbox_inventory(document):
+    """Normalize observed sbx inventories: v0.43's wrapper and v0.53's array.
+
+    Missing fields, error envelopes and malformed entries remain unreadable, never empty.
+    """
+    listing = (document["sandboxes"] if isinstance(document, dict)
+               and set(document) == {"sandboxes"} else document)
+    if not isinstance(listing, list) or any(
+            not isinstance(entry, dict) or not isinstance(entry.get("name"), str)
+            or not entry["name"] for entry in listing):
+        raise ValueError("expected a sandbox inventory with nonempty names")
+    return listing
+
+
+VERSIONS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), "runtime", "versions.yaml")
+
+
+def kit_build_pins(versions_path=VERSIONS):
+    """runtime/versions.yaml's `kit_build`: the buildx builder, its BuildKit image, the frontend."""
+    with open(versions_path, encoding="utf-8") as handle:
+        return json.load(handle)["kit_build"]
+
+
+def kit_builder(versions_path=VERSIONS):
+    return kit_build_pins(versions_path)["builder"]
+
+
+def kit_host_problems(pins, run=None):
+    """Read-only prerequisites for building v3 kits; never start or change a builder."""
+    if run is None:
+        def run(argv):
+            try:
+                result = subprocess.run(argv, capture_output=True, text=True, check=False,
+                                        timeout=20)
+                return result.returncode, result.stdout, result.stderr
+            except (OSError, subprocess.TimeoutExpired):
+                return 127, "", ""
+
+    code, output, _ = run(["docker", "info", "--format", "{{.ServerVersion}}"])
+    if code != 0 or not output.strip():
+        return ["Docker daemon is unavailable. Start Docker Desktop and re-run."]
+    builder = (pins or {}).get("builder")
+    image = (pins or {}).get("buildkit_image")
+    if not builder or not image:
+        return ["runtime/versions.yaml is missing the kit_build builder or BuildKit image pin."]
+    code, output, _ = run(["docker", "buildx", "inspect", builder])
+    if code != 0:
+        return [f"buildx builder {builder!r} is unavailable. Check `docker buildx inspect "
+                f"{builder}` and restore the builder pinned in runtime/versions.yaml."]
+    if not re.search(r"(?m)^Driver:\s+docker-container\s*$", output):
+        return [f"buildx builder {builder!r} must use the docker-container driver for v3 kits."]
+    if image not in output:
+        return [f"buildx builder {builder!r} does not report the pinned BuildKit image {image}."]
+    return []
+
+
+def composition_problem(record, base, kit):
+    """Why `sbx inspect --json` does NOT prove the sandbox is exactly `base` + `kit`, or None.
+
+    The sandbox's own record must list EXACTLY the pinned workload reference and the DCA mixin,
+    in that order: an extra kit (a shortcut, an injected mixin) or a workload resolved from a
+    tag is a different composition, and an unprovable composition is refused like a wrong one.
+    """
+    if not isinstance(record, dict):
+        return "sbx inspect returned no sandbox record"
+    kits = record.get("kits")
+    expected = [base, os.path.abspath(str(kit))]
+    if kits != expected:
+        return f"the sandbox is composed of {kits!r}, not exactly {expected!r}"
+    return None
 
 
 class SbxError(RuntimeError):
@@ -52,6 +126,9 @@ class Sbx:
 
     def _environment(self):
         environment = dict(os.environ)
+        # sbx builds the v3 mixin with the host's buildx, and the default `docker` driver cannot
+        # export it: the pinned docker-container builder is selected per process, never `--use`d.
+        environment["BUILDX_BUILDER"] = kit_builder()
         environment.update(self._env)
         # FR-029b / precondition 5: the VM never inherits a host SSH agent.
         environment.pop("SSH_AUTH_SOCK", None)
@@ -84,7 +161,12 @@ class Sbx:
         return out.strip()
 
     def list_sandboxes(self):
-        return (self._json("ls", "--json") or {}).get("sandboxes") or []
+        document = self._json("ls", "--json")
+        try:
+            return sandbox_inventory(document)
+        except ValueError as exc:
+            raise SbxError([self.binary, "ls", "--json"], 0,
+                           str(exc)) from exc
 
     def policy(self):
         """The whole policy document, including global rules and governance. Read-only."""
@@ -115,32 +197,35 @@ class Sbx:
 
     # --- per-sandbox lifecycle -------------------------------------------------------------------
 
-    def create(self, template, name, kit, base):
+    def create(self, name, kit, base, deny=()):
         """A mountless sandbox with shared skills OFF, the V1 kit and the EXACT pinned base.
 
-        `base` is the immutable, digest-qualified reference - `<repository>:<tag>@sha256:<hex>` -
-        and it is REQUIRED. Passing it with `--template` makes the image a creation-time input
-        rather than something resolved from the agent's default tag and audited afterwards, so an
-        upstream tag that moves can no longer decide which image boots. It is not defaulted: a
-        caller that has no pin must refuse to create, because falling back to the agent default
-        would silently select whatever the mutable tag points at today.
+        `base` is the immutable, digest-qualified v3 workload kit - `<repository>@sha256:<hex>` -
+        and it is REQUIRED. sbx >= 0.53 resolves a bare agent name (`claude`) to that kit's
+        mutable `:latest`, so the pinned reference is passed as the AGENT itself: the digest is a
+        creation-time input, never something resolved from a tag and audited afterwards. `kit` is
+        the absolute path of the DCA v3 mixin directory; sbx builds it with the host's buildx, so
+        the builder named in the environment (BUILDX_BUILDER) decides how it is built.
+        `--static-mcp none` gives the sandbox an empty static MCP set: V1 has no MCP. `deny` is
+        applied with `--deny-network` AT CREATION: a v3 workload kit's startup hook reaches its
+        own kit-allowed hosts while the VM boots, before any later `sbx policy deny` could land.
         """
-        if not base:
+        if not base or "@sha256:" not in base:
             raise ValueError("a pinned, digest-qualified base reference is required to create a "
                              "sandbox; the agent default would follow a mutable tag")
-        _, out, _ = self.run("create", template, "--template", base,
-                             "--name", name, "--skills", "off", "--kit", kit)
+        denies = [arg for host in deny for arg in ("--deny-network", host)]
+        _, out, _ = self.run("create", base, "--name", name, "--skills", "off",
+                             "--static-mcp", "none", "--kit", kit, *denies)
         return out
+
+    def inspect(self, name):
+        """`sbx inspect <name> --json`: the sandbox's own record of what it was composed from."""
+        return self._json("inspect", name, "--json")
 
     def allow_network(self, name, hosts):
         if not hosts:
             return
         self.run("policy", "allow", "network", "--sandbox", name, ",".join(hosts))
-
-    def deny_network(self, name, hosts):
-        if not hosts:
-            return
-        self.run("policy", "deny", "network", "--sandbox", name, ",".join(hosts))
 
     def copy_in(self, source, name, destination):
         self.run("cp", str(source), f"{name}:{destination}")

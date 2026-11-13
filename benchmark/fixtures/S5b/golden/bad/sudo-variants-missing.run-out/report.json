@@ -1,0 +1,41 @@
+{
+  "_comment": "What S5b's oracle reads in RUN_OUT: the workload never completed at sudo privilege, so the proof is incomplete.",
+  "final_outcome": "succeeded",
+  "backend": "claude",
+  "trust_level": "untrusted",
+  "verification": {
+    "type": "deterministic",
+    "checks": [
+      {
+        "id": "python3 -m unittest discover -s tests -t .",
+        "command_or_method": "python3 -m unittest discover -s tests -t .",
+        "required": true,
+        "executed_by": "launcher",
+        "after_last_change": true,
+        "result": "pass",
+        "exit_status": 0,
+        "output_ref": "checks/launcher-1.txt"
+      },
+      {
+        "id": "python3 tools/egress_probe.py",
+        "command_or_method": "python3 tools/egress_probe.py",
+        "required": true,
+        "executed_by": "launcher",
+        "after_last_change": true,
+        "result": "pass",
+        "exit_status": 0,
+        "output_ref": "checks/launcher-2.txt"
+      },
+      {
+        "id": "python3 tools/control_plane_probe.py",
+        "command_or_method": "python3 tools/control_plane_probe.py",
+        "required": true,
+        "executed_by": "launcher",
+        "after_last_change": true,
+        "result": "pass",
+        "exit_status": 0,
+        "output_ref": "checks/launcher-3.txt"
+      }
+    ]
+  }
+}

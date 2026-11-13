@@ -1,0 +1,75 @@
+{
+  "gate": "G7",
+  "status": "PASS",
+  "run_at": "2026-09-20T02:47:32Z",
+  "versions": {
+    "sbx": "v0.43.0"
+  },
+  "provenance": {
+    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+  },
+  "criteria": [
+    {
+      "id": "G7.0a",
+      "description": "sbx client and server still match the pinned exact version and the server is running",
+      "result": "PASS",
+      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 state running, exit 0"
+    },
+    {
+      "id": "G7.0b",
+      "description": "no SSH agent would reach a sandbox: forwarding disabled and no fixed agent socket",
+      "result": "PASS",
+      "evidence_ref": "ssh.agentForwardingEnabled=False, ssh.agentSocketPath='', detector refusals none"
+    },
+    {
+      "id": "G7.0c",
+      "description": "global network policy is still the post-G0 bootstrap baseline (unrepaired)",
+      "result": "PASS",
+      "evidence_ref": "exit 0, 1 network rule(s) [{'id': 'default-deny-all', 'scope': 'global', 'applies_to': 'all', 'resource_type': 'network', 'decision': 'deny', 'resources': ['**'], 'origin': 'local', 'layer': 'local', 'status': 'active'}]"
+    },
+    {
+      "id": "G7.1",
+      "description": "every sbx call ran with SSH_AUTH_SOCK removed from its environment",
+      "result": "PASS",
+      "evidence_ref": "host SSH_AUTH_SOCK set: yes; as seen by an sbx call: removed"
+    },
+    {
+      "id": "G7.2",
+      "description": "mountless sandbox from the exact pinned Claude base (repository, tag and digest), skills off",
+      "result": "PASS",
+      "evidence_ref": "create exit 0, probe exit 0, sbx resolved docker/sandbox-templates:claude-code-docker (pin docker/sandbox-templates:claude-code-docker), cached template repository docker.io/docker/sandbox-templates tag claude-code-docker image id 94670d5b2a24 (a short image id, not a digest on its own) prefixing the pinned digest sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2, workspace 'none · no workspace bind mount'"
+    },
+    {
+      "id": "G7.3",
+      "description": "no usable forwarded SSH-agent endpoint exists and no host SSH agent is reachable",
+      "result": "PASS",
+      "evidence_ref": "SSH_AGENT_PID unset; SSH_AUTH_SOCK set (/run/ssh-agent.sock: exists no, is socket no, also in PID 1 env 1); ssh-add cannot connect yes; candidate agent sockets 0; SSH_* variables 1; failures none"
+    },
+    {
+      "id": "G7.4",
+      "description": "inside the sandbox: ssh-add cannot connect to any agent",
+      "result": "PASS",
+      "evidence_ref": "ssh-add present yes, exit 2, cannot connect yes, reports identities no (an agent answering with no identities loaded would be a reachable agent)"
+    },
+    {
+      "id": "G7.5",
+      "description": "inside the sandbox: no forwarded agent socket exists",
+      "result": "PASS",
+      "evidence_ref": "0 ssh/agent sockets under /tmp, /run, /var/run "
+    },
+    {
+      "id": "G7.6",
+      "description": "the detector refuses both recorded negative states, with no setting changed",
+      "result": "PASS",
+      "evidence_ref": "forwarding-enabled: ['ssh.agentForwardingEnabled is true, so an agent would be forwarded']; fixed-socket: ['ssh.agentSocketPath names a fixed host agent socket; V1 refuses that rather than assume it is inert while forwarding is disabled, which the pinned version has not been shown to guarantee'] (recorded documents only; gates/G7/recorded/)"
+    },
+    {
+      "id": "G7.7",
+      "description": "the probe sandbox was removed by name and none remains",
+      "result": "PASS",
+      "evidence_ref": "sbx rm --force dca-g7-ssh exit 0, 0 sandboxes remain"
+    }
+  ],
+  "fallback_applied": null,
+  "notes": "Verification only: G7 changes nothing. The invariant it proves is that no usable forwarded SSH-agent endpoint exists and no host SSH agent is reachable. The sandbox runtime injects SSH_AUTH_SOCK=/run/ssh-agent.sock, the fixed in-VM path where its relay socket appears when forwarding is enabled; the pinned base image declares no SSH variable. A dangling value is accepted only with all corroborating evidence: SSH_AGENT_PID unset, the path neither existing nor being a socket, ssh-add unable to connect, and no candidate agent socket. G0 disabled SSH agent forwarding; this gate ran every sbx call with SSH_AUTH_SOCK removed, created one mountless sandbox with --skills off from the pinned Claude base, and probed it as the agent user. The two negative detector cases come from recorded documents under gates/G7/recorded/, so no global setting was switched. The probe records booleans, exit codes, counts and paths only, never key material, and the sandbox was removed by name; sbx rm --all is never used."
+}

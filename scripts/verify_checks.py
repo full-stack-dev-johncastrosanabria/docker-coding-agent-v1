@@ -214,6 +214,17 @@ def check_artifact_pin(report):
         base = ((versions.get("sandbox_bases") or {}).get(backend) or {})
         if not base.get("base") or not str(base.get("version", "")).startswith("sha256:"):
             report.fail("pins", f"sandbox_bases.{backend} has no pinned base and digest")
+    # The kit build is part of the supply chain: the sandbox-kit frontend and the BuildKit image
+    # that assemble the DCA mixin are pinned by digest, and so is the benchmark oracle image.
+    kit_build = versions.get("kit_build") or {}
+    if not kit_build.get("builder"):
+        report.fail("pins", "kit_build.builder names no buildx builder")
+    for field in ("frontend", "buildkit_image"):
+        if "@sha256:" not in str(kit_build.get(field, "")):
+            report.fail("pins", f"kit_build.{field} is not pinned by digest")
+    oracle = versions.get("oracle_image") or {}
+    if not oracle.get("base") or not str(oracle.get("version", "")).startswith("sha256:"):
+        report.fail("pins", "oracle_image has no pinned base and digest")
 
 
 def check_provider_keys(report):
@@ -295,6 +306,13 @@ def check_version_pins(report, allow_drift):
         report.fail("pins", message) if not allow_drift else report.note(f"drift: {message}")
 
 
+def check_kit_host(report):
+    versions = read_json(os.path.join(RUNTIME, "versions.yaml"))
+    sbx = _load("dca_sbx", os.path.join(ROOT, "src", "dca", "sbx.py"))
+    for problem in sbx.kit_host_problems(versions.get("kit_build"), run=run):
+        report.fail("kit-build", problem)
+
+
 def check_network_fingerprint(report):
     """The live global policy fingerprint must still equal the one the evidence was taken under.
 
@@ -310,7 +328,12 @@ def check_network_fingerprint(report):
     if code != 0:
         report.fail("network-fingerprint", f"sbx ls failed: {err.strip()}")
         return
-    sandboxes = (json.loads(out) or {}).get("sandboxes") or []
+    sbx_module = _load("dca_sbx", os.path.join(ROOT, "src", "dca", "sbx.py"))
+    try:
+        sandboxes = sbx_module.sandbox_inventory(json.loads(out))
+    except ValueError as exc:
+        report.fail("network-fingerprint", f"sbx inventory is unreadable: {exc}")
+        return
     if sandboxes:
         report.fail("network-fingerprint",
                     f"{len(sandboxes)} sandbox(es) exist, so the global fingerprint cannot be read")
@@ -445,6 +468,7 @@ def main(argv=None):
 
     if not options.static:
         backends = available_backends()
+        check_kit_host(report)
         check_version_pins(report, options.allow_drift)
         check_network_fingerprint(report)
         check_login_state(report)

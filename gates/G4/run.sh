@@ -170,26 +170,30 @@ record plan_exit 0
 
 # --- one cell at a time ---------------------------------------------------------------------------
 
+. gates/sbx_create.sh
+
 for name in $(awk '/^cell /{print $2}' "$PLAN"); do
     agent=$(awk -v n="$name" '$1=="cell" && $2==n {print $5}' "$PLAN")
     allow=$(awk -v n="$name" '$1=="allow" && $2==n {print $3}' "$PLAN")
     deny=$(awk -v n="$name" '$1=="deny" && $2==n {print $3}' "$PLAN")
     dests=$(awk -v n="$name" '$1=="dest" && $2==n {print $3}' "$PLAN")
 
+    # The explicit denies go in WITH the create (--deny-network, sandbox-scoped): the v3 claude
+    # kit's startup hook reaches its kit-allowed apt mirrors while the VM boots, before a later
+    # `sbx policy deny` could land.
+    denies=$(deny_flags "$deny")
     if [ "$agent" = docker-agent ]; then
-        run_sbx create "$agent" --name "$name" --skills off --kit "./$KIT" >"$WORK/create-$name.txt" 2>&1
+        # shellcheck disable=SC2086
+        create_pinned codex "$name" "$KIT" $denies
     else
-        run_sbx create "$agent" --name "$name" --skills off >"$WORK/create-$name.txt" 2>&1
+        # shellcheck disable=SC2086
+        create_pinned claude "$name" "" $denies
     fi
-    record "create_${name}_exit" "$?"
+    rules_status=$?
 
     # Sandbox-scoped rules only. A missing --sandbox here would write a GLOBAL rule.
-    rules_status=0
     if [ -n "$allow" ]; then
         run_sbx policy allow network --sandbox "$name" "$allow" >"$WORK/allow-$name.txt" 2>&1 || rules_status=1
-    fi
-    if [ -n "$deny" ]; then
-        run_sbx policy deny network --sandbox "$name" "$deny" >"$WORK/deny-$name.txt" 2>&1 || rules_status=1
     fi
     record "rules_${name}_exit" "$rules_status"
 
@@ -198,7 +202,9 @@ for name in $(awk '/^cell /{print $2}' "$PLAN"); do
 
     # Surface 1: the authorizer's decision for every destination.
     for host in $dests; do
-        run_sbx policy check network --sandbox "$name" "$host:$PORT" --json \
+        # A destination is a bare host on $PORT, or host:port for a must-deny host on another port.
+        case "$host" in *:*) target=$host ;; *) target=$host:$PORT ;; esac
+        run_sbx policy check network --sandbox "$name" "$target" --json \
             >"$WORK/check-$name-$host.json" 2>"$WORK/check-$name-$host.err"
     done
 
@@ -210,7 +216,8 @@ for name in $(awk '/^cell /{print $2}' "$PLAN"); do
         if command -v curl >/dev/null 2>&1; then printf 'probe_tool=curl\n'; else printf 'probe_tool=none\n'; exit 0; fi
         for h in \$HOSTS; do
             printf '### host=%s\n' \"\$h\"
-            curl -sS -o /dev/null -D - --max-time 20 --connect-timeout 10 \"https://\$h/\" 2>&1 | head -3
+            case \"\$h\" in *:80) url=\"http://\${h%:80}/\" ;; *) url=\"https://\$h/\" ;; esac
+            curl -sS -o /dev/null -D - --max-time 20 --connect-timeout 10 \"\$url\" 2>&1 | head -3
         done
     " >"$WORK/probe-$name.txt" 2>"$WORK/probe-$name.err"
     record "probe_${name}_exit" "$?"

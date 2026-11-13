@@ -138,23 +138,17 @@ record policy_deny "$POLICY_DENY"
 trap cleanup EXIT INT TERM
 
 # --- one mountless sandbox from the pinned Claude base ----------------------------------------------
-run_sbx create claude --name "$SANDBOX" --skills off --kit "./$KIT" \
-    >"$WORK/create-$SANDBOX.txt" 2>&1
+. gates/sbx_create.sh
+# The profile's denies go in WITH the create, so they hold while the VM boots.
+# shellcheck disable=SC2046
+create_pinned claude "$SANDBOX" "$KIT" $(deny_flags "$POLICY_DENY")
 create_status=$?
-record "create_${SANDBOX}_exit" "$create_status"
 [ "$create_status" -eq 0 ] && : >"$WORK/created-$SANDBOX"
 [ "$create_status" -eq 0 ] || stop
-
-run_sbx template ls --json >"$WORK/templates.json" 2>"$WORK/templates.err"
-record templates_exit "$?"
-record sbx_resolved_base "$(sed -n 's/.*\(docker\/sandbox-templates:[a-z0-9.-]*\).*/\1/p' \
-    "$WORK/create-$SANDBOX.txt" | head -1)"
 
 rules_status=0
 run_sbx policy allow network --sandbox "$SANDBOX" "$POLICY_ALLOW" \
     >"$WORK/allow-$SANDBOX.txt" 2>&1 || rules_status=1
-run_sbx policy deny network --sandbox "$SANDBOX" "$POLICY_DENY" \
-    >"$WORK/deny-$SANDBOX.txt" 2>&1 || rules_status=1
 record policy_rules_exit "$rules_status"
 
 # --- stage the managed assets, the hostile repository and the in-VM extractor -----------------------

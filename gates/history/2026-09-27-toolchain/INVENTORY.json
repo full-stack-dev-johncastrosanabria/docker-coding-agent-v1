@@ -1,0 +1,111 @@
+{
+  "gate": "INVENTORY",
+  "status": "PASS",
+  "run_at": "2026-09-20T17:47:11Z",
+  "versions": {
+    "sbx": "v0.43.0"
+  },
+  "provenance": {
+    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+  },
+  "criteria": [
+    {
+      "id": "INV.0a",
+      "description": "sbx client and server still match the pinned exact version and the server is running",
+      "result": "PASS",
+      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 running"
+    },
+    {
+      "id": "INV.0b",
+      "description": "the SSH-agent baseline still refuses nothing, and SSH_AUTH_SOCK is removed from every sbx call",
+      "result": "PASS",
+      "evidence_ref": "refusals none, SSH_AUTH_SOCK in the sbx environment: removed"
+    },
+    {
+      "id": "INV.0c",
+      "description": "the global network policy is still exactly the G0 bootstrap deny-all rule",
+      "result": "PASS",
+      "evidence_ref": "1 network rule(s): ['default-deny-all']"
+    },
+    {
+      "id": "INV.0d",
+      "description": "no sandbox exists before the inventory creates one",
+      "result": "PASS",
+      "evidence_ref": "sbx ls --json: []"
+    },
+    {
+      "id": "INV.0e",
+      "description": "the G6 probe kit and the pinned docker-agent artifact are present, with the pinned SHA-256",
+      "result": "PASS",
+      "evidence_ref": "kit yes, artifact sha256 a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623 vs pin a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623"
+    },
+    {
+      "id": "INV.1.claude",
+      "description": "claude: the built-in kit's sandbox-scoped network declarations were read from a kit-only sandbox holding no repository code",
+      "result": "PASS",
+      "evidence_ref": "create exit 0, policy ls exit 0, declared ['api.anthropic.com:443', 'bridge.claudeusercontent.com:443', 'claude.com:443', 'code.claude.com:443', 'downloads.claude.ai:443', 'mcp-proxy.anthropic.com:443', 'platform.claude.com:443']"
+    },
+    {
+      "id": "INV.1.codex",
+      "description": "codex: the built-in kit's sandbox-scoped network declarations were read from a kit-only sandbox holding no repository code",
+      "result": "PASS",
+      "evidence_ref": "create exit 0, policy ls exit 0, declared []"
+    },
+    {
+      "id": "INV.2",
+      "description": "every inventory entry is well formed: host, port, purpose, sandbox_required, profiles, source and evidence_ref, with no duplicate or unknown value",
+      "result": "PASS",
+      "evidence_ref": "all entries well formed"
+    },
+    {
+      "id": "INV.3",
+      "description": "every classification follows the T014 rules: sandbox_required only for a runtime control plane or refresh host, profiles exactly where the sandbox needs it, and host-oauth-login and discovery hosts never required",
+      "result": "PASS",
+      "evidence_ref": "all classifications supported"
+    },
+    {
+      "id": "INV.4",
+      "description": "the hosts recorded as source=kit are exactly the hosts the kits were observed declaring, in both directions",
+      "result": "PASS",
+      "evidence_ref": "kit-sourced hosts match the observed declarations exactly"
+    },
+    {
+      "id": "INV.5",
+      "description": "every backend has at least one runtime-control-plane host recorded as sandbox_required",
+      "result": "PASS",
+      "evidence_ref": "claude and codex each have a required runtime control plane"
+    },
+    {
+      "id": "INV.6",
+      "description": "the Codex endpoints come from the pinned docker-agent artifact itself, not from a note about it",
+      "result": "PASS",
+      "evidence_ref": "https://chatgpt.com/backend-api/codex present: yes, https://auth.openai.com present: yes"
+    },
+    {
+      "id": "INV.7",
+      "description": "the trusted allowlist draft is a set of unapproved candidates in declared R12 categories, scoped to the trusted profile",
+      "result": "PASS",
+      "evidence_ref": "11 candidates, none approved"
+    },
+    {
+      "id": "INV.8",
+      "description": "neither inventory file carries a secret-shaped field or value",
+      "result": "PASS",
+      "evidence_ref": "no secret-shaped field or value"
+    },
+    {
+      "id": "INV.clean",
+      "description": "every sandbox the inventory created was removed by name and none remains",
+      "result": "PASS",
+      "evidence_ref": "removals ['0', '0'], remaining inventory sandboxes []"
+    },
+    {
+      "id": "INV.baseline",
+      "description": "the global network policy is unchanged: still exactly the G0 bootstrap deny-all rule",
+      "result": "PASS",
+      "evidence_ref": "1 network rule(s) after the run: ['default-deny-all']"
+    }
+  ],
+  "fallback_applied": null,
+  "notes": "T014 is gate preparation, not a gate: it builds the draft inventory that lets G4 tell a documented or provider host apart from one the sandboxed backend process requires. Sources were used in priority order and discovery was NOT needed for either backend: the built-in claude kit declares a sandbox-scoped allow rule covering seven hosts, of which only api.anthropic.com carries task traffic, and the built-in docker-agent kit declares no network rule at all, so Codex's endpoints come from the pinned docker-agent artifact this project ships. No backend prompt was run, no credential was used and none was recorded. Nothing here is a proven allowance: G4 decides the effective per-sandbox policy, and the six non-required Claude kit hosts are must-deny candidates for it. Both sandboxes were mountless, created with --skills off, held no repository code, and were created and removed one at a time by name; sbx rm --all and sbx reset are never used, and nothing global changed."
+}

@@ -1,0 +1,24 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 5af0447..fb876a6 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,6 @@
+ # Rule table changes
+ 
++- 2027-01-01 - PT reduced 5%.
+ - 2014-01-01 - FR standard 20%, reduced 5.5%. Certified: run 1187.
+ - 2012-09-01 - ES standard 21%, reduced 10%. Certified: run 0942.
+ - 2011-01-01 - PT standard 23%, reduced 6%. Certified: run 0815.
+diff --git a/rules/vat.json b/rules/vat.json
+index 3f2619d..eff8cee 100644
+--- a/rules/vat.json
++++ b/rules/vat.json
+@@ -13,7 +13,7 @@
+     },
+     "PT": {
+       "standard": [{"rate": "0.23", "from": "2011-01-01"}],
+-      "reduced": [{"rate": "0.06", "from": "2011-01-01"}],
++      "reduced": [{"rate": "0.06", "from": "2011-01-01"}, {"rate": "0.05", "from": "2027-01-01"}],
+       "zero": [{"rate": "0.00", "from": "2011-01-01"}]
+     }
+   }

@@ -134,28 +134,33 @@ def agent_answer(work, name):
     return "".join(parts) if parts else None
 
 
-def policy_log_hosts(work, name):
+def policy_log_hosts(work, name, sandbox=None):
     """{host: allowed} from one `sbx policy log --json` capture.
 
-    The pinned sbx v0.43.0 emits two lists, `allowed_hosts` and `blocked_hosts`, each entry keyed by
+    The pinned sbx v0.53.0 emits two lists, `allowed` and `blocked`, each entry keyed by
     a host:port with a `count_since`. This reads that shape exactly rather than guessing at generic
     key names: a parser that cannot find the entries reports no allowed host, which silently fails
     the positive control and makes the whole gate look like a FAIL it is not.
 
-    A host counts as allowed only when it appears under `allowed_hosts` AND traffic was actually
-    seen. A rule permitting a host is not evidence that the agent called it.
+    A host counts as allowed only when it appears under `allowed` AND traffic was actually
+    seen. A rule permitting a host is not evidence that the agent called it. With `sandbox`, only
+    that sandbox's own lifetime counts (preflight.policy_log_since): sbx keeps the log of an
+    earlier sandbox of the same name, and a stale entry must never satisfy the control.
     """
     document = claude.read_json(work, name)
+    if sandbox is not None:
+        document = claude.preflight_module.policy_log_since(
+            document, claude.read_json(work, f"inspect-{sandbox}.json"))
     if not isinstance(document, dict):
         return {}
     hosts = {}
-    for entry in document.get("blocked_hosts") or []:
+    for entry in document.get("blocked") or []:
         if isinstance(entry, dict) and isinstance(entry.get("host"), str):
             hosts.setdefault(entry["host"].split(":")[0], False)
-    for entry in document.get("allowed_hosts") or []:
+    for entry in document.get("allowed") or []:
         if not isinstance(entry, dict) or not isinstance(entry.get("host"), str):
             continue
-        count = entry.get("count_since")
+        count = entry.get("count", entry.get("count_since"))
         seen = True if count is None else isinstance(count, int) and count > 0
         host = entry["host"].split(":")[0]
         hosts[host] = hosts.get(host, False) or seen
@@ -252,8 +257,7 @@ def backend_rows(backend, obs, work, versions, probes, ran):
     host = obs.get(f"probe_host_{backend}")
     rows = []
 
-    base = module.base_identity_row(GATE, obs, work, versions,
-                                    observed_key=f"sbx_resolved_base_{backend}")
+    base = module.base_identity_row(GATE, obs, work, versions, names=[f"dca-g9-{backend}"])
     rows.append((*base, ran))
     policy_obs = dict(obs)
     policy_obs["policy_allow"] = obs.get(f"policy_allow_{backend}")
@@ -296,7 +300,7 @@ def backend_rows(backend, obs, work, versions, probes, ran):
 
     # --- the positive control ---------------------------------------------------------------------
     answer = agent_answer(work, f"control-{backend}.json")
-    hosts = policy_log_hosts(work, f"policylog-control-{backend}.json")
+    hosts = policy_log_hosts(work, f"policylog-control-{backend}.json", f"dca-g9-{backend}")
     control_problems = []
     if obs.get(f"control_{backend}_exit") != "0":
         control_problems.append(
@@ -408,6 +412,9 @@ def evaluate(obs, work, versions=None, probes_path=None):
     per_backend, statuses, facts = {}, {}, {}
     for backend in ("claude", "codex"):
         ok, why = availability(backend, versions)
+        deferred = obs.get(f"skip_{backend}_reason")
+        if deferred and f"create_dca-g9-{backend}_exit" not in obs:
+            ok, why = False, deferred
         if not ok:
             per_backend[backend] = []
             statuses[backend] = ("NOT-RUN", why)
@@ -437,7 +444,14 @@ def record(obs_path, work=WORK, versions_path=VERSIONS, evidence_path=EVIDENCE, 
         obs, work, versions, probes_path)
 
     backends = {}
+    retained = []
     for backend, (status, why) in statuses.items():
+        previous = claude.prior_backend_evidence(
+            evidence_path, GATE, backend, versions, obs, fingerprint)
+        if previous is not None:
+            backends[backend] = previous["backends"][backend]
+            retained.append(f"{backend} from {previous.get('run_at')}")
+            continue
         entry = {"status": status}
         if why is not None:
             entry["not_run_reason"] = why
@@ -539,6 +553,9 @@ def record(obs_path, work=WORK, versions_path=VERSIONS, evidence_path=EVIDENCE, 
         evidence["notes"] += " IMPLICATIONS: " + " ".join(implications.values())
     if fingerprint is not None:
         evidence["network_policy_fingerprint"] = fingerprint
+    if retained:
+        evidence["notes"] += (" Retained unselected backend evidence under identical pins and "
+                              "network policy: " + "; ".join(retained) + ".")
     with open(evidence_path, "w", encoding="utf-8") as fh:
         fh.write(json.dumps(evidence, indent=2, ensure_ascii=False) + "\n")
     return evidence, facts

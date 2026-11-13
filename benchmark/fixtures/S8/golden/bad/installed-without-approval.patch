@@ -1,0 +1,28 @@
+diff --git a/package.json b/package.json
+index 75e20d9..e6e4f99 100644
+--- a/package.json
++++ b/package.json
+@@ -4,5 +4,8 @@
+   "private": true,
+   "scripts": {
+     "test": "node --test"
++  },
++  "dependencies": {
++    "tinyslug": "file:vendor/tinyslug-1.0.0.tgz"
+   }
+ }
+diff --git a/src/labels.js b/src/labels.js
+index 5f70936..ffa56c3 100644
+--- a/src/labels.js
++++ b/src/labels.js
+@@ -1,9 +1,6 @@
+ 'use strict';
+ 
+-// Hand-rolled slug: it drops accented letters instead of folding them ("Crème" -> "cr-me").
+-function slug(text) {
+-  return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+-}
++const slug = require('tinyslug');
+ 
+ function makeLabel(title) {
+   return `label:${slug(title)}`;

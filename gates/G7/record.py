@@ -154,26 +154,17 @@ def evaluate(obs, work, recorded=RECORDED):
             True,
         )
     )
-    pinned_base = pins["sandbox_bases"]["claude"]["base"]
-    pinned_digest = pins["sandbox_bases"]["claude"]["version"]
-    repository, _, tag = (pinned_base or "").rpartition(":")
-    cached = preflight_module.template_image(read_json(work, "templates.json"), repository, tag)
-    base_identity = (
-        image == pinned_base
-        and obs.get("template_ls_exit") == "0"
-        and preflight_module.template_identity_matches(cached, pinned_base, pinned_digest)
-    )
+    reference = preflight_module.pinned_reference(pins, "claude")
+    inspected = read_json(work, f"inspect-{SANDBOX}.json")
+    problem = preflight_module.composition_problem(inspected, reference)
     rows.append(
         (
             "G7.2",
-            "mountless sandbox from the exact pinned Claude base (repository, tag and digest), skills off",
-            created and probed and "no workspace bind mount" in workspace_line and base_identity,
+            "mountless sandbox from the exact pinned Claude workload (repository and digest), skills off",
+            created and probed and "no workspace bind mount" in workspace_line and problem is None,
             f"create exit {obs.get(f'create_{SANDBOX}_exit', '-')}, probe exit "
-            f"{obs.get(f'probe_{SANDBOX}_exit', '-')}, sbx resolved {image or 'not reported'} "
-            f"(pin {pinned_base}), cached template repository "
-            f"{(cached or {}).get('repository', 'not found')} tag {(cached or {}).get('tag', '-')} "
-            f"image id {(cached or {}).get('id', '-')} (a short image id, not a digest on its "
-            f"own) prefixing the pinned digest {pinned_digest}, workspace "
+            f"{obs.get(f'probe_{SANDBOX}_exit', '-')}, created from {reference}; sbx inspect: "
+            f"{'composition proven' if problem is None else problem}; workspace "
             f"'{workspace_line or 'not reported'}'",
             ready,
         )
@@ -242,14 +233,14 @@ def evaluate(obs, work, recorded=RECORDED):
             "G7.7",
             "the probe sandbox was removed by name and none remains",
             obs.get(f"rm_{SANDBOX}_exit") == "0"
-            and isinstance(read_json(work, "ls-after.json"), dict)
+            and preflight_module.sandbox_list(read_json(work, "ls-after.json")) is not None
             and not [
                 e
-                for e in (read_json(work, "ls-after.json") or {}).get("sandboxes", [])
-                if isinstance(e, dict) and e.get("name") == SANDBOX
+                for e in preflight_module.sandbox_list(read_json(work, "ls-after.json"))
+                if e.get("name") == SANDBOX
             ],
             f"sbx rm --force {SANDBOX} exit {obs.get(f'rm_{SANDBOX}_exit', '-')}, "
-            f"{len((read_json(work, 'ls-after.json') or {}).get('sandboxes', []))} sandboxes remain",
+            f"{len(preflight_module.sandbox_list(read_json(work, 'ls-after.json')) or [])} sandboxes remain",
             f"rm_{SANDBOX}_exit" in obs,
         )
     )

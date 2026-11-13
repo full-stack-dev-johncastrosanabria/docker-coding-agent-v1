@@ -8,6 +8,8 @@ Shapes are what the sbx version pinned by G0 emits, observed on this host, not a
 schema; an sbx upgrade re-runs the gates (research R27) and may need these adapted.
 """
 
+import datetime
+
 MISSING = object()
 
 SSH_FORWARDING_KEY = "ssh.agentForwardingEnabled"
@@ -159,43 +161,74 @@ def ssh_agent_isolation_failures(probe):
     return reasons
 
 
-# --- sandbox base identity ----------------------------------------------------------------------
-
-def template_image(templates, repository, tag):
-    """The cached template with this exact repository and tag from `sbx template ls --json`.
-
-    A tag alone doesn't identify a template: the repository must match too (the store reports it
-    fully qualified, for example docker.io/docker/sandbox-templates).
-    """
-    if not isinstance(templates, dict) or not isinstance(templates.get("images"), list):
-        return None
-    for image in templates["images"]:
-        if (
-            isinstance(image, dict)
-            and image.get("tag") == tag
-            and image.get("repository") in (repository, f"docker.io/{repository}")
-        ):
-            return image
+def sandbox_list(document):
+    """The sandbox entries of `sbx ls --json`: v0.43's {"sandboxes": [...]} or v0.53's bare
+    array. Anything else - an error envelope, extra keys, a non-list - is None, never "empty"."""
+    if isinstance(document, dict) and set(document) == {"sandboxes"}:
+        document = document["sandboxes"]
+    if isinstance(document, list) and all(isinstance(e, dict) for e in document):
+        return document
     return None
 
 
-def template_identity_matches(cached, image, digest):
-    """True when the cached template is this exact repository and tag and its image id prefixes
-    the full digest.
+def policy_log_since(log, inspected):
+    """`sbx policy log <name> --json` reduced to THIS sandbox's lifetime, or None when unreadable.
 
-    The short image id is not a digest on its own. The identity is the combination: the
-    sbx-resolved reference, the cached repository/tag/id, and the full digest.
+    sbx >= 0.53 keys the log by sandbox NAME and keeps it after `sbx rm`, so a gate that re-uses
+    a name would read an earlier sandbox's traffic as its own - a stale `allowed` entry can fail
+    a gate that held, and can equally satisfy a positive control that did not. An entry counts
+    only when its `last_seen` is not before the `created_at` of the sandbox's own inspect
+    record. Fail-closed: no readable creation time, or any entry without a readable `last_seen`,
+    is None, never "no entries".
     """
-    repository, _, tag = (image or "").rpartition(":")
-    identifier = cached.get("id") if isinstance(cached, dict) else None
-    return (
-        bool(repository)
-        and bool(tag)
-        and isinstance(cached, dict)
-        and cached.get("tag") == tag
-        and cached.get("repository") in (repository, f"docker.io/{repository}")
-        and isinstance(identifier, str)
-        and len(identifier) >= 12
-        and isinstance(digest, str)
-        and digest.startswith(f"sha256:{identifier}")
-    )
+    def moment(value):
+        try:
+            parsed = datetime.datetime.fromisoformat(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed.tzinfo else None
+
+    created = moment(inspected.get("created_at")) if isinstance(inspected, dict) else None
+    if created is None or not isinstance(log, dict):
+        return None
+    out = dict(log)
+    for key in ("allowed", "blocked"):
+        entries = log.get(key)
+        if not isinstance(entries, list):
+            return None
+        kept = []
+        for entry in entries:
+            seen = moment(entry.get("last_seen")) if isinstance(entry, dict) else None
+            if seen is None:
+                return None
+            if seen >= created:
+                kept.append(entry)
+        out[key] = kept
+    return out
+
+
+# --- sandbox base identity ----------------------------------------------------------------------
+#
+# sbx >= 0.53 creates every sandbox from a digest-qualified v3 workload kit, and `sbx inspect
+# --json` is its own record of what it composed (gates/sbx_create.sh saves it as
+# inspect-<sandbox>.json). The template store is NOT consulted: it reports what a mutable tag maps
+# to today, which can neither prove nor disprove what booted.
+
+def pinned_reference(versions, backend):
+    """`<repository>@<digest>` for `backend`'s pinned workload, or None."""
+    base = ((versions or {}).get("sandbox_bases") or {}).get(backend) or {}
+    if not base.get("base") or not base.get("version"):
+        return None
+    return f"{base['base']}@{base['version']}"
+
+
+def composition_problem(inspected, reference, kit=None):
+    """Why sbx's record does NOT show exactly `reference` (+ the absolute `kit`), or None."""
+    if not reference:
+        return "no pinned workload reference"
+    if not isinstance(inspected, dict):
+        return "no sbx inspect record"
+    expected = [reference] + ([kit] if kit else [])
+    if inspected.get("kits") != expected:
+        return f"composed of {inspected.get('kits')!r}, not exactly {expected!r}"
+    return None

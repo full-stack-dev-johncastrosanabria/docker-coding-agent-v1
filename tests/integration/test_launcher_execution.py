@@ -24,8 +24,10 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = Path(__file__).resolve().parent / "work"
@@ -85,6 +87,9 @@ def stream(*lines, terminal=True):
 
 class ExecutionCase(unittest.TestCase):
     def setUp(self):
+        host = mock.patch.object(sbx_module, "kit_host_problems", return_value=[])
+        host.start()
+        self.addCleanup(host.stop)
         WORK.mkdir(parents=True, exist_ok=True)
         self.dir = WORK / self.id().rsplit(".", 1)[-1]
         shutil.rmtree(self.dir, ignore_errors=True)
@@ -436,6 +441,233 @@ class TestEndings(ExecutionCase):
                 analysis, _, _, _ = instance.execute_agent(timeout=60)
                 self.assertEqual(analysis.steps, 3)
                 self.assertEqual(analysis.run_integrity()["stream"], "complete")
+
+
+# --- the host timer and the stop of the in-VM workload --------------------------------------------
+
+
+class TestHostStopAuthority(ExecutionCase):
+    """A host stop has to be the HOST's, in time and in effect.
+
+    In time: the wall-clock limit is a timer, not a check made when the next event happens to
+    arrive. An agent inside one long tool call writes nothing to the stream, and a deadline that is
+    only looked at between lines would let it run on until that call returned.
+
+    In effect: killing the local `sbx exec` client does not stop the process inside the VM (the
+    command keeps running there, observed live on sbx v0.43.0). So after the agent phase ends, for
+    any reason, the launcher stops every process that was not there before the agent started, and
+    only then collects evidence, re-verifies and retrieves. Otherwise work done after the stop -
+    the rest of an in-flight tool call, or a background job the agent left behind - would reach the
+    change set as if the agent had done it within its limits.
+    """
+
+    def silent_stream(self, silence):
+        self.record_stream(stream(tool_call("one", arguments={"command": "sleep 3600"}),
+                                  tool_call("two", arguments={"command": "ls"})), exit_status=0)
+        self.state["stream_pause"] = {"after_line": 2, "seconds": silence}
+        self.write_state()
+
+    def quiesce_calls(self):
+        return [argv[-1] for argv in self.all_calls() if "DCA_QUIESCE" in argv[-1]]
+
+    def all_calls(self):
+        log = self.state_dir / "calls.jsonl"
+        return [json.loads(line)["argv"] for line in log.read_text(encoding="utf-8").splitlines()]
+
+    def termination(self, instance):
+        return json.loads(Path(instance.request.out, "termination.json").read_text(
+            encoding="utf-8"))
+
+    def test_35_a_silent_stream_is_stopped_by_the_host_timer_at_the_deadline(self):
+        self.silent_stream(silence=8)
+        instance = self.provisioned()
+        instance.host_limits = lambda classification=None: {"steps": 10 ** 6, "retries": 99,
+                                                            "tokens": 10 ** 9,
+                                                            "wall_clock_seconds": 1}
+        started = time.monotonic()
+        analysis, host_stop, _, _ = instance.execute_agent()
+        elapsed = time.monotonic() - started
+        self.assertEqual(host_stop["reason"], "wall_clock")
+        self.assertEqual(analysis.limit_reached, "wall_clock")
+        self.assertEqual(analysis.run_integrity()["stream"], "host-terminated")
+        self.assertEqual(analysis.run_integrity()["agent_exit"], "host-limit")
+        self.assertLess(elapsed, 6, "the host waited for the silent tool call instead of its timer")
+
+    def test_36_the_stop_records_when_it_fired_against_which_deadline(self):
+        self.silent_stream(silence=8)
+        instance = self.provisioned()
+        instance.host_limits = lambda classification=None: {"steps": 10 ** 6, "retries": 99,
+                                                            "tokens": 10 ** 9,
+                                                            "wall_clock_seconds": 1}
+        _, host_stop, _, _ = instance.execute_agent()
+        self.assertEqual(host_stop["deadline_seconds"], 1)
+        self.assertGreaterEqual(host_stop["elapsed_seconds"], 1)
+        self.assertLess(host_stop["elapsed_seconds"], 5)
+        recorded = self.termination(instance)["host_stop"]
+        self.assertEqual(recorded["reason"], "wall_clock")
+        self.assertEqual(recorded["elapsed_seconds"], host_stop["elapsed_seconds"])
+
+    def test_37_the_workload_in_the_vm_is_stopped_after_a_host_limit(self):
+        body = [tool_call(f"call-{n}", arguments={"command": "make"}) for n in range(40)]
+        self.record_stream(stream(*body, terminal=False), exit_status=0)
+        instance = self.provisioned()
+        instance.host_limits = lambda classification=None: {"steps": 5, "retries": 99,
+                                                            "tokens": 10 ** 9,
+                                                            "wall_clock_seconds": 60}
+        _, host_stop, _, _ = instance.execute_agent()
+        self.assertEqual(host_stop["reason"], "steps")
+        scripts = [argv[-1] for argv in self.all_calls()]
+        agent = next(i for i, s in enumerate(scripts) if MARKER in s)
+        baseline = next(i for i, s in enumerate(scripts) if "DCA_PROCESS_BASELINE" in s)
+        quiesce = next(i for i, s in enumerate(scripts) if "DCA_QUIESCE" in s)
+        self.assertLess(baseline, agent, "the process table must be read before the agent starts")
+        self.assertGreater(quiesce, agent)
+        # The baseline (the fake answers 1, 2 and 3 plus its own shell and ps) is what survives.
+        self.assertIn("keep=' 1 2 3 '", scripts[quiesce])
+        recorded = self.termination(instance)
+        self.assertEqual(recorded["host_stop"]["reason"], "steps")
+        self.assertEqual(recorded["workload"][0]["phase"], "agent")
+        self.assertEqual(recorded["workload"][0]["survivors"], [])
+        self.assertEqual(recorded["enforced_limits"]["steps"], 5)
+        # The stop completed after the host decided it, on the same clock, and promptly.
+        gap = (recorded["workload"][0]["elapsed_seconds"]
+               - recorded["host_stop"]["elapsed_seconds"])
+        self.assertGreaterEqual(gap, 0)
+        self.assertLess(gap, 10)
+
+    def test_38_the_workload_is_stopped_even_when_the_agent_ends_on_its_own(self):
+        self.record_stream(stream(tool_call("one", arguments={"command": "ls"})), exit_status=0)
+        instance = self.provisioned()
+        _, host_stop, _, _ = instance.execute_agent(timeout=60)
+        self.assertIsNone(host_stop)
+        self.assertEqual(len(self.quiesce_calls()), 1)
+        recorded = self.termination(instance)
+        self.assertIsNone(recorded["host_stop"])
+        self.assertEqual(recorded["workload"][0]["phase"], "agent")
+
+    def test_39_a_workload_that_cannot_be_stopped_aborts_the_run(self):
+        self.record_stream(stream(tool_call("one", arguments={"command": "ls"})), exit_status=0)
+        self.state["quiesce_output"] = ("SURVIVOR 4242 python3 backfill.py\n"
+                                        "DCA_QUIESCE terminated=3 survivors=1\n")
+        self.write_state()
+        instance = self.provisioned()
+        with self.assertRaises(errors.InfraAbort) as caught:
+            instance.execute_agent(timeout=60)
+        self.assertIn("4242", str(caught.exception))
+        recorded = self.termination(instance)
+        self.assertEqual(recorded["workload"][0]["survivors"], ["4242 python3 backfill.py"])
+
+    def test_39a_an_unreadable_process_table_aborts_before_the_agent_starts(self):
+        self.record_stream(stream(tool_call("one")), exit_status=0)
+        self.state["process_baseline"] = "sh: ps: not found\n"
+        self.write_state()
+        instance = self.provisioned()
+        with self.assertRaises(errors.InfraAbort):
+            instance.execute_agent(timeout=60)
+        self.assertEqual(self.agent_calls(), [], "the agent must not start without a baseline")
+
+    def test_39b_an_unanswered_quiesce_is_not_read_as_a_stopped_workload(self):
+        self.record_stream(stream(tool_call("one")), exit_status=0)
+        self.state["quiesce_output"] = ""
+        self.write_state()
+        instance = self.provisioned()
+        with self.assertRaises(errors.InfraAbort):
+            instance.execute_agent(timeout=60)
+
+
+class TestProcessCleanup(ExecutionCase):
+    """Stream capture must release the client, both pipes and its deadline on every exit."""
+
+    def watch_agent(self):
+        processes = []
+        popen = subprocess.Popen
+
+        def start(argv, *args, **kwargs):
+            proc = popen(argv, *args, **kwargs)
+            if MARKER in argv[-1]:
+                processes.append(proc)
+            return proc
+
+        def release():
+            for proc in processes:
+                if proc.poll() is None:
+                    proc.kill()
+                proc.wait()
+                proc.stdout.close()
+                proc.stderr.close()
+
+        patcher = mock.patch.object(launcher.subprocess, "Popen", side_effect=start)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(release)
+        return processes
+
+    def assert_released(self, processes):
+        self.assertEqual(len(processes), 1)
+        proc = processes[0]
+        self.assertIsNotNone(proc.poll(), "the sbx client is still running")
+        self.assertTrue(proc.stdout.closed, "the event pipe is still open")
+        self.assertTrue(proc.stderr.closed, "the diagnostic pipe is still open")
+
+    def test_41_normal_completion_closes_both_pipes_after_draining_stderr(self):
+        self.record_stream(stream(tool_call("one")), exit_status=0)
+        self.state["exec_stderr"] = "diagnostic tail\n"
+        self.write_state()
+        instance = self.provisioned()
+        processes = self.watch_agent()
+        _, host_stop, status, stderr = instance.execute_agent(timeout=60)
+        self.assertIsNone(host_stop)
+        self.assertEqual(status, 0)
+        self.assertIn("diagnostic tail", stderr)
+        self.assert_released(processes)
+
+    def test_42_a_host_stop_closes_both_pipes(self):
+        self.record_stream(stream(*[tool_call(str(n)) for n in range(20)]), exit_status=0)
+        instance = self.provisioned()
+        instance.host_limits = lambda classification=None: {
+            "steps": 2, "retries": 99, "tokens": 10 ** 9, "wall_clock_seconds": 60}
+        processes = self.watch_agent()
+        _, host_stop, _, _ = instance.execute_agent()
+        self.assertEqual(host_stop["reason"], "steps")
+        self.assert_released(processes)
+
+    def test_43_a_capture_error_reaps_the_client_and_cancels_its_timer(self):
+        self.record_stream(stream(tool_call("one"), tool_call("two")), exit_status=0)
+        self.state["stream_pause"] = {"after_line": 2, "seconds": 30}
+        self.write_state()
+        instance = self.provisioned()
+        processes = self.watch_agent()
+        timers = []
+        timer_factory = launcher.threading.Timer
+
+        def timer(*args, **kwargs):
+            result = timer_factory(*args, **kwargs)
+            timers.append(result)
+            return result
+
+        with mock.patch.object(launcher.threading, "Timer", side_effect=timer), \
+                mock.patch.object(events.StreamAccountant, "feed",
+                                  side_effect=OSError("cannot write event capture")):
+            with self.assertRaises(errors.InfraAbort) as caught:
+                instance.execute_agent(timeout=60)
+        self.assertIn("cannot write event capture", str(caught.exception))
+        self.assert_released(processes)
+        self.assertEqual(len(timers), 1)
+        self.assertFalse(timers[0].is_alive(), "a deadline callback survived the failed capture")
+
+    def test_44_a_capture_error_aborts_without_a_report_and_removes_the_sandbox(self):
+        self.record_stream(stream(tool_call("one")), exit_status=0)
+        instance = self.make()
+        processes = self.watch_agent()
+        with mock.patch.object(events.StreamAccountant, "feed",
+                               side_effect=OSError("cannot write event capture")):
+            with self.assertRaises(errors.InfraAbort) as caught:
+                instance.run()
+        self.assertEqual(caught.exception.exit_code, 4)
+        self.assert_released(processes)
+        self.assertEqual(self.sbx.list_sandboxes(), [])
+        self.assertFalse(Path(instance.request.out, "report.json").exists())
+        self.assertEqual(git(self.repo, "branch", "--list", "dca/*").strip(), "")
 
 
 class TestProgress(ExecutionCase):

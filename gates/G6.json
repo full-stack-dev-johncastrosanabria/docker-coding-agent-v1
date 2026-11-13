@@ -1,33 +1,33 @@
 {
   "gate": "G6",
   "status": "PASS",
-  "run_at": "2026-09-20T01:47:02Z",
+  "run_at": "2026-11-13T07:03:48Z",
   "versions": {
-    "sbx": "v0.43.0",
-    "docker_agent": "v1.136.0"
+    "sbx": "v0.53.0",
+    "docker_agent": "v1.160.0"
   },
   "provenance": {
     "pins": {
-      "docker_agent_artifact_sha256": "a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623",
+      "docker_agent_artifact_sha256": "7ff167391f6f1267d8a1d3ef62856c1a8b7bb99713ffc5bc3702c3b3fcd082ef",
       "sandbox_bases": {
         "claude": {
-          "base": "docker/sandbox-templates:claude-code-docker",
-          "version": "sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2"
+          "base": "docker.io/sbx/claude",
+          "version": "sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9"
         },
         "codex": {
-          "base": "docker/sandbox-templates:docker-agent-docker",
-          "version": "sha256:6a1b26c279bb74321e8cf9599e8d19732a3354814a6ca446a5251702c58ea90b"
+          "base": "docker.io/sbx/shell",
+          "version": "sha256:89ed5d63def6bfb2373d408e3ab6ad55aa5c010f884a182a78299fcf85ea42d1"
         }
       }
     },
-    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+    "runtime_versions_digest": "sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1"
   },
   "criteria": [
     {
       "id": "G6.0a",
       "description": "sbx client and server still match the pinned exact version and the server is running",
       "result": "PASS",
-      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 state running, exit 0"
+      "evidence_ref": "pin v0.53.0, client v0.53.0, server v0.53.0 state running, exit 0"
     },
     {
       "id": "G6.0b",
@@ -43,45 +43,45 @@
     },
     {
       "id": "G6.1",
-      "description": "the pinned docker-agent v1.136.0 artifact is fetched and hashed on the host",
+      "description": "the pinned docker-agent v1.160.0 artifact is fetched and hashed on the host",
       "result": "PASS",
-      "evidence_ref": "https://github.com/docker/docker-agent/releases/download/v1.136.0/docker-agent-linux-arm64 sha256=a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623 bytes=131178992"
+      "evidence_ref": "https://github.com/docker/docker-agent/releases/download/v1.160.0/docker-agent-linux-arm64 sha256=7ff167391f6f1267d8a1d3ef62856c1a8b7bb99713ffc5bc3702c3b3fcd082ef bytes=149527096"
     },
     {
       "id": "G6.1b",
       "description": "the artifact matches the official GitHub release metadata (URL, size, asset digest)",
       "result": "PASS",
-      "evidence_ref": "release asset docker-agent-linux-arm64: url matches, size 131178992 vs downloaded 131178992, digest sha256:a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623 vs computed sha256:a0c95df654a017ad67adc2bb9f0d6e90f7b64ca48faf9be55ac711dea7491623; this is a release-hosting asset digest, not a Docker signature or attestation (gh attestation verify exit 1: none published)"
+      "evidence_ref": "release asset docker-agent-linux-arm64: url matches, size 149527096 vs downloaded 149527096, digest sha256:7ff167391f6f1267d8a1d3ef62856c1a8b7bb99713ffc5bc3702c3b3fcd082ef vs computed sha256:7ff167391f6f1267d8a1d3ef62856c1a8b7bb99713ffc5bc3702c3b3fcd082ef; this is a release-hosting asset digest, not a Docker signature or attestation (gh attestation verify exit 1: none published)"
     },
     {
       "id": "G6.2",
-      "description": "the probe kit validates and stages only host-provided files (no sandbox egress)",
+      "description": "the probe kit is a v3 mixin from host-provided files only, built by the pinned builder",
       "result": "PASS",
-      "evidence_ref": "sbx kit validate exit 0; kit declares no permissions.network and no remote kit source (kit.allowLocalKits default)"
+      "evidence_ref": "frontend line '# syntax=docker/sandbox-kit:3@sha256:adbc0d1ea63451871d5d78111120bb29f2fd2b265e63d39c664ae2c3d722c805'; network-policy capabilities 0; recipe 'FROM scratch;COPY payload/ /;'; buildx builder dca-kit inspect exit 0, BuildKit image moby/buildkit@sha256:c5f8862f52499773af85bc07695b2379ef08e8002352b0df2c4864c91d78dabe"
     },
     {
       "id": "G6.claude.create",
       "description": "claude: mountless sandbox from the claude base, shared skills off",
       "result": "PASS",
-      "evidence_ref": "create exit 0, probe exit 0, sbx resolved workspace 'none · no workspace bind mount', mounts at the workspace path 0, workspace entries 0, mounts at the shared skills path 0, other host-backed mounts (microVM plumbing) /etc/resolv.conf /etc/hosts, os Ubuntu 26.04 LTS"
+      "evidence_ref": "create exit 0, probe exit 0, sbx inspect host_mounts [], mounts at the workspace path 0, workspace entries 0, mounts at the shared skills path 0, other host-backed mounts (microVM plumbing) /etc/resolv.conf, os Docker Hardened Images/Debian GNU/Linux 13 (trixie)"
     },
     {
       "id": "G6.claude.kit",
       "description": "claude: kit files installed (artifact, probe file, manifest, managed settings, two skills)",
       "result": "PASS",
-      "evidence_ref": "docker-agent v1.136.0 sha256 matches the host artifact, probe file yes, manifest yes, managed settings yes, skills yes/yes"
+      "evidence_ref": "docker-agent v1.160.0 sha256 matches the host artifact, probe file yes, manifest yes, managed settings yes, skills yes/yes"
     },
     {
       "id": "G6.claude.python",
       "description": "claude: /usr/bin/python3 exists and is >= 3.11",
       "result": "PASS",
-      "evidence_ref": "/usr/bin/python3 version 3.14.4, version check exit 0"
+      "evidence_ref": "/usr/bin/python3 version 3.14.10, version check exit 0"
     },
     {
       "id": "G6.claude.base",
-      "description": "claude: the exact sandbox base is recorded and the cached template matches it",
+      "description": "claude: the sandbox is exactly the workload kit at the gate-time digest plus the probe kit",
       "result": "PASS",
-      "evidence_ref": "sbx_resolved_base docker/sandbox-templates:claude-code-docker; registry_digest_at_gate_time sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2; cached template repository docker.io/docker/sandbox-templates tag claude-code-docker image id 94670d5b2a24 (sbx template ls --json; a short image id, not a digest on its own), whose id prefixes that registry digest, so the three together name the image sbx actually used"
+      "evidence_ref": "registry digest of docker.io/sbx/claude:latest at gate time sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9; sbx inspect kits ['docker.io/sbx/claude@sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9', '/Users/johnbenjamincastrosanabria/Developer/docker-coding-agent-v1/gates/G6/work/kit']; composition proven"
     },
     {
       "id": "G6.claude.cleanup",
@@ -93,37 +93,31 @@
       "id": "G6.codex.create",
       "description": "codex: mountless sandbox from the codex base, shared skills off",
       "result": "PASS",
-      "evidence_ref": "create exit 0, probe exit 0, sbx resolved workspace 'none · no workspace bind mount', mounts at the workspace path 0, workspace entries 0, mounts at the shared skills path 0, other host-backed mounts (microVM plumbing) /etc/resolv.conf /etc/hosts, os Ubuntu 26.04 LTS"
+      "evidence_ref": "create exit 0, probe exit 0, sbx inspect host_mounts [], mounts at the workspace path 0, workspace entries 0, mounts at the shared skills path 0, other host-backed mounts (microVM plumbing) /etc/resolv.conf, os Docker Hardened Images/Debian GNU/Linux 13 (trixie)"
     },
     {
       "id": "G6.codex.kit",
       "description": "codex: kit files installed (artifact, probe file, manifest, managed settings, two skills)",
       "result": "PASS",
-      "evidence_ref": "docker-agent v1.136.0 sha256 matches the host artifact, probe file yes, manifest yes, managed settings yes, skills yes/yes"
+      "evidence_ref": "docker-agent v1.160.0 sha256 matches the host artifact, probe file yes, manifest yes, managed settings yes, skills yes/yes"
     },
     {
       "id": "G6.codex.python",
       "description": "codex: /usr/bin/python3 exists and is >= 3.11",
       "result": "PASS",
-      "evidence_ref": "/usr/bin/python3 version 3.14.4, version check exit 0"
+      "evidence_ref": "/usr/bin/python3 version 3.14.10, version check exit 0"
     },
     {
       "id": "G6.codex.base",
-      "description": "codex: the exact sandbox base is recorded and the cached template matches it",
+      "description": "codex: the sandbox is exactly the workload kit at the gate-time digest plus the probe kit",
       "result": "PASS",
-      "evidence_ref": "sbx_resolved_base docker/sandbox-templates:docker-agent-docker; registry_digest_at_gate_time sha256:6a1b26c279bb74321e8cf9599e8d19732a3354814a6ca446a5251702c58ea90b; cached template repository docker.io/docker/sandbox-templates tag docker-agent-docker image id 6a1b26c279bb (sbx template ls --json; a short image id, not a digest on its own), whose id prefixes that registry digest, so the three together name the image sbx actually used"
+      "evidence_ref": "registry digest of docker.io/sbx/shell:latest at gate time sha256:89ed5d63def6bfb2373d408e3ab6ad55aa5c010f884a182a78299fcf85ea42d1; sbx inspect kits ['docker.io/sbx/shell@sha256:89ed5d63def6bfb2373d408e3ab6ad55aa5c010f884a182a78299fcf85ea42d1', '/Users/johnbenjamincastrosanabria/Developer/docker-coding-agent-v1/gates/G6/work/kit']; composition proven"
     },
     {
       "id": "G6.codex.cleanup",
       "description": "codex: the probe sandbox was removed by name",
       "result": "PASS",
       "evidence_ref": "sbx rm --force dca-g6-codex exit 0"
-    },
-    {
-      "id": "G6.templates",
-      "description": "the local sbx template store was read (read-only) to identify the bases",
-      "result": "PASS",
-      "evidence_ref": "sbx template ls --json exit 0, 2 cached templates"
     },
     {
       "id": "G6.clean",

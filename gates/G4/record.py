@@ -9,7 +9,7 @@ everything else, on four surfaces that must agree:
   2. `sbx policy check network --sandbox <name> <dest> --json` - the authorizer's decision;
   3. a real connection attempt from inside the sandbox - the proxy either establishes the CONNECT
      tunnel or answers it itself;
-  4. `sbx policy log <name> --json` - the destination appears under allowed_hosts or blocked_hosts
+  4. `sbx policy log <name> --json` - the destination appears under allowed or blocked
      with a matching reason.
 
 Surface 1 is not redundant. Surfaces 2-4 only ever speak about destinations G4 thought to probe, so
@@ -74,6 +74,9 @@ PROFILE_VALUES = ("trusted", "untrusted")
 PROFILES = ("trusted", "untrusted")
 AGENT = {"claude": "claude", "codex": "docker-agent"}
 PORT = 443
+# A destination is a bare host on PORT, or `host:port` for a must-deny host a kit declares on
+# another port (the v3 claude kit's apt mirrors on 80). Only PORT can ever be permitted.
+DENY_ONLY_PORTS = (80,)
 
 # The R12 categories the trusted allowlist may draw on (plan.md: declared package registries,
 # read-only source-control fetch hosts, documentation hosts). A draft candidate in any other
@@ -202,6 +205,17 @@ def host_of(resource):
     return host_port_of(resource)[0]
 
 
+def dest_key(host, port):
+    """The destination token for host:port: the bare host on PORT, `host:port` otherwise."""
+    return host if port in (None, PORT) else f"{host}:{port}"
+
+
+def target_of(dest):
+    """The `host:port` the policy check and the policy log speak about for a destination."""
+    return dest if ":" in dest else f"{dest}:{PORT}"
+
+
+
 # --- the trusted allowlist, derived from the committed T014 draft --------------------------------
 
 def trusted_candidates(draft):
@@ -283,14 +297,18 @@ def inventory_hosts(inventory, backend):
         host = entry.get("host")
         if not isinstance(host, str) or not HOSTNAME.match(host):
             raise ValueError(f"{where} host {host!r} is not a bare lowercase hostname")
-        if host in seen:
-            raise ValueError(f"the inventory lists {host} twice for {backend}")
-        seen.add(host)
-        if entry.get("port") != PORT:
-            raise ValueError(f"{where} ({host}) port {entry.get('port')!r} is not {PORT}")
+        port = entry.get("port")
+        if port != PORT and port not in DENY_ONLY_PORTS:
+            raise ValueError(f"{where} ({host}) port {port!r} is not {PORT} or {DENY_ONLY_PORTS}")
+        key = dest_key(host, port)
+        if key in seen:
+            raise ValueError(f"the inventory lists {key} twice for {backend}")
+        seen.add(key)
         required = entry.get("sandbox_required")
         if not isinstance(required, bool):
             raise ValueError(f"{where} ({host}) sandbox_required {required!r} is not a boolean")
+        if port != PORT and required is not False:
+            raise ValueError(f"{where} ({host}) on port {port} can only be a must-deny host")
         profiles = entry.get("profiles")
         if not isinstance(profiles, list) or any(not isinstance(v, str) for v in profiles):
             raise ValueError(f"{where} ({host}) profiles {profiles!r} is not a list of strings")
@@ -325,9 +343,10 @@ def cells(inventory, draft):
         hosts = inventory_hosts(inventory, backend)
         if not hosts:
             raise ValueError(f"the inventory records no hosts for {backend}")
-        all_by_backend[backend] = [h["host"] for h in hosts]
-        required_by_backend[backend] = [h["host"] for h in hosts if h["sandbox_required"]]
-        kit_allowed_by_backend[backend] = {h["host"] for h in hosts if h.get("source") == "kit"}
+        key = lambda h: dest_key(h["host"], h["port"])
+        all_by_backend[backend] = [key(h) for h in hosts]
+        required_by_backend[backend] = [key(h) for h in hosts if h["sandbox_required"]]
+        kit_allowed_by_backend[backend] = {key(h) for h in hosts if h.get("source") == "kit"}
         if not required_by_backend[backend]:
             raise ValueError(f"the inventory marks no host sandbox_required for {backend}")
         # A sandbox-required host is required for a CELL only where the inventory says the sandbox
@@ -335,7 +354,7 @@ def cells(inventory, draft):
         # untrusted: a host promoted with profiles ["trusted"] stays must-deny for untrusted.
         for profile in PROFILES:
             required_by_cell[(backend, profile)] = [
-                h["host"] for h in hosts if h["sandbox_required"] and profile in h["profiles"]
+                key(h) for h in hosts if h["sandbox_required"] and profile in h["profiles"]
             ]
 
     out = []
@@ -483,7 +502,8 @@ def effective_policy_failures(cell, document):
                 )
                 continue
             host, port = host_port_of(resource)
-            if port is not None and port != PORT:
+            host = dest_key(host, port)
+            if port is not None and port != PORT and host not in cell["expected"]:
                 # The V1 policy names hosts on PORT and nothing else - the inventory and the draft
                 # are both validated to declare no other port. Reducing a rule to its bare host
                 # here would read an allow like `github.com:22` as this profile's own 443 allow,
@@ -491,9 +511,10 @@ def effective_policy_failures(cell, document):
                 # and the log all speak only about <host>:PORT. Surface 1 is the only place a
                 # port-qualified grant can be seen, so it fails closed on both decisions - a deny
                 # on another port does not neutralize a kit allow on PORT either.
+                # A must-deny destination the matrix names on that port is accounted for below.
                 failures.append(
                     f"network {decision} rule {rule.get('id')} names {resource!r}, a port other "
-                    f"than {PORT}; this profile grants and denies hosts on {PORT} only"
+                    f"than {PORT} that this profile's matrix does not name"
                 )
                 continue
             if decision == "allow":
@@ -575,11 +596,11 @@ def log_decision(log, host):
     """How `sbx policy log --json` recorded this host, or None when it recorded nothing."""
     if not isinstance(log, dict):
         return None
-    target = f"{host}:{PORT}"
-    for entry in log.get("allowed_hosts") or []:
+    target = target_of(host)
+    for entry in log.get("allowed") or []:
         if isinstance(entry, dict) and entry.get("host") == target:
             return ALLOW
-    for entry in log.get("blocked_hosts") or []:
+    for entry in log.get("blocked") or []:
         if isinstance(entry, dict) and entry.get("host") == target:
             reason = entry.get("reason") or ""
             if reason == "Denied by local rule":
@@ -592,10 +613,10 @@ def log_decision(log, host):
 
 def logged_allowed_hosts(log):
     """Every host the log shows the sandbox actually reached, or None when unreadable."""
-    if not isinstance(log, dict) or not isinstance(log.get("allowed_hosts"), list):
+    if not isinstance(log, dict) or not isinstance(log.get("allowed"), list):
         return None
     out = set()
-    for entry in log["allowed_hosts"]:
+    for entry in log["allowed"]:
         if not isinstance(entry, dict) or not isinstance(entry.get("host"), str):
             return None
         out.add(entry["host"])
@@ -636,7 +657,7 @@ def surprise_failures(cell, log):
     reached = logged_allowed_hosts(log)
     if reached is None:
         return ["the policy log's allowed hosts could not be read"]
-    permitted = {f"{host}:{PORT}" for host, decision in cell["expected"].items() if decision == ALLOW}
+    permitted = {target_of(host) for host, decision in cell["expected"].items() if decision == ALLOW}
     extra = sorted(reached - permitted)
     return [f"the sandbox reached {host}, which this profile does not permit" for host in extra]
 
@@ -744,7 +765,7 @@ def preflight(obs, work):
     policy = read_json(work, "pf-policy.json")
     listing = read_json(work, "pf-ls.json")
     refusals = preflight_module.ssh_forwarding_refusals(forwarding, socket_path)
-    running = (listing or {}).get("sandboxes") if isinstance(listing, dict) else None
+    running = preflight_module.sandbox_list(listing)
 
     return [
         (
@@ -926,7 +947,9 @@ def evaluate(obs, work, inventory_file=INVENTORY_FILE, draft_file=DRAFT_FILE):
             host, _, body = block.partition("\n")
             if host.strip():
                 probes[host.strip()] = body
-        log = read_json(work, f"log-{name}.json")
+        # Only this sandbox's lifetime: sbx keeps the log of an earlier sandbox of the same name.
+        log = preflight_module.policy_log_since(
+            read_json(work, f"log-{name}.json"), read_json(work, f"inspect-{name}.json"))
 
         failures = cell_failures(cell, checks, probes, log) if applied else ["the cell did not run"]
         rows.append((
@@ -1020,8 +1043,8 @@ def evaluate(obs, work, inventory_file=INVENTORY_FILE, draft_file=DRAFT_FILE):
     remaining = read_json(work, "ls-after.json")
     names = {cell["name"] for cell in matrix or []}
     left = (
-        [e for e in (remaining or {}).get("sandboxes", []) if isinstance(e, dict) and e.get("name") in names]
-        if isinstance(remaining, dict)
+        [e for e in preflight_module.sandbox_list(remaining) if e.get("name") in names]
+        if preflight_module.sandbox_list(remaining) is not None
         else None
     )
     removed = all(

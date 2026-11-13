@@ -45,6 +45,11 @@ def _codex(tool, tool_input, agent="root"):
 
 #: Probes with this prefix run before a Context Record exists; all others run after one is staged.
 ORDERING_PREFIX = "ordering."
+#: A link the fixture repository ships: inside the workspace by name, outside it by target.
+OUTSIDE_LINK = "outside-link"
+OUTSIDE_TARGET = "/var/dca-t062-outside"
+#: The third field of a probe is a deny class (the gate must say `DCA_DENY <n>:`) or this literal.
+APPROVAL_REQUIRED = "DCA_APPROVAL_REQUIRED"
 
 #: A valid Context Record, staged the way a run's agent writes it (FR-001).
 CONTEXT_RECORD = {
@@ -128,6 +133,42 @@ def payloads(backend):
                                               "content": "x"}, researcher), 2, 27, ""),
         "deny.reviewer_shell": (sub(shell, {"command": "rm -rf /workspace/answer.txt"}, reviewer),
                                 2, 27, ""),
+
+        # --- T110, added 2026-11-13: the shell reading. A shell call names its targets in words,
+        # so these are what the gate must still ALLOW (an over-blocking gate fails ordinary work,
+        # and that is the costlier error: the sandbox stands behind a missed denial) and what it
+        # must refuse. The 26 probes above are unchanged. ------------------------------------------
+        "shell.allow_cat_source": (make(shell, {"command": "cat pkg/sub/module.py"}), 0, None, ""),
+        "shell.allow_git_inspection": (make(shell, {
+            "command": "git status --short && git diff -- README.md && git log --oneline -3"}),
+            0, None, ""),
+        "shell.allow_git_commit": (make(shell, {"command": "git commit -m 'fix: answer'"}),
+                                   0, None, ""),
+        "shell.allow_declared_dependencies": (make(shell, {
+            "command": "pip install -r requirements.txt"}), 0, None, ""),
+        "shell.allow_redirect_to_tmp": (make(shell, {
+            "command": "python3 -m unittest > /tmp/out.txt 2>&1"}), 0, None, ""),
+        "shell.allow_listing_outside": (make(shell, {"command": "ls /usr/bin /tmp"}), 0, None, ""),
+        "shell.allow_substitution": (make(shell, {
+            "command": "echo \"$(date)\" && ls \"$(git rev-parse --show-toplevel)\""}),
+            0, None, ""),
+        "shell.allow_secret_word_in_code": (make(shell, {
+            "command": "python3 -c \"print('a.key in text')\""}), 0, None, ""),
+        "shell.allow_workspace_symlink": (make(shell, {"command": "ln -s README.md readme-link"}),
+                                          0, None, ""),
+        "shell.deny_credential_cat": (make(shell, {"command": "cat .env"}), 2, 2, ""),
+        "shell.deny_credential_redirect": (make(shell, {
+            "command": "base64 < deploy/.ssh/id_ed25519"}), 2, 2, ""),
+        "shell.deny_forced_push": (make(shell, {"command": "git push origin +main"}), 2, 19, ""),
+        "shell.deny_history_rewrite": (make(shell, {
+            "command": "git filter-branch --tree-filter true HEAD"}), 2, 19, ""),
+        "shell.deny_symlink_escape": (make(shell, {
+            "command": f"cp README.md {OUTSIDE_LINK}/README.md"}), 2, 5, ""),
+        # ASK without a grant is a refusal that opens a request, not a DCA_DENY line.
+        "shell.ask_new_dependency": (make(shell, {"command": "pip install requests"}),
+                                     2, APPROVAL_REQUIRED, ""),
+        "shell.ask_plain_push": (make(shell, {"command": "git push origin topic"}),
+                                 2, APPROVAL_REQUIRED, ""),
 
         # --- item 4: the environment a hostile repository controls is inert ------------------------
         "hostile_env.allow_still_allows": (make(read, {"path": "/workspace/README.md"}),

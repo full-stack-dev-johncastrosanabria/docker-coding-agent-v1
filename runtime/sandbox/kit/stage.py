@@ -27,6 +27,7 @@ one.
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -132,18 +133,83 @@ def _copy_tree_files(source, target, names):
         shutil.copyfile(os.path.join(source, name), os.path.join(target, name))
 
 
-def _stage_agents(kit_dir, backends):
+def _sub(pattern, replacement, text, what):
+    """re.subn that refuses to be a silent no-op: a reshaped config must fail the build, not ship
+    without the developer's choice in it."""
+    text, count = re.subn(pattern, replacement, text, flags=re.M)
+    if not count:
+        raise StagingError(f"cannot apply {what}: the staged agent config no longer has the "
+                           "line it is set on")
+    return text
+
+
+def render_agent_config(backend, text, choice):
+    """The backend config with the developer's model / effort / autocompact choice applied.
+
+    `choice` was validated by the launcher; values are still written as JSON strings (valid YAML
+    scalars) so no value can open a new key. No choice returns `text` unchanged, byte for byte.
+    """
+    model, effort, compact = (choice or {}).get("model"), (choice or {}).get("effort"), \
+        (choice or {}).get("autocompact")
+    if backend == "claude":
+        if model:
+            text = _sub(r"^(\s+)type: claude-code$", lambda m: f"{m.group(0)}\n{m.group(1)}"
+                        f"model: {json.dumps(model)}", text, "the Claude model")
+        if effort:
+            text = _sub(r"^(\s+effort: ).*$", lambda m: m.group(1) + json.dumps(effort), text,
+                        "the Claude effort")
+        return text                                   # Claude's autocompact is managed env
+    if model or effort:
+        current = re.search(r"^\s+model: (\S+)/(\S+)$", text, re.M)
+        if current is None:
+            raise StagingError("cannot apply the Codex model: no `model: provider/name` line")
+        provider, name = (model.split("/", 1) if model and "/" in model
+                          else (current.group(1), model or current.group(2)))
+        entry = f"models:\n  dca:\n    provider: {json.dumps(provider)}\n" \
+                f"    model: {json.dumps(name)}\n"
+        if effort:
+            entry += f"    thinking_budget: {json.dumps(effort)}\n"
+        text = _sub(r"^(\s+)model: \S+/\S+$", lambda m: f"{m.group(1)}model: dca", text,
+                    "the Codex model")
+        text = _sub(r"^agents:$", lambda m: f"{entry}\n{m.group(0)}", text, "the Codex model")
+    if compact == "off":
+        text = _sub(r"^(\s+session_compaction: )true$", r"\1false", text, "Codex autocompact")
+    elif compact not in (None, "on"):
+        text = _sub(r"^(\s+compaction_threshold: ).*$",
+                    lambda m: f"{m.group(1)}{int(compact) / 100}", text, "Codex autocompact")
+    return text
+
+
+def claude_compaction_env(choice):
+    """Claude Code reads autocompact only from its environment; the managed env is where the
+    kit pins it, so a repository cannot turn it back."""
+    compact = (choice or {}).get("autocompact")
+    if compact == "off":
+        return {"DISABLE_AUTO_COMPACT": "1"}
+    if compact not in (None, "on"):
+        return {"CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": str(int(compact))}
+    return {}
+
+
+def _stage_agents(kit_dir, backends, choice=None):
     """`<KIT_DIR>/agents/`: the backend configs plus the instructions they reference."""
     agents_dir = os.path.join(kit_dir, "agents")
     os.makedirs(agents_dir, exist_ok=True)
     for backend in backends:
         source = os.path.join(AGENTS_SRC, f"{backend}.yaml")
-        if os.path.isfile(source):
+        if not os.path.isfile(source):
+            continue
+        if not choice:
             shutil.copyfile(source, os.path.join(agents_dir, f"{backend}.yaml"))
+            continue
+        with open(source, encoding="utf-8") as handle:
+            text = render_agent_config(backend, handle.read(), choice)
+        with open(os.path.join(agents_dir, f"{backend}.yaml"), "w", encoding="utf-8") as handle:
+            handle.write(text)
     _copy_tree_files(INSTRUCTIONS_SRC, os.path.join(agents_dir, "instructions"), INSTRUCTIONS)
 
 
-def _stage_claude(kit_dir, skills_source):
+def _stage_claude(kit_dir, skills_source, choice=None):
     """Claude's managed material, staged for the installer to place under /etc/claude-code.
 
     The managed `CLAUDE.md` is a byte copy of `runtime/instructions/root.md`, and the skill copies
@@ -152,8 +218,17 @@ def _stage_claude(kit_dir, skills_source):
     """
     target = os.path.join(kit_dir, "backends", "claude")
     os.makedirs(target, exist_ok=True)
-    shutil.copyfile(os.path.join(CLAUDE_SRC, "managed-settings.json"),
-                    os.path.join(target, "managed-settings.json"))
+    extra = claude_compaction_env(choice)
+    if not extra:
+        shutil.copyfile(os.path.join(CLAUDE_SRC, "managed-settings.json"),
+                        os.path.join(target, "managed-settings.json"))
+    else:
+        with open(os.path.join(CLAUDE_SRC, "managed-settings.json"), encoding="utf-8") as handle:
+            settings = json.load(handle)
+        settings["env"] = dict(settings.get("env") or {}, **extra)
+        with open(os.path.join(target, "managed-settings.json"), "w", encoding="utf-8") as handle:
+            json.dump(settings, handle, indent=2, sort_keys=True)
+            handle.write("\n")
     shutil.copyfile(os.path.join(INSTRUCTIONS_SRC, "root.md"), os.path.join(target, "CLAUDE.md"))
     _copy_tree_files(os.path.join(CLAUDE_SRC, "agents"), os.path.join(target, "agents"), SUBAGENTS)
     for name in RUNTIME_SKILLS:
@@ -201,7 +276,8 @@ def _stage_artifact(kit_dir, artifact):
 
 
 def stage(prefix, python=PRODUCTION_PYTHON, skills_source=None, policy_source=POLICY_SRC,
-          backends=None, artifact=None, eligibility_path=ELIGIBILITY, install_prefix=None):
+          backends=None, artifact=None, eligibility_path=ELIGIBILITY, install_prefix=None,
+          choice=None):
     """Lay out `<prefix>/opt/dca/...`. Returns the kit directory.
 
     `prefix` is where the files are WRITTEN. `install_prefix` is where they will RUN, and it is
@@ -267,9 +343,9 @@ def stage(prefix, python=PRODUCTION_PYTHON, skills_source=None, policy_source=PO
 
     if os.path.isdir(INSTRUCTIONS_SRC) and os.path.isfile(
             os.path.join(INSTRUCTIONS_SRC, "root.md")):
-        _stage_agents(kit_dir, backends)
+        _stage_agents(kit_dir, backends, choice)
         if "claude" in backends and skills_source is not None:
-            _stage_claude(kit_dir, str(skills_source))
+            _stage_claude(kit_dir, str(skills_source), choice)
         if "codex" in backends:
             _stage_codex(kit_dir)
 
@@ -311,81 +387,87 @@ if __name__ == "__main__":
 
 # --- the sbx kit -----------------------------------------------------------------------------------
 
-#: Where the kit's staged payload lands inside the sandbox image before the install step runs.
-KIT_STAGING = "/home/agent/dca-kit"
+#: The v3 descriptor's file name inside the kit directory. sbx names the kit after the DIRECTORY,
+#: so callers pass an absolute directory path whose basename is a valid kit name.
+KIT_DESCRIPTOR = "dca-runtime.yaml"
 #: Where the pinned docker-agent artifact is looked for on the host, unless a caller says otherwise.
 DEFAULT_ARTIFACT = os.path.join(ROOT, "gates", "G6", "work", "docker-agent-linux-arm64")
 
-SPEC_TEMPLATE = """# Production sandbox kit for docker-coding-agent-v1 (tasks.md T056).
+SPEC_TEMPLATE = """# syntax={frontend}
+# Production sandbox kit for docker-coding-agent-v1 (tasks.md T056), as a v3 MIXIN.
 #
 # GENERATED by runtime/sandbox/kit/stage.py. Do not edit a built kit: its payload hashes are
-# recorded in <KIT_DIR>/kit-manifest.json, and the in-VM preflight refuses a kit whose files do not
+# recorded in /opt/dca/kit-manifest.json, and the in-VM preflight refuses a kit whose files do not
 # match it.
 #
-# Mixin kit, schemaVersion 2. It declares NO `permissions.network`: every file it installs is
-# staged from the host, so the sandbox needs no egress to be provisioned. That matters under the
-# G0 deny-all bootstrap policy, where a kit that fetched anything would simply fail.
+# The overlay is `payload/` copied onto the pinned workload, so every trusted file arrives owned by
+# root and no staging copy is ever left in the agent's home. The frontend is pinned by digest. The
+# kit declares NO network-policy: everything it installs is in the overlay, so provisioning needs
+# no egress under the deny-all policy.
 #
-# The install step runs as root and is the only thing that writes the trusted material. It
-# verifies the pinned docker-agent artifact's SHA-256 before installing it, so a substituted
-# binary fails provisioning (exit 4) instead of running the task.
-schemaVersion: "2"
+# The install hook runs as root, once, before the agent starts. It verifies the pinned
+# docker-agent artifact's SHA-256 before anything uses it, so a substituted binary fails
+# provisioning instead of running the task.
+schemaVersion: "3"
 kind: mixin
-name: dca-runtime
-version: "1.0.0"
 displayName: docker-coding-agent-v1 runtime kit
-description: Installs the pinned docker-agent, the policy gate, the trusted skill root and the\\
+description: Installs the pinned docker-agent, the policy gate, the trusted skill root and the
   backend material for the available backends.
-setup:
-  install:
-    - description: install the dca runtime kit
-      user: "0"
-      command: |
-        set -eu
-        expected={artifact_sha256}
-        actual=$(sha256sum {staging}/opt/dca/bin/docker-agent | cut -d' ' -f1)
-        if [ "$actual" != "$expected" ]; then
-            echo "dca kit: docker-agent artifact sha256 $actual does not match the pin $expected" >&2
-            exit 1
-        fi
-        install -d -m 0755 /opt /opt/dca
-        cp -a {staging}/opt/dca/. /opt/dca/
-        chown -R 0:0 /opt/dca
-        chmod 0755 /opt/dca/bin/docker-agent /opt/dca/bin/dca-gate /opt/dca/bin/dca-fingerprint
-{claude_install}{codex_install}        install -d -m 0755 -o 0 -g 0 /run/dca
-        install -d -m 0777 /run/dca/out /run/dca/state
-        rm -rf {staging}
-        /usr/bin/python3 -I /opt/dca/lib/dca/kit_preflight.py /opt/dca {codex_config_path}
+version: "1.0.0"
+provides: ["dca-runtime@1.0.0"]
+build: |
+  FROM scratch
+  COPY payload/ /
+capabilities:
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - description: install the dca runtime kit
+          user: "0"
+          command: |
+            set -eu
+            expected={artifact_sha256}
+            actual=$(sha256sum /opt/dca/bin/docker-agent | cut -d' ' -f1)
+            if [ "$actual" != "$expected" ]; then
+                echo "dca kit: docker-agent artifact sha256 $actual does not match the pin $expected" >&2
+                exit 1
+            fi
+            chown -R 0:0 /opt/dca
+            chmod -R go-w /opt/dca
+            chmod 0755 /opt/dca/bin/docker-agent /opt/dca/bin/dca-gate /opt/dca/bin/dca-fingerprint
+{claude_install}{codex_install}            install -d -m 0755 -o 0 -g 0 /run/dca
+            install -d -m 0777 /run/dca/out /run/dca/state
+            /usr/bin/python3 -I /opt/dca/lib/dca/kit_preflight.py /opt/dca {codex_config_path}
 """
 
-CLAUDE_INSTALL = """        install -d -m 0755 -o 0 -g 0 /etc/claude-code /etc/claude-code/.claude \\
-            /etc/claude-code/.claude/agents /etc/claude-code/.claude/skills
-        install -m 0644 -o 0 -g 0 /opt/dca/backends/claude/managed-settings.json \\
-            /etc/claude-code/managed-settings.json
-        install -m 0644 -o 0 -g 0 /opt/dca/backends/claude/CLAUDE.md /etc/claude-code/CLAUDE.md
-        for a in dca-researcher dca-reviewer; do
-            install -m 0644 -o 0 -g 0 "/opt/dca/backends/claude/agents/$a.md" \\
-                "/etc/claude-code/.claude/agents/$a.md"
-        done
-        for s in change-receipt repository-navigation root-cause-debugging verification; do
-            install -d -m 0755 -o 0 -g 0 "/etc/claude-code/.claude/skills/$s"
-            install -m 0644 -o 0 -g 0 "/opt/dca/backends/claude/skills/$s/SKILL.md" \\
-                "/etc/claude-code/.claude/skills/$s/SKILL.md"
-        done
+CLAUDE_INSTALL = """            install -d -m 0755 -o 0 -g 0 /etc/claude-code /etc/claude-code/.claude \\
+                /etc/claude-code/.claude/agents /etc/claude-code/.claude/skills
+            install -m 0644 -o 0 -g 0 /opt/dca/backends/claude/managed-settings.json \\
+                /etc/claude-code/managed-settings.json
+            install -m 0644 -o 0 -g 0 /opt/dca/backends/claude/CLAUDE.md /etc/claude-code/CLAUDE.md
+            for a in dca-researcher dca-reviewer; do
+                install -m 0644 -o 0 -g 0 "/opt/dca/backends/claude/agents/$a.md" \\
+                    "/etc/claude-code/.claude/agents/$a.md"
+            done
+            for s in change-receipt repository-navigation root-cause-debugging verification; do
+                install -d -m 0755 -o 0 -g 0 "/etc/claude-code/.claude/skills/$s"
+                install -m 0644 -o 0 -g 0 "/opt/dca/backends/claude/skills/$s/SKILL.md" \\
+                    "/etc/claude-code/.claude/skills/$s/SKILL.md"
+            done
 """
 
-CODEX_INSTALL = """        install -d -m 0755 /home/agent/.config /home/agent/.config/cagent
-        install -m 0644 /opt/dca/backends/codex/config.yaml \\
-            /home/agent/.config/cagent/config.yaml
-        chown -R agent:agent /home/agent/.config || true
+CODEX_INSTALL = """            install -d -m 0755 /home/agent/.config /home/agent/.config/cagent
+            install -m 0644 /opt/dca/backends/codex/config.yaml \\
+                /home/agent/.config/cagent/config.yaml
+            chown -R agent:agent /home/agent/.config || true
 """
 
 CODEX_CONFIG_PATH = "/home/agent/.config/cagent/config.yaml"
 
 
 def build_sbx_kit(destination, backends=None, artifact=None, skills_source=None,
-                  eligibility_path=ELIGIBILITY):
-    """Build a complete `sbx create --kit` directory. Returns its path.
+                  eligibility_path=ELIGIBILITY, choice=None):
+    """Build a complete v3 `sbx create --kit` mixin directory. Returns its absolute path.
 
     The payload is laid out by `stage()` itself, under the kit's staging path, so the bytes that
     reach the VM are the bytes `stage()` produced and hashed - there is no second copy of the
@@ -394,11 +476,8 @@ def build_sbx_kit(destination, backends=None, artifact=None, skills_source=None,
     destination = os.path.abspath(str(destination))
     if os.path.isdir(destination):
         shutil.rmtree(destination)
-    # Kit `files/home/` is installed at the sandbox user's home (/home/agent), not at /.
-    # Using `files/home/agent/` would land the payload at /home/agent/agent/ and make the
-    # installer fail its pinned-artifact check before any production asset is installed.
-    payload_root = os.path.join(destination, "files", "home",
-                                os.path.relpath(KIT_STAGING, "/home/agent"))
+    # The overlay root: `COPY payload/ /` lands `payload/opt/dca` at /opt/dca in the VM.
+    payload_root = os.path.join(destination, "payload")
     os.makedirs(payload_root, exist_ok=True)
 
     artifact = artifact or DEFAULT_ARTIFACT
@@ -413,17 +492,18 @@ def build_sbx_kit(destination, backends=None, artifact=None, skills_source=None,
     # rendered against the production prefix, never against this temporary staging path.
     stage(payload_root, skills_source=skills_source or os.path.join(ROOT, "runtime", "skills"),
           backends=backends, artifact=artifact, eligibility_path=eligibility_path,
-          install_prefix=PRODUCTION_PREFIX)
+          install_prefix=PRODUCTION_PREFIX, choice=choice)
 
     with open(VERSIONS, encoding="utf-8") as handle:
-        expected = json.load(handle)["docker_agent_artifact"]["sha256"]
+        versions = json.load(handle)
+    expected = versions["docker_agent_artifact"]["sha256"]
     spec = SPEC_TEMPLATE.format(
+        frontend=versions["kit_build"]["frontend"],
         artifact_sha256=expected,
-        staging=KIT_STAGING,
         claude_install=CLAUDE_INSTALL if "claude" in backends else "",
         codex_install=CODEX_INSTALL if "codex" in backends else "",
         codex_config_path=CODEX_CONFIG_PATH if "codex" in backends else "/dev/null",
     )
-    with open(os.path.join(destination, "spec.yaml"), "w", encoding="utf-8") as handle:
+    with open(os.path.join(destination, KIT_DESCRIPTOR), "w", encoding="utf-8") as handle:
         handle.write(spec)
     return destination

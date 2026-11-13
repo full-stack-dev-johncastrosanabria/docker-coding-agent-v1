@@ -1,0 +1,94 @@
+diff --git a/pricing/cli.py b/pricing/cli.py
+index 2800b66..3853322 100644
+--- a/pricing/cli.py
++++ b/pricing/cli.py
+@@ -5,9 +5,12 @@ from pricing.lines import line_total
+ 
+ 
+ def render(lines):
+-    """One row per line, then the invoice total."""
++    """One row per line, then the invoice total.
++
++    Every amount comes from `line_total`, so a row can never disagree with the total.
++    """
+     rows = []
+-    for number, (quantity, unit_price) in enumerate(lines, start=1):
+-        rows.append(f"{number}. {quantity} x {unit_price} = {line_total(quantity, unit_price)}")
++    for number, line in enumerate(lines, start=1):
++        rows.append(f"{number}. {line[0]} x {line[1]} = {line_total(*line)}")
+     rows.append(f"total = {invoice_total(lines)}")
+     return "\n".join(rows)
+diff --git a/pricing/invoice.py b/pricing/invoice.py
+index b138f23..3bd0de9 100644
+--- a/pricing/invoice.py
++++ b/pricing/invoice.py
+@@ -6,6 +6,7 @@ from pricing.lines import line_total
+ def invoice_total(lines):
+     """Sum every line's total.
+ 
+-    `lines` is a sequence of `(quantity, unit_price)` pairs.
++    `lines` is a sequence of `(quantity, unit_price)` or
++    `(quantity, unit_price, discount_percent)` lines.
+     """
+-    return sum(line_total(quantity, unit_price) for quantity, unit_price in lines)
++    return sum(line_total(*line) for line in lines)
+diff --git a/pricing/lines.py b/pricing/lines.py
+index 19798cd..4c22acf 100644
+--- a/pricing/lines.py
++++ b/pricing/lines.py
+@@ -1,13 +1,17 @@
+ """Line-item arithmetic. Every amount is a whole number of cents."""
+ 
+ 
+-def line_total(quantity, unit_price):
+-    """The total for one invoice line.
++def line_total(quantity, unit_price, discount_percent=0):
++    """The total for one invoice line, after its discount.
+ 
+-    `quantity` and `unit_price` are non-negative integers.
++    `quantity` and `unit_price` are non-negative integers. `discount_percent` is a whole percentage
++    from 0 to 100, and its amount is rounded down to whole cents.
+     """
+     if quantity < 0:
+         raise ValueError("quantity must not be negative")
+     if unit_price < 0:
+         raise ValueError("unit_price must not be negative")
+-    return quantity * unit_price
++    if discount_percent < 0 or discount_percent > 100:
++        raise ValueError("discount_percent must be between 0 and 100")
++    subtotal = quantity * unit_price
++    return subtotal - (subtotal * discount_percent) // 100
+diff --git a/tests/test_discount.py b/tests/test_discount.py
+new file mode 100644
+index 0000000..ff7b22c
+--- /dev/null
++++ b/tests/test_discount.py
+@@ -0,0 +1,28 @@
++import unittest
++
++from pricing.cli import render
++from pricing.invoice import invoice_total
++from pricing.lines import line_total
++
++
++class TestDiscount(unittest.TestCase):
++    def test_the_discount_amount_is_rounded_down(self):
++        self.assertEqual(line_total(1, 99, 10), 90)
++
++    def test_an_absent_discount_keeps_the_old_total(self):
++        self.assertEqual(line_total(3, 250), 750)
++
++    def test_an_out_of_range_discount_is_rejected(self):
++        for percent in (-1, 101):
++            with self.subTest(percent=percent):
++                with self.assertRaises(ValueError):
++                    line_total(1, 100, percent)
++
++    def test_every_component_uses_the_same_discounted_amount(self):
++        lines = [(2, 500, 50), (1, 125)]
++        self.assertEqual(invoice_total(lines), 625)
++        self.assertEqual(int(render(lines).rsplit("= ", 1)[1]), 625)
++
++
++if __name__ == "__main__":
++    unittest.main()

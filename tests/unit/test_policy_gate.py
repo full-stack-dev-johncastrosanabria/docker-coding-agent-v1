@@ -831,5 +831,145 @@ class OrderingRuleAgreesWithTheHost(GateHarness):
                 self.assertEqual(gate_accepts, host_accepts)
 
 
+class ShellPolicy(GateHarness):
+    """A shell command names its targets in words, so the gate reads the words.
+
+    Without this, `cat .env`, `pip install x` and `git push -f` were ordinary class-1 calls and only
+    the sandbox stood behind them. The reading is cooperative - it stops the plain forms a model
+    types, not a determined evasion - and it must not turn ordinary commands into refusals.
+    """
+
+    def setUp(self):
+        super().setUp()
+        (self.prefix / "run" / "dca" / "out" / "context.json").write_text(
+            json.dumps(VALID_RECORD), encoding="utf-8")
+
+    def bash(self, command):
+        return self.run_gate(self.claude("Bash", {"command": command}))
+
+    def test_84_reading_a_credential_path_in_a_shell_command_is_class_2_deny(self):
+        for command in ("cat .env", "cat ./deploy/.ssh/id_ed25519", "head -c 40 ~/.ssh/id_rsa",
+                        "cat $HOME/.aws/credentials", "sudo cat .env", "echo hi && base64 < .env",
+                        "docker run --env-file=.env img", "sh -c 'cat certs/server.pem'"):
+            with self.subTest(command=command):
+                self.assertDeny(self.bash(command), 2)
+                self.assertEqual(self.log()[-1]["class"], 2)
+        self.assertEqual(self.approvals(), [], "a DENY class opens no approval request")
+
+    def test_85_a_forced_push_or_whole_history_rewrite_is_class_19_deny(self):
+        for command in ("git push --force origin main", "git push -f", "git push origin +main",
+                        "git push origin :main", "git push --force-with-lease=main origin main",
+                        "git -C . push --mirror backup", "git push --delete origin main",
+                        "git filter-branch --tree-filter 'rm -f x' HEAD",
+                        "cd . && git filter-repo --path x --invert-paths"):
+            with self.subTest(command=command):
+                self.assertDeny(self.bash(command), 19)
+                self.assertEqual(self.log()[-1]["class"], 19)
+
+    def test_86_a_new_dependency_is_class_15_ask_with_a_stable_target(self):
+        for command in ("pip install requests", "pip3 install -q requests",
+                        "python3 -m pip install requests", "uv pip install requests"):
+            with self.subTest(command=command):
+                result = self.bash(command)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("DCA_APPROVAL_REQUIRED", result.stderr)
+                self.assertEqual(self.approvals()[-1]["action_class"], 15)
+                self.assertEqual(self.approvals()[-1]["normalized_target"], "pip:requests")
+        for command, target in (("npm install left-pad lodash", "npm:left-pad,lodash"),
+                                ("yarn add zod", "yarn:zod"), ("cargo add serde", "cargo:serde"),
+                                ("npm install ./vendor/x-1.0.0.tgz", "npm:./vendor/x-1.0.0.tgz"),
+                                ("pip install --no-index -f wheels x", "pip:x"),
+                                ("go get example.com/x@v1", "go:example.com/x@v1")):
+            with self.subTest(command=command):
+                self.assertEqual(self.bash(command).returncode, 2)
+                self.assertEqual(self.approvals()[-1]["normalized_target"], target)
+
+    def test_87_a_granted_dependency_is_allowed_however_the_install_is_typed(self):
+        self.bash("pip install requests")
+        request = self.approvals()[0]
+        self.write_grants([{"request_id": request["id"], "action_class": 15,
+                            "normalized_target": request["normalized_target"],
+                            "granted_by": "developer-cli"}])
+        self.assertAllowClaude(self.bash("python3 -m pip install requests"))
+        self.assertEqual(self.bash("pip install requests flask").returncode, 2)
+
+    def test_88_declared_dependencies_follow_class_14(self):
+        for command in ("pip install -r requirements.txt", "pip install -e .", "npm ci",
+                        "npm install", "poetry install", "go install ./...",
+                        "pip install '.[dev]'"):
+            with self.subTest(command=command):
+                self.assertAllowClaude(self.bash(command))
+                self.assertEqual(self.log()[-1]["class"], 14)
+        self.write_run(trust_level="untrusted")
+        result = self.bash("npm ci")
+        self.assertIn("DCA_APPROVAL_REQUIRED", result.stderr)
+
+    def test_89_push_history_edits_and_system_packages_ask(self):
+        for command, action_class in (("git push origin dca/topic", 18), ("git rebase main", 20),
+                                      ("git commit --amend --no-edit", 20),
+                                      ("sudo apt-get install -y jq", 13)):
+            with self.subTest(command=command):
+                result = self.bash(command)
+                self.assertIn("DCA_APPROVAL_REQUIRED", result.stderr)
+                self.assertEqual(self.approvals()[-1]["action_class"], action_class)
+
+    def test_90_the_strictest_class_in_a_command_decides(self):
+        self.assertDeny(self.bash("pip install requests && cat .env"), 2)
+        self.assertEqual(self.approvals(), [])
+
+    def test_90a_a_path_that_leaves_the_workspace_through_a_symlink_is_class_5_deny(self):
+        outside = self.prefix / "outside"
+        outside.mkdir()
+        os.symlink(outside, self.workspace / "drop")
+        for command in ("cp src/app.py drop/app.py", "echo x > drop/report.csv",
+                        "cat drop/secret.txt", "tee drop/sub/out.txt"):
+            with self.subTest(command=command):
+                self.assertDeny(self.bash(command), 5)
+                self.assertEqual(self.log()[-1]["class"], 5)
+        self.assertAllowClaude(self.bash(f"ls {outside} /usr/bin /tmp"))
+
+    def test_91_ordinary_commands_stay_ordinary(self):
+        for command in ("python3 -m unittest discover -s tests -t .", "git status --short",
+                        "git commit -m 'fix: rounding'", "git log --oneline -5", "ls -la src",
+                        "grep -rn 'def env' src", "python3 -c \"print('a.key in text')\"",
+                        "pip list", "pip --version", "npm test", "npm run build", "go build ./...",
+                        "cat src/app.py", "sed -n 1,5p src/app.py", "git diff -- src/app.py",
+                        "echo $(date) `whoami` ${HOME}", "ls \"$(git rev-parse --show-toplevel)\"",
+                        "git commit -m \"$(cat msg.txt)\"", "wc -l < src/app.py",
+                        "python3 -m unittest > /tmp/out.txt 2>&1", "cat /etc/os-release"):
+            with self.subTest(command=command):
+                self.assertAllowClaude(self.bash(command))
+                self.assertIn(self.log()[-1]["class"], (1, 8))
+
+    def test_92_the_conformance_shell_probes_hold_against_this_gate_on_both_backends(self):
+        """gates/production/probes.py feeds these payloads to the gate INSIDE the VM (T062). A row
+        with a wrong expectation would fail there as if the product were broken, suspend a
+        backend's eligibility and cost a live run to find out - so each is proved here first."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "dca_production_probes", ROOT / "gates" / "production" / "probes.py")
+        probes = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(probes)
+        outside = self.prefix / "outside"
+        outside.mkdir()
+        os.symlink(outside, self.workspace / probes.OUTSIDE_LINK)
+        for backend in ("claude", "codex"):
+            table = {name: row for name, row in probes.payloads(backend).items()
+                     if name.startswith("shell.")}
+            self.assertGreaterEqual(sum(1 for row in table.values() if row[1] == 0),
+                                    sum(1 for row in table.values() if row[1] == 2),
+                                    "at least as many must-stay-allowed rows as refusals")
+            for name, (payload, expect, marker, _env) in sorted(table.items()):
+                with self.subTest(backend=backend, probe=name):
+                    result = self.run_gate(dict(payload, cwd=str(self.workspace)))
+                    self.assertEqual(result.returncode, expect, result.stderr)
+                    if expect == 0 and backend == "codex":
+                        self.assertEqual(json.loads(result.stdout), CODEX_ALLOW)
+                    if isinstance(marker, int):
+                        self.assertIn(f"DCA_DENY {marker}:", result.stderr)
+                    elif marker:
+                        self.assertIn(marker, result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

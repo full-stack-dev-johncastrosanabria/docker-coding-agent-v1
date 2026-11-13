@@ -11,7 +11,7 @@ The file is written as `gates/PRODUCTION-CONFORMANCE.json` because that is the n
 requires. tasks.md T062 spells the same document in lower case.
 
 Usage:
-  python3 gates/production/publish.py [--codex-not-run "<reason>"]
+  python3 gates/production/publish.py [--claude-not-run "<reason>"] [--codex-not-run "<reason>"]
 """
 
 import argparse
@@ -138,9 +138,10 @@ def resolve(criterion, foundation, behaviour, backend):
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--codex-not-run", default=None,
-                        help="record codex NOT-RUN with this reason instead of reading its "
-                             "behaviour evidence")
+    for backend in BACKENDS:
+        parser.add_argument(f"--{backend}-not-run", default=None,
+                            help=f"record {backend} NOT-RUN with this reason instead of reading "
+                                 "its behaviour evidence")
     options = parser.parse_args(argv)
 
     versions = read(ROOT / "runtime" / "versions.yaml")
@@ -159,8 +160,9 @@ def main(argv=None):
                 "not_run_reason": f"{backend} is not available per gates/eligibility.json",
             }
             continue
-        if backend == "codex" and options.codex_not_run:
-            backends[backend] = {"status": "NOT-RUN", "not_run_reason": options.codex_not_run}
+        deferred = getattr(options, f"{backend}_not_run")
+        if deferred:
+            backends[backend] = {"status": "NOT-RUN", "not_run_reason": deferred}
             continue
         behaviour_doc = read(WORK / f"behavior-{backend}.json")
         found = foundation_checks(foundation, backend)
@@ -189,6 +191,9 @@ def main(argv=None):
     overall = ("FAIL" if "FAIL" in applicable
                else "PASS" if applicable and set(applicable) == {"PASS"}
                else "NOT-RUN")
+    cells = [cell for cell in foundation.get("cells", [])
+             if not getattr(options, f"{cell['backend']}_not_run")
+             and (eligibility or {}).get("backends", {}).get(cell["backend"], {}).get("available")]
 
     document = {
         "gate": "PRODUCTION-CONFORMANCE",
@@ -211,11 +216,11 @@ def main(argv=None):
             {"id": "PC.0b",
              "description": "every applicable backend x trust-profile foundation cell passed and "
                             "left zero sandboxes behind",
-             "result": ("PASS" if foundation.get("cells") and
-                        all(cell.get("status") == "PASS" for cell in foundation["cells"])
+             "result": ("PASS" if cells and
+                        all(cell.get("status") == "PASS" for cell in cells)
                         else "FAIL"),
              "evidence_ref": ", ".join(f"{cell['backend']}/{cell['profile']}={cell['status']}"
-                                       for cell in foundation.get("cells", []))},
+                                       for cell in cells)},
         ],
         "not_run_reason": ("; ".join(f"{name}: {entry['status']}"
                                      for name, entry in sorted(backends.items())

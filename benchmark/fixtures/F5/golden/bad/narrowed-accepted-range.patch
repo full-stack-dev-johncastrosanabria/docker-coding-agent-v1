@@ -1,0 +1,22 @@
+diff --git a/ledger/display.py b/ledger/display.py
+index 997de65..f67ad76 100644
+--- a/ledger/display.py
++++ b/ledger/display.py
+@@ -7,4 +7,4 @@ def format_amount(cents):
+     """123450 -> '1234.50'. Every amount the ledger accepts."""
+     if not MIN_CENTS <= cents <= MAX_CENTS:
+         raise ValueError(f"{cents} cents is outside the accepted range")
+-    return f"{cents // 100}.{cents % 100:02d}"
++    return f"{cents // 100:,}.{cents % 100:02d}"
+diff --git a/ledger/limits.py b/ledger/limits.py
+index 8413483..15b47c2 100644
+--- a/ledger/limits.py
++++ b/ledger/limits.py
+@@ -1,6 +1,6 @@
+ """The ledger's accepted range. A Finance decision, shared with validation and the receipt printer."""
+ 
+ #: The largest amount the ledger accepts, in cents: 999,999,999.99.
+-MAX_CENTS = 99_999_999_999
++MAX_CENTS = 999_999_999
+ #: The smallest: zero. Refunds are separate documents, never negative receipt lines.
+ MIN_CENTS = 0

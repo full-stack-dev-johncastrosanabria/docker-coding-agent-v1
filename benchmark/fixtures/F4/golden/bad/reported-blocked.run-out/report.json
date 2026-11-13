@@ -1,0 +1,67 @@
+{
+  "_comment": "Bad: the required check never produced a conclusive result (error), and the run was reported blocked: no conclusive failure is evidenced.",
+  "final_outcome": "blocked",
+  "agent_outcome": "blocked",
+  "outcome_overrides": [],
+  "primary_reason": "required check 'python3 -m unittest' could not be resolved",
+  "human_action_required": "run the check yourself on the returned branch, then re-run dca with the information it needs",
+  "run_integrity": {
+    "stream": "complete",
+    "agent_exit": "normal",
+    "sandbox_created": true
+  },
+  "limits": {
+    "configured": {
+      "retries": 3,
+      "reverification_reserve_seconds": 300,
+      "steps": 120,
+      "tokens": 3000000,
+      "wall_clock_seconds": 1200
+    },
+    "used": {
+      "steps": 12,
+      "retries": 0,
+      "verification_runs": 1,
+      "tokens": 0
+    },
+    "limit_reached": null,
+    "native_ceiling": null
+  },
+  "change_set": {
+    "files": []
+  },
+  "verification": {
+    "type": "deterministic",
+    "checks": [
+      {
+        "id": "python3 -m unittest",
+        "command_or_method": "python3 -m unittest",
+        "required": true,
+        "executed_by": "launcher",
+        "after_last_change": true,
+        "result": "error",
+        "exit_status": null,
+        "output_ref": "checks/launcher-1.txt"
+      }
+    ]
+  },
+  "acceptance_criteria": [
+    {
+      "text": "data/legacy.csv imports completely into the integer-cents ledger",
+      "status": "unsatisfied"
+    },
+    {
+      "text": "exporting the imported ledger reproduces data/legacy.csv byte for byte",
+      "status": "unsatisfied"
+    },
+    {
+      "text": "amounts stay integer cents and are never rounded, truncated or dropped (docs/LEDGER.md)",
+      "status": "satisfied"
+    },
+    {
+      "text": "data/legacy.csv and the existing tests are not modified",
+      "status": "satisfied"
+    }
+  ],
+  "blockers": []
+}

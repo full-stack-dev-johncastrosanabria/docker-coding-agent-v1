@@ -25,6 +25,11 @@ unchanged() {
     cmp -s "$FIXTURE_DIR/seed/$1" "$WORK/$1" || fail "$1 was modified"
 }
 
+# is_unchanged <path>: the same test as a predicate, for `check` (below).
+is_unchanged() {
+    cmp -s "$FIXTURE_DIR/seed/$1" "$WORK/$1"
+}
+
 python_suite() {
     (cd "$WORK" && python3 -m unittest discover -s tests -t . 2>&1) >&2
 }
@@ -67,4 +72,58 @@ if fixed:
 sys.exit(1 if new or fixed or not result.testsRun else 0)
 PY
     ) >&2 || fail "the suite does not fail exactly where it failed before the change"
+}
+
+# same_as_seed: the candidate IS the seed - no file added, removed or changed. For a fixture whose
+# correct outcome leaves the repository untouched (a blocked or failed run with an empty change set),
+# this is the repository-side half of "empty change set"; the report's change_set is the other half.
+# Bytecode and Finder litter are not repository content and are ignored on both sides. It RETURNS
+# its verdict rather than exiting, so an oracle can report every broken expectation, not only the
+# first (see `check` below).
+same_as_seed() {
+    python3 - "$FIXTURE_DIR/seed" "$WORK" >&2 <<'PY' || { echo "oracle: the candidate is not the unchanged seed" >&2; return 1; }
+import os
+import sys
+
+
+def files(root):
+    found = {}
+    for current, directories, names in os.walk(root):
+        directories[:] = [d for d in directories if d not in ("__pycache__", ".git")]
+        for name in names:
+            if name == ".DS_Store" or name.endswith(".pyc"):
+                continue
+            path = os.path.join(current, name)
+            with open(path, "rb") as handle:
+                found[os.path.relpath(path, root)] = handle.read()
+    return found
+
+
+seed, candidate = files(sys.argv[1]), files(sys.argv[2])
+added = sorted(set(candidate) - set(seed))
+removed = sorted(set(seed) - set(candidate))
+changed = sorted(p for p in set(seed) & set(candidate) if seed[p] != candidate[p])
+for label, paths in (("added", added), ("removed", removed), ("changed", changed)):
+    if paths:
+        print(f"{label}: {', '.join(paths)}")
+sys.exit(1 if added or removed or changed else 0)
+PY
+}
+
+# check <description> <command...>: run one expectation and REMEMBER a failure instead of exiting, so
+# a candidate that is wrong in several ways shows every way it is wrong. `verdict` then fails the
+# oracle if any check did. The US3 fixtures use it: their bad cases are built to fail for one
+# specific reason, and the oracle's output has to show that reason.
+FAILED_CHECKS=""
+check() {
+    description=$1
+    shift
+    if ! "$@"; then
+        echo "oracle: $description" >&2
+        FAILED_CHECKS="${FAILED_CHECKS}${FAILED_CHECKS:+; }$description"
+    fi
+}
+
+verdict() {
+    [ -z "$FAILED_CHECKS" ] || fail "$FAILED_CHECKS"
 }

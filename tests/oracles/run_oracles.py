@@ -2,7 +2,9 @@
 
 For each fixture in benchmark/fixtures/:
 
-  * the untouched seed FAILS the oracle - the task is not already solved;
+  * the untouched seed FAILS the oracle - the task is not already solved. For a fixture whose correct
+    outcome leaves the repository unchanged, the seed still fails, because it comes with no run
+    outputs: an unchanged repository proves nothing without the report that explains it;
   * `golden/good.patch` applied to the seed PASSES it;
   * every `golden/bad/*.patch` FAILS it - each is a plausible wrong answer (a weakened test, a
     partial fix, a workaround in the wrong place) the oracle must not accept.
@@ -41,12 +43,17 @@ bench = _load("dca_bench", os.path.join(ROOT, "src", "dca", "bench.py"))
 
 
 def candidate(fixture, patch, workdir):
-    """The seed with `patch` applied (None: the seed itself), as a plain directory."""
+    """The seed with `patch` applied (None: the seed itself), as a plain directory.
+
+    An EMPTY patch is a real answer, not a missing one: for a fixture whose correct outcome is a
+    blocked or failed run that changes nothing (US3's F2-F5), the reference change set is empty, and
+    its evidence is carried by the run outputs beside it.
+    """
     repo = os.path.join(workdir, "repo")
     shutil.rmtree(repo, ignore_errors=True)
     bench.build_seed(os.path.join(fixture["_dir"], fixture.get("seed", "seed")), repo)
     if patch is not None:
-        proc = subprocess.run(["git", "-C", repo, "apply", "--index",
+        proc = subprocess.run(["git", "-C", repo, "apply", "--index", "--allow-empty",
                                os.path.join(fixture["_dir"], patch)],
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
         if proc.returncode != 0:

@@ -1,0 +1,5 @@
+{
+  "_comment": "What S8's oracle reads in RUN_OUT: blocked, but no approval request reached the report: the developer has nothing to approve.",
+  "final_outcome": "blocked",
+  "approvals": []
+}

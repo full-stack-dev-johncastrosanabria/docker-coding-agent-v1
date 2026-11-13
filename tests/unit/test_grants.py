@@ -273,3 +273,48 @@ class Guarantees(GrantHarness):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+REPORT_SCHEMA = ROOT / "specs" / "001-bounded-coding-agent" / "contracts" / "completion-report.schema.json"
+
+
+class GateViewAndReportedApprovals(unittest.TestCase):
+    """The two hand-offs the launcher makes: grants to the in-VM gate, requests to the report."""
+
+    def test_29_gate_view_flattens_exact_scopes_and_drops_equivalence_ones(self):
+        document = {"run_id": NEW_RUN, "granted_by": "host",
+                    "grants": [{"request_id": REQUEST, "action_class": 7,
+                                "scope": {"exact": "git push origin main"}},
+                               {"request_id": f"apr-{ORIGIN_RUN}-2", "action_class": 8,
+                                "scope": {"equivalence_class": {"action_type": "x",
+                                                                "targets": ["a"]}}}]}
+        view = grants.gate_view(document)
+        self.assertEqual(view["grants"], [{"request_id": REQUEST, "action_class": 7,
+                                           "normalized_target": "git push origin main",
+                                           "granted_by": "host"}])
+        self.assertEqual(view["run_id"], NEW_RUN)
+        self.assertEqual(grants.gate_view(None)["grants"], [])
+
+    def test_30_reported_approvals_keep_only_this_runs_valid_requests_as_unanswered(self):
+        good = {"id": f"apr-{NEW_RUN}-1", "action_class": 7, "normalized_target": "git push",
+                "reason": "push", "status": "granted"}
+        records = [good, dict(good),                                   # duplicate
+                   dict(good, id=REQUEST),                             # another run
+                   dict(good, id=f"apr-{NEW_RUN}-2", action_class=0),  # class out of range
+                   dict(good, id=f"apr-{NEW_RUN}-3", action_class=32),
+                   dict(good, id=f"apr-{NEW_RUN}-4", normalized_target=""),
+                   dict(good, id="not-an-id"), "junk"]
+        reported = grants.reported_approvals(records, NEW_RUN, {7: "push"})
+        self.assertEqual([r["id"] for r in reported], [f"apr-{NEW_RUN}-1"])
+        self.assertEqual(reported[0]["status"], "unanswered", "a VM-written status is ignored")
+        self.assertEqual(reported[0]["action"], "push")
+        item = json.loads(REPORT_SCHEMA.read_text())["properties"]["approvals"]
+        jsonschema.validate(reported, item)
+
+    def test_31_vm_text_is_bounded(self):
+        record = {"id": f"apr-{NEW_RUN}-1", "action_class": 3, "normalized_target": "x" * 2000,
+                  "reason": "y" * 2000}
+        reported = grants.reported_approvals([record], NEW_RUN, {})
+        self.assertEqual(len(reported[0]["target"]), 500)
+        self.assertEqual(len(reported[0]["reason"]), 500)
+        self.assertEqual(reported[0]["action"], "action class 3")

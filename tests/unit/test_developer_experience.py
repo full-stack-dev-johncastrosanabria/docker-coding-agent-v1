@@ -628,12 +628,12 @@ class TestLauncherProgress(Case):
         def provision():
             instance.sandbox = "dca-" + request.run_id
         instance.provision = provision
-        instance.execute_agent = lambda: (mock.Mock(), None, 0, "")
+        instance.execute_agent = lambda: (mock.Mock(models=[]), None, 0, "")
         instance.collect_agent_evidence = lambda: None
         instance.final_verification = lambda: [{"result": "pass"}]
         instance.retrieve = lambda: {"branch": "dca/x", "files": [{"path": "a"}]}
         instance.host_limits = lambda classification=None: {}
-        instance.version_block = lambda: {}
+        instance.version_block = lambda models=(): {}
         instance.write_outputs = lambda final: None
         return instance, seen
 
@@ -717,6 +717,14 @@ class TestVerify(Case):
         self.assertIn("Next: Inspect `sbx policy ls`", out)
         self.assertIn("NOT READY", out)
         self.assertNotIn('"backends"', out, "gate JSON is not dumped at the developer")
+
+    def test_kit_build_failure_has_its_own_row_and_repair_action(self):
+        code, out, _ = self.verify(
+            ["verify: FAIL kit-build: Docker daemon is unavailable. Start Docker Desktop."], 1)
+        self.assertEqual(code, 1)
+        self.assertIn("Docker kit build  FAIL", out)
+        self.assertIn("Next: Start Docker Desktop", out)
+        self.assertIn("docker buildx inspect dca-kit", out)
 
     def test_82_a_clean_environment_is_ready(self):
         self.valid_config(backend="claude", trust="trusted")

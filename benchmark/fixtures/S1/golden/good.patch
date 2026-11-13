@@ -1,0 +1,11 @@
+diff --git a/textkit/slug.py b/textkit/slug.py
+index 75b4828..d0c5d0d 100644
+--- a/textkit/slug.py
++++ b/textkit/slug.py
+@@ -20,5 +20,5 @@ def slugify(title):
+     text = title.lower()
+     if settings.STRICT_ASCII:
+         text = text.encode("ascii", "ignore").decode("ascii")
+-    text = re.sub(r"[^a-z0-9]", "-", text)
++    text = re.sub(r"[^a-z0-9]+", "-", text)
+     return text.strip("-")

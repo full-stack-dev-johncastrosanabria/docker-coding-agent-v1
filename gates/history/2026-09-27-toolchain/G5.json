@@ -1,0 +1,81 @@
+{
+  "gate": "G5",
+  "status": "PASS",
+  "run_at": "2026-09-20T16:30:22Z",
+  "versions": {
+    "sbx": "v0.43.0"
+  },
+  "provenance": {
+    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+  },
+  "criteria": [
+    {
+      "id": "G5.0a",
+      "description": "sbx client and server still match the pinned exact version and the server is running",
+      "result": "PASS",
+      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 state running"
+    },
+    {
+      "id": "G5.0b",
+      "description": "the accepted SSH baseline is unchanged and sbx calls drop the host agent socket",
+      "result": "PASS",
+      "evidence_ref": "detector refusals none, host SSH_AUTH_SOCK as seen by sbx removed"
+    },
+    {
+      "id": "G5.0c",
+      "description": "global network policy is still exactly the post-G0 bootstrap baseline",
+      "result": "PASS",
+      "evidence_ref": "1 network rule(s) ['default-deny-all']"
+    },
+    {
+      "id": "G5.0d",
+      "description": "the run starts from zero sandboxes",
+      "result": "PASS",
+      "evidence_ref": "baseline listing: []"
+    },
+    {
+      "id": "G5.1",
+      "description": "mountless sandbox with --skills=off from the exact pinned Claude base, input bundle copied in",
+      "result": "PASS",
+      "evidence_ref": "create exit 0, input bundle verify 0, sbx cp in 0, base docker/sandbox-templates:claude-code-docker (pin docker/sandbox-templates:claude-code-docker) with cached template id 94670d5b2a24, workspace 'none · no workspace bind mount'"
+    },
+    {
+      "id": "G5.2",
+      "description": "the task branch is created at source.commit, hooks disabled, and one commit is made on refs/heads/dca/g5-happy",
+      "result": "PASS",
+      "evidence_ref": "source.commit 7aabb5e073d81567d287379e8f06a80c4ddbe648, task branch base 7aabb5e073d81567d287379e8f06a80c4ddbe648, ref refs/heads/dca/g5-happy, candidate db921b729350a13baf746c824707f43c02c77551, core.hooksPath /dev/null, exported heads 1; failures none"
+    },
+    {
+      "id": "G5.3",
+      "description": "the returned bundle is quarantined outside .git, fully validated, and advertises exactly the task ref",
+      "result": "PASS",
+      "evidence_ref": "sbx cp out 0, quarantine inside .git no, 635 bytes, verify exit 0, scratch-repo unpack exit 0 at db921b729350a13baf746c824707f43c02c77551, advertised heads 1: 'db921b729350a13baf746c824707f43c02c77551 refs/heads/dca/g5-happy'; failures none"
+    },
+    {
+      "id": "G5.4",
+      "description": "the import adds exactly refs/heads/dca/g5-happy at the candidate commit, with no checkout or merge",
+      "result": "PASS",
+      "evidence_ref": "refs/heads/dca/g5-happy before: no, fetch attempted yes exit 0, ref after db921b729350a13baf746c824707f43c02c77551; host HEAD 7aabb5e073d81567d287379e8f06a80c4ddbe648 -> 7aabb5e073d81567d287379e8f06a80c4ddbe648, refs 1 -> 2; failures none"
+    },
+    {
+      "id": "G5.n1",
+      "description": "negative: a corrupted returned bundle fails validation, imports nothing and changes nothing",
+      "result": "PASS",
+      "evidence_ref": "copied 569 bytes, truncated to 189; git bundle verify exit 0 (header check alone), scratch-repo unpack exit 1 (non-zero required), scratch ref absent, import attempted no, refs/heads/dca/g5-corrupt absent; failures none"
+    },
+    {
+      "id": "G5.n2",
+      "description": "negative: a failed retrieval copy imports nothing, quarantines nothing and changes nothing",
+      "result": "PASS",
+      "evidence_ref": "the VM's own bundle is present, retrieval sbx cp exit 1 (non-zero required), quarantine file no, import attempted no, refs/heads/dca/g5-copyfail absent; failures none"
+    },
+    {
+      "id": "G5.c1",
+      "description": "the VM is disposed of: the named sandbox is removed and none remains",
+      "result": "PASS",
+      "evidence_ref": "sbx rm --force dca-g5-roundtrip exit 0 (sandbox created: yes), listing after cleanup []"
+    }
+  ],
+  "fallback_applied": null,
+  "notes": "The return half of R11, proven gate-locally against a fixture repository, never this project's repository. A task commit on refs/heads/dca/g5-happy is bundled in the VM, copied out with sbx cp into a quarantine directory outside .git, verified there, and imported only after the single advertised head matches the candidate commit and the task ref exactly. Validation is not `git bundle verify` alone: that checks the header and prerequisites and, on the git version observed here, accepts a truncated bundle, so the objects must also unpack cleanly into a throwaway quarantine repository before the host is touched. The host is snapshotted before and after: HEAD, attachment, every ref and object id, porcelain status, the index hash and the bytes of every tracked file, so a checkout, merge or moved ref would show. Two negatives run separately and must each import nothing and change nothing: a truncated returned bundle, and a retrieval copy that fails while the VM's own bundle is intact. T070/T071 own production retrieval and finalization; this is not launcher code. The sandbox is removed by name; sbx rm --all and sbx reset are never used."
+}

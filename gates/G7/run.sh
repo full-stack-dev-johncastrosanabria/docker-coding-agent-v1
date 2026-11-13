@@ -49,6 +49,8 @@ stop() {
     exit 1
 }
 
+. gates/sbx_create.sh
+
 # --- host-side facts about the agent socket we remove ----------------------------------------
 
 record host_ssh_auth_sock_set "$(if [ -n "${SSH_AUTH_SOCK:-}" ]; then echo yes; else echo no; fi)"
@@ -67,17 +69,11 @@ record pf_policy_exit "$?"
 run_sbx ls --json >"$WORK/pf-ls.json" 2>"$WORK/pf-ls.err"
 record pf_ls_exit "$?"
 
-run_sbx template ls --json >"$WORK/templates.json" 2>"$WORK/templates.err"
-record template_ls_exit "$?"
-
 python3 gates/G7/record.py --preflight "$OBS" "$WORK" || stop
 
 # --- the sandbox ------------------------------------------------------------------------------
 
-run_sbx create claude --name "$SANDBOX" --skills off >"$WORK/create-$SANDBOX.txt" 2>&1
-record "create_${SANDBOX}_exit" "$?"
-record "image_${SANDBOX}" "$(awk '/^ *image  */ {print $2; exit}' "$WORK/create-$SANDBOX.txt")"
-record "workspace_line_${SANDBOX}" "$(awk '/^ *workspace  */ {$1=""; print; exit}' "$WORK/create-$SANDBOX.txt" | sed 's/^ *//')"
+create_pinned claude "$SANDBOX"
 
 # Probe as the agent user: this is what a workload would see. It records only booleans, exit
 # codes, counts and paths, never key material.

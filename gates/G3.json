@@ -1,19 +1,19 @@
 {
   "gate": "G3",
   "status": "PASS",
-  "run_at": "2026-09-21T02:17:28Z",
+  "run_at": "2026-11-13T07:52:40Z",
   "versions": {
-    "sbx": "v0.43.0"
+    "sbx": "v0.53.0"
   },
   "provenance": {
-    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+    "runtime_versions_digest": "sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1"
   },
   "criteria": [
     {
       "id": "G3.0a",
       "description": "sbx client and server still match the pinned exact version and the server is running",
       "result": "PASS",
-      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 running"
+      "evidence_ref": "pin v0.53.0, client v0.53.0, server v0.53.0 running"
     },
     {
       "id": "G3.0b",
@@ -41,9 +41,9 @@
     },
     {
       "id": "G3.base",
-      "description": "every sandbox in this gate came from the exact pinned sandbox_bases.codex base: the reference sbx resolved, the cached template's repository, tag and image id, and the pinned digest all agree; no base was discovered or substituted",
+      "description": "every sandbox in this gate was created from the exact pinned sandbox_bases.codex workload, by digest, and sbx's own inspect record shows that composition and nothing else; no base was discovered or substituted",
       "result": "PASS",
-      "evidence_ref": "pinned docker/sandbox-templates:docker-agent-docker sha256:6a1b26c279bb74321e8cf9599e8d19732a3354814a6ca446a5251702c58ea90b; sbx resolved docker/sandbox-templates:docker-agent-docker; cached template docker.io/docker/sandbox-templates:docker-agent-docker id 6a1b26c279bb"
+      "evidence_ref": "pinned docker.io/sbx/shell@sha256:89ed5d63def6bfb2373d408e3ab6ad55aa5c010f884a182a78299fcf85ea42d1; 2 sandbox record(s); every composition matches"
     },
     {
       "id": "G3.policy",
@@ -53,21 +53,21 @@
     },
     {
       "id": "G3.model",
-      "description": "the model this gate ran is one the BACKEND actually accepts, not merely one the provider lists: candidates from the pinned artifact are tried against the real endpoint in T019's preference order, the first acceptance is taken, it is a non-deprecated GPT-5.x, and both runs reported that exact model and the native chatgpt provider. An older family is never selected to make the gate pass and no second provider is introduced",
+      "description": "the model this gate ran is one the BACKEND actually accepts, not merely one the provider lists: candidates from the pinned artifact are tried against the real endpoint in T019's preference order, the first acceptance is taken, it is a non-deprecated GPT-6.x, and both runs reported that exact model and the native chatgpt provider. An older family is never selected to make the gate pass and no second provider is introduced",
       "result": "PASS",
-      "evidence_ref": "`docker agent models` lists ['gpt-5.6']; the backend accepted gpt-5.5 and rejected ['gpt-5.6']; both runs reported provider chatgpt model gpt-5.5; fallback_applied True - the preferred gpt-5.6 is LISTED by `docker agent models` and marked default, but the backend REJECTED it: The 'gpt-5.6' model is not supported when using Codex with a ChatGPT account.. T019's documented fallback selected gpt-5.5, the first candidate the backend accepted in preference order; it also rejected ['gpt-5.6']"
+      "evidence_ref": "`docker agent models` lists ['gpt-5.6']; the backend accepted gpt-6.1-sol and rejected []; both runs reported provider chatgpt model gpt-6.1-sol; fallback_applied False - the backend accepted the preferred model"
     },
     {
       "id": "G3.no-api-key",
       "description": "the run authenticated from the developer's subscription OAuth credential, not from a provider API key: the host has no API-key variable, this gate sets none, and the decisive negative control holds - with the credential absent the identical task fails. Variables the sandbox base declares itself are recorded by name and emptiness, never by value",
       "result": "PASS",
-      "evidence_ref": "host: all absent; in-VM classification {'OPENAI_API_KEY': 'present', 'OPENAI_BASE_URL': 'absent', 'OPENAI_ORG_ID': 'absent', 'ANTHROPIC_API_KEY': 'present', 'ANTHROPIC_AUTH_TOKEN': 'absent', 'CLAUDE_API_KEY': 'absent'}; negative control with no credential exited '1' without the marker"
+      "evidence_ref": "host: all absent; in-VM classification {'OPENAI_API_KEY': 'absent', 'OPENAI_BASE_URL': 'absent', 'OPENAI_ORG_ID': 'absent', 'ANTHROPIC_API_KEY': 'absent', 'ANTHROPIC_AUTH_TOKEN': 'absent', 'CLAUDE_API_KEY': 'absent'}; negative control with no credential exited '1' without the marker"
     },
     {
       "id": "G3.pinned-binary",
       "description": "the docker-agent that actually ran in both sandboxes is the pinned artifact: the binary attempts a self-update at startup, so the version it reports afterwards is what proves the pin held rather than the kit's install step alone",
       "result": "PASS",
-      "evidence_ref": "both sandboxes ran the pinned docker-agent v1.136.0"
+      "evidence_ref": "both sandboxes ran the pinned docker-agent v1.160.0"
     },
     {
       "id": "G3.minimal-credential",
@@ -138,18 +138,16 @@
   ],
   "codex_backend": {
     "provider": "chatgpt",
-    "selected_model": "gpt-5.5",
-    "model_fallback_applied": true,
-    "model_selection_reason": "the preferred gpt-5.6 is LISTED by `docker agent models` and marked default, but the backend REJECTED it: The 'gpt-5.6' model is not supported when using Codex with a ChatGPT account.. T019's documented fallback selected gpt-5.5, the first candidate the backend accepted in preference order; it also rejected ['gpt-5.6']",
+    "selected_model": "gpt-6.1-sol",
+    "model_fallback_applied": false,
+    "model_selection_reason": "the backend accepted the preferred model",
     "listed_models": [
       "gpt-5.6"
     ],
     "backend_accepted_models": [
-      "gpt-5.5"
+      "gpt-6.1-sol"
     ],
-    "backend_rejected_models": [
-      "gpt-5.6"
-    ],
+    "backend_rejected_models": [],
     "safety": "strict",
     "token_file_fallback_proven": true,
     "in_vm_refresh_required": false,
@@ -160,7 +158,7 @@
       "profiles": []
     }
   },
-  "fallback_applied": "model gpt-5.5",
-  "notes": "Native ChatGPT availability and the trusted token-file fallback, proven in TWO CONSECUTIVE completely fresh mountless sandboxes created with --skills off from the exact pinned sandbox_bases.codex base, under the network policy accepted G4 proved for codex/trusted, with only one sandbox live at a time. The model is the one the signed-in plan actually lists, read from the provider rather than asserted; T019's fallback would accept only a non-deprecated GPT-5.x. Provisioning copies ONLY chatgpt-auth.json, never the full ~/.config/cagent: the staged directory and the in-VM config directory each hold exactly that one file and the markers of a full copy are absent. The credential is staged in a mode-0700 directory OUTSIDE the repository and removed on every exit path; no token value, partial value, digest, Authorization header, cookie or file content is ever read or recorded - only presence, mode, owner, entry names and counts. Every invocation passes --safety strict on the command line rather than relying on a config default. The approval matrix is decided by what happened to the workspace file, not by what the run reported: an explicit allow writes it exactly once, an exit-2 hook does not, a hook expressing NO decision does not, and a user config asking for safety: autonomous and yolo: true does not - which is the behavioral proof that strict held, because under autonomous the hook would never have been consulted. Whether the fallback needs auth.openai.com inside the VM is OBSERVED: that host is explicitly denied to both sandboxes and both runs still succeeded, so no promotion is justified here and it stays host-oauth-login/sandbox_required=false. Every rule this gate added carried --sandbox; the global fingerprint is captured with zero sandboxes before and after; sbx policy init, sbx reset and sbx rm --all are never called. Both sandboxes were removed by name.",
+  "fallback_applied": null,
+  "notes": "Native ChatGPT availability and the trusted token-file fallback, proven in TWO CONSECUTIVE completely fresh mountless sandboxes created with --skills off from the exact pinned sandbox_bases.codex base, under the network policy accepted G4 proved for codex/trusted, with only one sandbox live at a time. The model is the one the signed-in plan actually lists, read from the provider rather than asserted; T019's fallback would accept only a non-deprecated GPT-6.x. Provisioning copies ONLY chatgpt-auth.json, never the full ~/.config/cagent: the staged directory and the in-VM config directory each hold exactly that one file and the markers of a full copy are absent. The credential is staged in a mode-0700 directory OUTSIDE the repository and removed on every exit path; no token value, partial value, digest, Authorization header, cookie or file content is ever read or recorded - only presence, mode, owner, entry names and counts. Every invocation passes --safety strict on the command line rather than relying on a config default. The approval matrix is decided by what happened to the workspace file, not by what the run reported: an explicit allow writes it exactly once, an exit-2 hook does not, a hook expressing NO decision does not, and a user config asking for safety: autonomous and yolo: true does not - which is the behavioral proof that strict held, because under autonomous the hook would never have been consulted. Whether the fallback needs auth.openai.com inside the VM is OBSERVED: that host is explicitly denied to both sandboxes and both runs still succeeded, so no promotion is justified here and it stays host-oauth-login/sandbox_required=false. Every rule this gate added carried --sandbox; the global fingerprint is captured with zero sandboxes before and after; sbx policy init, sbx reset and sbx rm --all are never called. Both sandboxes were removed by name.",
   "network_policy_fingerprint": "sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697"
 }

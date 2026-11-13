@@ -14,7 +14,7 @@ direction:
     blocks is the proof;
   * "minimal credential" means exactly one file, checked on both sides, because copying the whole
     ~/.config/cagent would bring .env and cached state along with the token;
-  * T019's model fallback accepts only a NON-DEPRECATED GPT-5.x. An older family must never be
+  * T019's model fallback accepts only a NON-DEPRECATED GPT-6.x. An older family must never be
     selected to make the gate pass, and no second provider is ever introduced;
   * two CONSECUTIVE fresh sandboxes means one live at a time - a second created while the first
     still exists proves nothing about freshness.
@@ -42,14 +42,14 @@ def _load(name, path):
     return module
 
 
-def models_table(rows=(("chatgpt", "gpt-5.6", True),)):
+def models_table(rows=(("chatgpt", "gpt-6.1-sol", True),)):
     out = "PROVIDER   MODEL     DEFAULT\n"
     for provider, model, default in rows:
         out += f"{provider}    {model}   {'*' if default else ''}\n"
     return out
 
 
-def run_capture(answer=MARKER, include_answer=True, provider="chatgpt", model="gpt-5.5"):
+def run_capture(answer=MARKER, include_answer=True, provider="chatgpt", model="gpt-6.1-terra"):
     """A `docker agent run --exec --json` capture in the pinned JSON-Lines shape.
 
     team_info reports the EFFECTIVE provider and model, which is how the gate checks that the run
@@ -68,7 +68,7 @@ def run_capture(answer=MARKER, include_answer=True, provider="chatgpt", model="g
 
 
 class G3ModelSelection(unittest.TestCase):
-    """T019's model rule: the preferred model, or a non-deprecated GPT-5.x, or nothing."""
+    """T019's model rule: the preferred model, or a non-deprecated GPT-6.x, or nothing."""
 
     @classmethod
     def setUpClass(cls):
@@ -78,20 +78,22 @@ class G3ModelSelection(unittest.TestCase):
         return self.record_module.select_model(models_table(rows))
 
     def test_01_the_preferred_model_is_selected_without_a_fallback(self):
-        model, fallback, _ = self.select((("chatgpt", "gpt-5.6", True),))
-        self.assertEqual(model, "gpt-5.6")
+        model, fallback, _ = self.select((("chatgpt", "gpt-6.1-sol", True),))
+        self.assertEqual(model, "gpt-6.1-sol")
         self.assertFalse(fallback)
 
     def test_02_a_missing_preferred_model_falls_back_to_a_gpt5_model(self):
-        model, fallback, why = self.select((("chatgpt", "gpt-5.2", True),
-                                            ("chatgpt", "gpt-5.4", False)))
-        self.assertEqual(model, "gpt-5.4")
+        model, fallback, why = self.select((("chatgpt", "gpt-6-sol", True),
+                                            ("chatgpt", "gpt-6.1-terra", False)))
+        self.assertEqual(model, "gpt-6.1-terra")
         self.assertTrue(fallback)
         self.assertIn("fallback", why)
 
     def test_03_an_older_family_is_never_selected(self):
-        """The gate must fail rather than quietly drop to a pre-GPT-5 model."""
+        """The gate must fail rather than quietly drop to a pre-GPT-6 model."""
         for rows in (
+            # The retired GPT-5.x family is an older family too: only an owner decision moves it.
+            (("chatgpt", "gpt-5.5", True), ("chatgpt", "gpt-5.3-codex", False)),
             (("chatgpt", "gpt-4o", True),),
             (("chatgpt", "gpt-4.1", True), ("chatgpt", "o3", False)),
             (("chatgpt", "gpt-3.5-turbo", True),),
@@ -99,10 +101,10 @@ class G3ModelSelection(unittest.TestCase):
             with self.subTest(rows=rows):
                 model, _, why = self.select(rows)
                 self.assertIsNone(model)
-                self.assertIn("GPT-5.x", why)
+                self.assertIn("GPT-6.x", why)
 
     def test_04_a_deprecated_gpt5_model_is_rejected(self):
-        model, _, _ = self.select((("chatgpt", "gpt-5.1-deprecated", True),))
+        model, _, _ = self.select((("chatgpt", "gpt-6-deprecated", True),))
         self.assertIsNone(model)
 
     def test_05_an_empty_or_unreadable_list_selects_nothing(self):
@@ -113,7 +115,7 @@ class G3ModelSelection(unittest.TestCase):
 
     def test_06_another_provider_is_never_selected(self):
         model, _, _ = self.record_module.select_model(
-            "PROVIDER MODEL DEFAULT\nopenai gpt-5.6 *\n")
+            "PROVIDER MODEL DEFAULT\nopenai gpt-6.1-sol *\n")
         self.assertIsNone(model)
 
 
@@ -134,6 +136,14 @@ class G3Recorder(unittest.TestCase):
         self.work = self.tmp / "work"
         self.work.mkdir()
         self._write_work()
+
+    def _write_inspect(self, sandbox, backend, kits=()):
+        """sbx's own composition record of a sandbox: the pinned workload plus the G6 kit."""
+        base = self.versions["sandbox_bases"][backend]
+        self._write(f"inspect-{sandbox}.json", {
+            "name": sandbox, "host_mounts": [],
+            "kits": [f"{base['base']}@{base['version']}", str(GATES / "G6" / "work" / "kit")]
+            if kits == () else kits})
 
     def _write(self, name, document):
         (self.work / name).write_text(
@@ -181,18 +191,15 @@ class G3Recorder(unittest.TestCase):
         self._write("governance-before.json", governance)
         self._write("governance-after.json", governance)
 
-        image, digest = self.common.codex_base(self.versions)
-        repository, _, tag = image.rpartition(":")
-        self._write("templates.json", {"images": [
-            {"repository": f"docker.io/{repository}", "tag": tag,
-             "id": digest.removeprefix("sha256:")[:12]}]})
+        self._write_inspect("dca-g3-a", "codex")
+        self._write_inspect("dca-g3-b", "codex")
 
         self._write("models.txt", models_table())
-        # The backend rejects the listed default and accepts gpt-5.5, which is what the live run
+        # The backend rejects the listed default and accepts gpt-6.1-terra, which is what the live run
         # observed. Enumeration stops at the first acceptance, so later candidates are unprobed.
-        self._write("model-probe.txt", "gpt-5.6=1\ngpt-5.5=0\n")
-        self._write("probe-gpt-5.6.err",
-                    'Error: model failed: HTTP 400: {"detail":"The \'gpt-5.6\' model is not '
+        self._write("model-probe.txt", "gpt-6.1-sol=1\ngpt-6.1-terra=0\n")
+        self._write("probe-gpt-6.1-sol.err",
+                    'Error: model failed: HTTP 400: {"detail":"The \'gpt-6.1-sol\' model is not '
                     'supported when using Codex with a ChatGPT account."}\n')
         self._write("apikeys-host.txt",
                     "".join(f"{n}=absent\n" for n in self.common.API_KEY_NAMES))
@@ -219,12 +226,12 @@ class G3Recorder(unittest.TestCase):
             "pf_version_exit": "0", "pf_ssh_forwarding_exit": "0", "pf_ssh_socket_exit": "0",
             "pf_policy_exit": "0", "pf_ls_exit": "0",
             "governance_before_exit": "1", "governance_after_exit": "1",
-            "ls_after_exit": "0", "policy_after_exit": "0", "templates_exit": "0",
+            "ls_after_exit": "0", "policy_after_exit": "0", "inspect_dca-g3-a_exit": "0", "inspect_dca-g3-b_exit": "0",
             "sbx_resolved_base": self.common.codex_base(self.versions)[0],
             "policy_allow": ",".join(self.allow), "policy_deny": ",".join(self.deny),
             "policy_rules_exit": "0", "safety_flag": "strict",
-            "models_exit": "0", "listed_preferred": "gpt-5.6",
-            "runtime_selected_model": "gpt-5.5",
+            "models_exit": "0", "listed_preferred": "gpt-6.1-sol",
+            "runtime_selected_model": "gpt-6.1-terra",
             "apikeys_host_exit": "0", "host_agent_version_exit": "0",
             "host_config_dir_entries": "4", "host_credential_mode": "600",
             "staged_entries": "1", "staged_names": self.common.CREDENTIAL_FILE,
@@ -275,16 +282,16 @@ class G3Recorder(unittest.TestCase):
              jsonschema.Draft202012Validator(self.evidence_schema).iter_errors(evidence)], [])
         backend = evidence["codex_backend"]
         self.assertEqual(backend["provider"], "chatgpt")
-        self.assertEqual(backend["selected_model"], "gpt-5.5")
+        self.assertEqual(backend["selected_model"], "gpt-6.1-terra")
         self.assertTrue(backend["model_fallback_applied"])
-        self.assertEqual(backend["listed_models"], ["gpt-5.6"])
-        self.assertEqual(backend["backend_accepted_models"], ["gpt-5.5"])
-        self.assertEqual(backend["backend_rejected_models"], ["gpt-5.6"])
+        self.assertEqual(backend["listed_models"], ["gpt-6.1-sol"])
+        self.assertEqual(backend["backend_accepted_models"], ["gpt-6.1-terra"])
+        self.assertEqual(backend["backend_rejected_models"], ["gpt-6.1-sol"])
         self.assertIn("REJECTED", backend["model_selection_reason"])
         self.assertEqual(backend["safety"], "strict")
         self.assertTrue(backend["token_file_fallback_proven"])
         self.assertIs(backend["in_vm_refresh_required"], False)
-        self.assertEqual(evidence["fallback_applied"], "model gpt-5.5")
+        self.assertEqual(evidence["fallback_applied"], "model gpt-6.1-terra")
 
     def test_02_no_secret_material_appears_in_the_evidence(self):
         """Value-shaped material, not vocabulary.
@@ -310,7 +317,7 @@ class G3Recorder(unittest.TestCase):
     # --- availability and the model ------------------------------------------------------------------
 
     def test_03_a_backend_that_accepts_nothing_fails(self):
-        """Every candidate rejected means no usable non-deprecated GPT-5.x, so Codex is unavailable."""
+        """Every candidate rejected means no usable non-deprecated GPT-6.x, so Codex is unavailable."""
         self._write("model-probe.txt",
                     "".join(f"{c}=1\n" for c in self.common.MODEL_CANDIDATES))
         results = self._results(self._capture(runtime_selected_model=""))
@@ -318,12 +325,12 @@ class G3Recorder(unittest.TestCase):
 
     def test_04_the_listing_is_not_the_authority(self):
         """A model the provider lists but the backend rejects must never be selected."""
-        self._write("model-probe.txt", "gpt-5.6=1\n")
-        self.assertEqual(self._results(self._capture(runtime_selected_model="gpt-5.6"))["G3.model"],
+        self._write("model-probe.txt", "gpt-6.1-sol=1\n")
+        self.assertEqual(self._results(self._capture(runtime_selected_model="gpt-6.1-sol"))["G3.model"],
                          "FAIL")
 
     def test_04b_a_run_that_used_a_different_model_than_the_verified_one_fails(self):
-        self._write("task-b.json", run_capture(model="gpt-5.6"))
+        self._write("task-b.json", run_capture(model="gpt-6.1-sol"))
         self.assertEqual(self._results()["G3.model"], "FAIL")
 
     def test_04c_a_run_that_did_not_use_the_native_chatgpt_provider_fails(self):
@@ -485,8 +492,8 @@ class G3Recorder(unittest.TestCase):
     # --- bindings and cleanup -------------------------------------------------------------------------
 
     def test_26_a_base_mismatch_fails_and_stops_the_run(self):
-        self.assertEqual(self._results(self._capture(
-            sbx_resolved_base="docker/sandbox-templates:claude-code-docker"))["G3.base"], "FAIL")
+        self._write_inspect("dca-g3-a", "codex", kits=["docker.io/sbx/claude:latest"])
+        self.assertEqual(self._results(self._capture())["G3.base"], "FAIL")
 
     def test_27_a_policy_that_is_not_the_accepted_one_fails(self):
         for change in ({"policy_allow": "chatgpt.com"},

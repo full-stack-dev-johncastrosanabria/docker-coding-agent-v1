@@ -144,6 +144,13 @@ class GateContractSchemas(unittest.TestCase):
                     name: {"status": s, **({"not_run_reason": "SYNTHETIC"} if s == "NOT-RUN" else {})}
                     for name, s in backends.items()
                 }
+                if gate == "G11":
+                    for name, entry in ev["backends"].items():
+                        if entry["status"] == "PASS":
+                            entry["criteria"] = [
+                                {"id": f"G11.c{n}.{name}", "description": "SYNTHETIC part B",
+                                 "result": "PASS", "evidence_ref": "SYNTHETIC"}
+                                for n in (5, 6, 7, 8)]
             return ev
 
         def summary(gate, statuses):

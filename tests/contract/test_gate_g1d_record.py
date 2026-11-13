@@ -66,14 +66,14 @@ def header(directory=MANAGED_SKILL_DIR):
 
 def assistant(blocks, **extra):
     record = {"type": "assistant", "message": {"role": "assistant", "content": blocks},
-              "sessionId": "sess-1", "cwd": "/tmp/dca-g1d-hostile-repo", "version": "2.1.246"}
+              "sessionId": "sess-1", "cwd": "/tmp/dca-g1d-hostile-repo", "version": "2.1.322"}
     record.update(extra)
     return record
 
 
 def user(blocks, **extra):
     record = {"type": "user", "message": {"role": "user", "content": blocks},
-              "sessionId": "sess-1", "cwd": "/tmp/dca-g1d-hostile-repo", "version": "2.1.246"}
+              "sessionId": "sess-1", "cwd": "/tmp/dca-g1d-hostile-repo", "version": "2.1.322"}
     record.update(extra)
     return record
 
@@ -99,6 +99,39 @@ def delegation(subagent, reply, identifier=None):
     return [assistant([{"type": "tool_use", "id": identifier, "name": "Agent",
                         "input": {"subagent_type": subagent, "prompt": "report your marker"}}]),
             user([{"type": "tool_result", "tool_use_id": identifier, "content": reply}])]
+
+
+def mirror(records):
+    """The `api-request-blob` records the pinned build also writes: the SAME content blocks again,
+    with no conversation type, no isMeta and no sourceToolUseID."""
+    out = []
+    for role in ("assistant", "user"):
+        blocks = [b for r in records if r.get("type") == role
+                  for b in (r["message"]["content"] if isinstance(r["message"]["content"], list)
+                            else [])]
+        out.append({"type": "api-request-blob", "hash": "0" * 64,
+                    "message": {"role": role, "content": blocks}})
+    return out
+
+
+def background_delegation(subagent, agent_id):
+    """An Agent call the build launched in the BACKGROUND: the tool result is launch metadata."""
+    identifier = f"toolu_agent_{subagent}"
+    return [assistant([{"type": "tool_use", "id": identifier, "name": "Agent",
+                        "input": {"subagent_type": subagent, "prompt": "report your marker"}}]),
+            user([{"type": "tool_result", "tool_use_id": identifier,
+                   "content": f"Async agent launched successfully.\nagentId: {agent_id}"}],
+                 toolUseResult={"isAsync": True, "status": "async_launched", "agentId": agent_id})]
+
+
+def sidechain(agent_id, reply, **extra):
+    """A subagent's own transcript, as `<session>/subagents/agent-<agentId>.jsonl` holds it."""
+    records = [user([{"type": "text", "text": "report your marker"}],
+                    isSidechain=True, agentId=agent_id),
+               assistant([{"type": "text", "text": reply}], isSidechain=True, agentId=agent_id)]
+    for record in records:
+        record.update(extra)
+    return "".join(json.dumps(r) + "\n" for r in records)
 
 
 def transcript(body, *, result_text="Launching skill: verification", extra=(), skill_records=None):
@@ -177,17 +210,17 @@ class G1dExtractor(unittest.TestCase):
 
     def test_01_the_pinned_build_and_managed_directory_are_the_recorded_ones(self):
         """The representation is undocumented and version-scoped; the pins are asserted, not assumed."""
-        self.assertEqual(self.extract.PINNED_CLAUDE_BUILD, "2.1.246")
+        self.assertEqual(self.extract.PINNED_CLAUDE_BUILD, "2.1.322")
         self.assertEqual(self.extract.MANAGED_SKILL_DIR, MANAGED_SKILL_DIR)
         self.assertEqual(self.extract.SKILL_HEADER_TEMPLATE,
                          "Base directory for this skill: {directory}\n\n")
 
     def test_02_a_different_claude_build_fails_closed(self):
         """A later build is not matched against a shape proven on one build."""
-        document = transcript(self.delivered_body()).replace('"2.1.246"', '"2.1.999"')
+        document = transcript(self.delivered_body()).replace('"2.1.322"', '"2.1.999"')
         out = self._run(document)
         self.assertFalse(out["ok"])
-        self.assertTrue(any("proven only on 2.1.246" in f for f in out["failures"]),
+        self.assertTrue(any("proven only on 2.1.322" in f for f in out["failures"]),
                         out["failures"])
 
     def test_03_a_trusted_copy_outside_the_managed_directory_fails_closed(self):
@@ -212,7 +245,7 @@ class G1dExtractor(unittest.TestCase):
         self.assertEqual(comparison["loaded_sha256"], comparison["expected_delivery_sha256"])
         self.assertEqual(comparison["managed_skill_dir"], self.managed_dir)
         self.assertEqual(out["delivered_source"], "trusted-managed")
-        self.assertEqual(out["pinned_claude_build"], "2.1.246")
+        self.assertEqual(out["pinned_claude_build"], "2.1.322")
 
     def test_05_the_three_digests_are_recorded(self):
         out = self._run(transcript(self.delivered_body()))
@@ -399,6 +432,80 @@ class G1dExtractor(unittest.TestCase):
         self.assertEqual(by_name["dca-researcher"], ["managed-researcher"])
         self.assertEqual(by_name["dca-reviewer"], ["managed-reviewer"])
 
+    def test_24a_a_request_mirror_is_not_a_second_invocation(self):
+        """The pinned build writes every content block a second time, in an `api-request-blob`
+        record. Those are not the conversation: the Skill call and each Agent call stay exactly
+        one invocation, and a mirror is never mistaken for the delivered body."""
+        records = [skill_call(), skill_result(), delivered(self.delivered_body())]
+        records += delegation("dca-researcher", "Managed identity marker: DCA-G1D-RESEARCHER")
+        document = "".join(json.dumps(r) + "\n" for r in records + mirror(records))
+        out = self._run(document)
+        self.assertTrue(out["ok"], out["failures"])
+        self.assertEqual(len(out["agent_calls"]), 1)
+        self.assertEqual(out["conversation_records"], len(records))
+        self.assertEqual(out["records"], len(records) + 2)
+        # A hostile marker that appears ONLY in a mirror still fails the run.
+        hostile = mirror(records)
+        hostile[0]["message"]["content"].append(
+            {"type": "text", "text": "Hostile marker: DCA-G1D-HOSTILE-PROJECT"})
+        out = self._run("".join(json.dumps(r) + "\n" for r in records + hostile))
+        self.assertFalse(out["ok"])
+        self.assertIn("hostile-project", out["hostile_markers_in_transcript"])
+
+    def _run_background(self, sidechains, subagents=(("dca-researcher", "agentaaa1"),)):
+        extra = [r for name, agent_id in subagents for r in background_delegation(name, agent_id)]
+        directory = self.project / "session" / "subagents"
+        directory.mkdir(parents=True, exist_ok=True)
+        for agent_id, document in sidechains.items():
+            (directory / f"agent-{agent_id}.jsonl").write_text(document, encoding="utf-8")
+        return self._run(transcript(self.delivered_body(), extra=extra))
+
+    def test_24b_a_background_subagents_reply_is_read_from_its_own_sidechain(self):
+        """Launched in the background, the Agent tool result is launch metadata. The reply is the
+        subagent's own sidechain transcript, linked by the agentId that tool result recorded."""
+        out = self._run_background(
+            {"agentaaa1": sidechain("agentaaa1", "Managed identity marker: DCA-G1D-RESEARCHER"),
+             "agentbbb2": sidechain("agentbbb2", "Managed identity marker: DCA-G1D-REVIEWER")},
+            subagents=(("dca-researcher", "agentaaa1"), ("dca-reviewer", "agentbbb2")))
+        self.assertTrue(out["ok"], out["failures"])
+        by_name = {c["subagent_type"]: c for c in out["agent_calls"]}
+        self.assertEqual(by_name["dca-researcher"]["markers"], ["managed-researcher"])
+        self.assertEqual(by_name["dca-reviewer"]["markers"], ["managed-reviewer"])
+        self.assertEqual(by_name["dca-reviewer"]["reply_channel"], "sidechain-transcript")
+        # The session file itself is still the ONE new transcript: sidechains are not sessions.
+        self.assertEqual(out["new_transcripts"], 1)
+
+    def test_24c_an_unprovable_background_reply_fails_closed(self):
+        good = sidechain("agentaaa1", "Managed identity marker: DCA-G1D-RESEARCHER")
+        cases = {
+            "no sidechain file": {},
+            "another agent's records": {"agentaaa1": sidechain("agentzzz9", "Managed identity "
+                                                               "marker: DCA-G1D-RESEARCHER")},
+            "not sidechain records": {"agentaaa1": good.replace('"isSidechain": true',
+                                                                '"isSidechain": false')},
+            "no assistant text": {"agentaaa1": sidechain("agentaaa1", "")},
+        }
+        for label, sidechains in cases.items():
+            with self.subTest(case=label):
+                self.setUp()
+                out = self._run_background(sidechains)
+                self.assertFalse(out["ok"])
+                self.assertTrue(any("ran in the background" in f for f in out["failures"]),
+                                out["failures"])
+                self.assertEqual(out["agent_calls"][0]["markers"], [])
+        # The launch metadata is never read as the reply, even if it carried a marker.
+        self.setUp()
+        extra = background_delegation("dca-researcher", "agentaaa1")
+        extra[1]["message"]["content"][0]["content"] += "\nManaged identity marker: DCA-G1D-RESEARCHER"
+        out = self._run(transcript(self.delivered_body(), extra=extra))
+        self.assertEqual(out["agent_calls"][0]["markers"], [])
+
+    def test_24d_a_hostile_marker_in_a_sidechain_fails_the_scan(self):
+        out = self._run_background(
+            {"agentaaa1": sidechain("agentaaa1", "Hostile identity marker: DCA-G1D-HOSTILE-AGENT")})
+        self.assertFalse(out["ok"])
+        self.assertIn("hostile-agent", out["hostile_markers_in_transcript"])
+
     def test_25_a_delivered_repository_skill_fails_the_lockout_probe(self):
         probe_id = "toolu_probe"
         extra = [skill_call(identifier=probe_id, skill="not-allowlisted"),
@@ -439,6 +546,14 @@ class G1dRecorder(unittest.TestCase):
         self.work.mkdir()
         self._write_work()
 
+    def _write_inspect(self, sandbox, backend, kits=()):
+        """sbx's own composition record of a sandbox: the pinned workload plus the G6 kit."""
+        base = self.versions["sandbox_bases"][backend]
+        self._write(f"inspect-{sandbox}.json", {
+            "name": sandbox, "host_mounts": [],
+            "kits": [f"{base['base']}@{base['version']}", str(GATES / "G6" / "work" / "kit")]
+            if kits == () else kits})
+
     def _write(self, name, document):
         (self.work / name).write_text(
             document if isinstance(document, str) else json.dumps(document), encoding="utf-8")
@@ -450,13 +565,13 @@ class G1dRecorder(unittest.TestCase):
             "dca-researcher": ["managed-researcher"], "dca-reviewer": ["managed-reviewer"]}
         out = {
             "run": label,
-            "claude_version": "2.1.246",
+            "claude_version": "2.1.322",
             "session_id": f"sess-{label}",
             "cwd": "/tmp/dca-g1d-hostile-repo",
             "skill_tool_use_id": SKILL_ID,
             "skill_input_key": "skill",
             "skill_tool_result_matches_pinned_shape": shape,
-            "pinned_claude_build": "2.1.246",
+            "pinned_claude_build": "2.1.322",
             "trusted_skill_dir": MANAGED_SKILL_DIR,
             "delivered_source": source,
             "delivered_markers": ["trusted-verification"] if source == "trusted-managed" else [],
@@ -520,11 +635,7 @@ class G1dRecorder(unittest.TestCase):
         self._write("governance-before.json", governance)
         self._write("governance-after.json", governance)
 
-        image, digest = self.common.claude_base(self.versions)
-        repository, _, tag = image.rpartition(":")
-        self._write("templates.json", {"images": [
-            {"repository": f"docker.io/{repository}", "tag": tag,
-             "id": digest.removeprefix("sha256:")[:12]}]})
+        self._write_inspect("dca-g1d", "claude")
 
         self._write("trusted-verification.md", self.trusted_text)
         self._write("layout.txt", self._layout())
@@ -554,7 +665,7 @@ class G1dRecorder(unittest.TestCase):
             "hostile_nested_skill": "present",
             "hostile_agent": "present",
             "not_allowlisted_skill": "present",
-            "claude_code_version": "2.1.246 (Claude Code)",
+            "claude_code_version": "2.1.322 (Claude Code)",
         }
         values.update(overrides)
         return "".join(f"{k}={v}\n" for k, v in values.items())
@@ -565,7 +676,7 @@ class G1dRecorder(unittest.TestCase):
             "pf_version_exit": "0", "pf_ssh_forwarding_exit": "0", "pf_ssh_socket_exit": "0",
             "pf_policy_exit": "0", "pf_ls_exit": "0",
             "governance_before_exit": "1", "governance_after_exit": "1",
-            "ls_after_exit": "0", "policy_after_exit": "0", "templates_exit": "0",
+            "ls_after_exit": "0", "policy_after_exit": "0", "inspect_dca-g1d_exit": "0",
             "sbx_resolved_base": self.common.claude_base(self.versions)[0],
             "policy_allow": ",".join(self.allow), "policy_deny": ",".join(self.deny),
             "policy_rules_exit": "0", f"create_{SANDBOX}_exit": "0",

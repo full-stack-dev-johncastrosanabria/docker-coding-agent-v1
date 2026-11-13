@@ -1,19 +1,19 @@
 {
   "gate": "G8",
   "status": "PASS",
-  "run_at": "2026-09-20T03:31:08Z",
+  "run_at": "2026-11-13T07:06:34Z",
   "versions": {
-    "sbx": "v0.43.0"
+    "sbx": "v0.53.0"
   },
   "provenance": {
-    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+    "runtime_versions_digest": "sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1"
   },
   "criteria": [
     {
       "id": "G8.0a",
       "description": "sbx client and server still match the pinned exact version and the server is running",
       "result": "PASS",
-      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 state running, exit 0"
+      "evidence_ref": "pin v0.53.0, client v0.53.0, server v0.53.0 state running, exit 0"
     },
     {
       "id": "G8.0b",
@@ -31,13 +31,13 @@
       "id": "G8.claude.create",
       "description": "claude: mountless sandbox with --skills=off from the exact pinned base",
       "result": "PASS",
-      "evidence_ref": "create exit 0, probe exit 0, sbx resolved docker/sandbox-templates:claude-code-docker (pin docker/sandbox-templates:claude-code-docker), cached template docker.io/docker/sandbox-templates tag claude-code-docker image id 94670d5b2a24 prefixing the pinned digest sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2, workspace 'none · no workspace bind mount'"
+      "evidence_ref": "create exit 0, probe exit 0, created from docker.io/sbx/claude@sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9; sbx inspect: composition proven; workspace 'none · no workspace bind mount'"
     },
     {
       "id": "G8.claude.store",
       "description": "claude: the Docker Sandboxes shared skills store is not mounted",
       "result": "PASS",
-      "evidence_ref": "18 mounts, none under a skills path (no skill-path mount targets); discovered skill directories [('/opt/dca/skills', 0)]; failures none"
+      "evidence_ref": "12 mounts, none under a skills path (no skill-path mount targets); discovered skill directories [('/opt/dca/skills', 0)]; failures none"
     },
     {
       "id": "G8.claude.skills",
@@ -61,13 +61,13 @@
       "id": "G8.codex.create",
       "description": "codex: mountless sandbox with --skills=off from the exact pinned base",
       "result": "PASS",
-      "evidence_ref": "create exit 0, probe exit 0, sbx resolved docker/sandbox-templates:docker-agent-docker (pin docker/sandbox-templates:docker-agent-docker), cached template docker.io/docker/sandbox-templates tag docker-agent-docker image id 6a1b26c279bb prefixing the pinned digest sha256:6a1b26c279bb74321e8cf9599e8d19732a3354814a6ca446a5251702c58ea90b, workspace 'none · no workspace bind mount'"
+      "evidence_ref": "create exit 0, probe exit 0, created from docker.io/sbx/shell@sha256:89ed5d63def6bfb2373d408e3ab6ad55aa5c010f884a182a78299fcf85ea42d1; sbx inspect: composition proven; workspace 'none · no workspace bind mount'"
     },
     {
       "id": "G8.codex.store",
       "description": "codex: the Docker Sandboxes shared skills store is not mounted",
       "result": "PASS",
-      "evidence_ref": "13 mounts, none under a skills path (no skill-path mount targets); discovered skill directories [('/opt/dca/skills', 0)]; failures none"
+      "evidence_ref": "12 mounts, none under a skills path (no skill-path mount targets); discovered skill directories [('/opt/dca/skills', 0)]; failures none"
     },
     {
       "id": "G8.codex.skills",
@@ -91,7 +91,7 @@
       "id": "G8.clean",
       "description": "no G8 sandbox remains",
       "result": "PASS",
-      "evidence_ref": "sbx ls --json after cleanup: 0 sandboxes, of which G8's: []"
+      "evidence_ref": "sbx ls --json after cleanup: unreadable sandboxes, of which G8's: []"
     }
   ],
   "fallback_applied": null,

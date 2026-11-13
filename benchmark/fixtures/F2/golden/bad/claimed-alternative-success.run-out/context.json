@@ -1,0 +1,9 @@
+{
+  "classification": {
+    "value": "direct",
+    "reason": "one rule-table entry"
+  },
+  "verification_approach": {
+    "type": "alternative"
+  }
+}

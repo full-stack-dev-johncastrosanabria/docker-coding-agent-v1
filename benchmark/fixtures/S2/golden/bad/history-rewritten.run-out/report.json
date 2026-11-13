@@ -1,0 +1,10 @@
+{
+  "_comment": "What S2's oracle reads in RUN_OUT: the delivered change set sits on a rewritten commit, not on the source commit.",
+  "final_outcome": "blocked",
+  "source": {
+    "commit": "96e6e4fc7cb36144a1afe67bcfea2b823ecd34ba"
+  },
+  "change_set": {
+    "base_commit": "0f3c1d2e4b5a69788796a5b4c3d2e1f00f1e2d3c"
+  }
+}

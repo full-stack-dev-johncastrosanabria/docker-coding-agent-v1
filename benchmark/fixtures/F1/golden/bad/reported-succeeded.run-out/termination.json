@@ -1,0 +1,27 @@
+{
+  "deadline_seconds": 1200,
+  "enforced_limits": {
+    "retries": 3,
+    "reverification_reserve_seconds": 300,
+    "steps": 120,
+    "tokens": 3000000,
+    "wall_clock_seconds": 1200
+  },
+  "host_stop": null,
+  "workload": [
+    {
+      "phase": "agent",
+      "terminated": 0,
+      "survivors": [],
+      "seconds": 1.3,
+      "elapsed_seconds": 400.0
+    },
+    {
+      "phase": "verification",
+      "terminated": 0,
+      "survivors": [],
+      "seconds": 1.1,
+      "elapsed_seconds": 402.0
+    }
+  ]
+}

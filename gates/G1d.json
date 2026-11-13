@@ -1,19 +1,19 @@
 {
   "gate": "G1d",
   "status": "PASS",
-  "run_at": "2026-09-21T01:17:22Z",
+  "run_at": "2026-11-13T07:48:54Z",
   "versions": {
-    "sbx": "v0.43.0"
+    "sbx": "v0.53.0"
   },
   "provenance": {
-    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+    "runtime_versions_digest": "sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1"
   },
   "criteria": [
     {
       "id": "G1d.0a",
       "description": "sbx client and server still match the pinned exact version and the server is running",
       "result": "PASS",
-      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 running"
+      "evidence_ref": "pin v0.53.0, client v0.53.0, server v0.53.0 running"
     },
     {
       "id": "G1d.0b",
@@ -41,21 +41,21 @@
     },
     {
       "id": "G1d.base",
-      "description": "every sandbox in this gate came from the exact pinned sandbox_bases.claude base: the reference sbx resolved, the cached template's repository, tag and image id, and the pinned digest all agree; no base was discovered or substituted",
+      "description": "every sandbox in this gate was created from the exact pinned sandbox_bases.claude workload, by digest, and sbx's own inspect record shows that composition and nothing else; no base was discovered or substituted",
       "result": "PASS",
-      "evidence_ref": "pinned docker/sandbox-templates:claude-code-docker sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2; sbx resolved docker/sandbox-templates:claude-code-docker; cached template docker.io/docker/sandbox-templates:claude-code-docker id 94670d5b2a24"
+      "evidence_ref": "pinned docker.io/sbx/claude@sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9; 1 sandbox record(s); every composition matches"
     },
     {
       "id": "G1d.policy",
       "description": "every sandbox ran under the accepted G4 claude/trusted network policy: the allow set is the one G4 proved, and the built-in kit's non-permitted hosts are neutralized by explicit sandbox-scoped denies",
       "result": "PASS",
-      "evidence_ref": "12 allow (api.anthropic.com, registry.npmjs.org, pypi.org, files.pythonhosted.org, proxy.golang.org, crates.io, static.crates.io, github.com, codeload.github.com, objects.githubusercontent.com, code.claude.com, docs.claude.com); 5 explicit deny (bridge.claudeusercontent.com, claude.com, downloads.claude.ai, mcp-proxy.anthropic.com, platform.claude.com)"
+      "evidence_ref": "12 allow (api.anthropic.com, registry.npmjs.org, pypi.org, files.pythonhosted.org, proxy.golang.org, crates.io, static.crates.io, github.com, codeload.github.com, objects.githubusercontent.com, code.claude.com, docs.claude.com); 7 explicit deny (bridge.claudeusercontent.com, claude.com, deb.debian.org:80, dhi.io:80, downloads.claude.ai, mcp-proxy.anthropic.com, platform.claude.com)"
     },
     {
       "id": "G1d.fixture",
       "description": "the managed assets are root-owned under /etc/claude-code/.claude, the discovery path Claude Code reads managed subagents and skills from, the workload cannot modify them, and every hostile copy the fixture is supposed to ship is actually present - so a clean result means the shadowing attempt failed, not that it was never made",
       "result": "PASS",
-      "evidence_ref": "managed dir root:root:755, managed assets root:root:755, workload write access no; trusted skill, both managed agents and managed memory installed; hostile project, nested, agent and non-allowlisted copies all present; in-VM 2.1.246 (Claude Code)"
+      "evidence_ref": "managed dir root:root:755, managed assets root:root:755, workload write access no; trusted skill, both managed agents and managed memory installed; hostile project, nested, agent and non-allowlisted copies all present; in-VM 2.1.322 (Claude Code)"
     },
     {
       "id": "G1d.runs",
@@ -67,7 +67,7 @@
       "id": "G1d.evidence-channel",
       "description": "what Claude actually loaded is read from Claude Code's own session transcript, from the single metadata record linked to the exact Skill invocation by sourceToolUseID, and the pinned transcript shape held in every run on the in-VM Claude Code build - the extraction runs in the VM and emits only identity fields, digests and marker names, never transcript content",
       "result": "PASS",
-      "evidence_ref": "precedence-root: 2.1.246 session d342dd5e-c843-4841-80e3-6bfbde97edb5 cwd /tmp/dca-g1d-hostile-repo Skill tool_use toolu_01Boz9yVEXm9KN6x7xXtbP5r; precedence-nested: 2.1.246 session 6295ebaa-3ad8-47bf-91f3-7232df772c29 cwd /tmp/dca-g1d-hostile-repo/pkg/sub Skill tool_use toolu_01RrX3yVoQT82UZrE3TNhUNV; lockout-root: 2.1.246 session 470a78f3-0092-4b80-b388-97b61c164cdb cwd /tmp/dca-g1d-hostile-repo Skill tool_use toolu_01McxQpoUMHNu4ArWt2WiUr8; lockout-nested: 2.1.246 session 3f742ebb-89cb-4e23-923d-2a0d390cdc41 cwd /tmp/dca-g1d-hostile-repo/pkg/sub Skill tool_use toolu_01XdCsQfXki4k46eXMfmGR4c"
+      "evidence_ref": "precedence-root: 2.1.322 session 07700c6d-5a24-4157-91b7-be2bb1d8659b cwd /tmp/dca-g1d-hostile-repo Skill tool_use toolu_01FCHVtsFSWicpL74gcZuTUy; precedence-nested: 2.1.322 session c533a532-3db0-4f0f-af8c-eadf0c2a0970 cwd /tmp/dca-g1d-hostile-repo/pkg/sub Skill tool_use toolu_01JrjgzKiEgoZkgTnuSkn6Lg; lockout-root: 2.1.322 session da51f374-1030-444d-993a-04cbdc31f89e cwd /tmp/dca-g1d-hostile-repo Skill tool_use toolu_015nrPcsxhfGzfic2fnkSz5h; lockout-nested: 2.1.322 session df6ee219-4272-41fd-9780-54f5fe9c926c cwd /tmp/dca-g1d-hostile-repo/pkg/sub Skill tool_use toolu_01LPE4QTyCG8Z2p9xJfKZFaR"
     },
     {
       "id": "G1d.skill-precedence",
@@ -127,9 +127,9 @@
   "observed_precedence": {
     "precedence-root": {
       "extraction_ok": true,
-      "claude_code_version": "2.1.246",
+      "claude_code_version": "2.1.322",
       "cwd": "/tmp/dca-g1d-hostile-repo",
-      "skill_tool_use_id": "toolu_01Boz9yVEXm9KN6x7xXtbP5r",
+      "skill_tool_use_id": "toolu_01FCHVtsFSWicpL74gcZuTUy",
       "verification_source": "trusted-managed",
       "delivered_sha256": "e7cbcc75e2545ee1458bd01dee364b0a7c6f50bdfc15ae3cf0cb61c7aad95194",
       "trusted_file_sha256": "a8629cfc8bae3f368b6ffe1e4418e93f37e44ad4ce0b01aa7a24958ededb36d3",
@@ -150,9 +150,9 @@
     },
     "precedence-nested": {
       "extraction_ok": true,
-      "claude_code_version": "2.1.246",
+      "claude_code_version": "2.1.322",
       "cwd": "/tmp/dca-g1d-hostile-repo/pkg/sub",
-      "skill_tool_use_id": "toolu_01RrX3yVoQT82UZrE3TNhUNV",
+      "skill_tool_use_id": "toolu_01JrjgzKiEgoZkgTnuSkn6Lg",
       "verification_source": "trusted-managed",
       "delivered_sha256": "e7cbcc75e2545ee1458bd01dee364b0a7c6f50bdfc15ae3cf0cb61c7aad95194",
       "trusted_file_sha256": "a8629cfc8bae3f368b6ffe1e4418e93f37e44ad4ce0b01aa7a24958ededb36d3",
@@ -173,9 +173,9 @@
     },
     "lockout-root": {
       "extraction_ok": true,
-      "claude_code_version": "2.1.246",
+      "claude_code_version": "2.1.322",
       "cwd": "/tmp/dca-g1d-hostile-repo",
-      "skill_tool_use_id": "toolu_01McxQpoUMHNu4ArWt2WiUr8",
+      "skill_tool_use_id": "toolu_015nrPcsxhfGzfic2fnkSz5h",
       "verification_source": "trusted-managed",
       "delivered_sha256": "e7cbcc75e2545ee1458bd01dee364b0a7c6f50bdfc15ae3cf0cb61c7aad95194",
       "trusted_file_sha256": "a8629cfc8bae3f368b6ffe1e4418e93f37e44ad4ce0b01aa7a24958ededb36d3",
@@ -201,9 +201,9 @@
     },
     "lockout-nested": {
       "extraction_ok": true,
-      "claude_code_version": "2.1.246",
+      "claude_code_version": "2.1.322",
       "cwd": "/tmp/dca-g1d-hostile-repo/pkg/sub",
-      "skill_tool_use_id": "toolu_01XdCsQfXki4k46eXMfmGR4c",
+      "skill_tool_use_id": "toolu_01LPE4QTyCG8Z2p9xJfKZFaR",
       "verification_source": "trusted-managed",
       "delivered_sha256": "e7cbcc75e2545ee1458bd01dee364b0a7c6f50bdfc15ae3cf0cb61c7aad95194",
       "trusted_file_sha256": "a8629cfc8bae3f368b6ffe1e4418e93f37e44ad4ce0b01aa7a24958ededb36d3",

@@ -36,6 +36,7 @@ because the host is the authority on direct/planned semantics.
 """
 
 import collections
+import fnmatch
 import json
 import os
 import re
@@ -126,6 +127,12 @@ def same_path(cited, observed):
     right = str(observed or "").strip().replace(chr(92), "/")
     if not left or not right:
         return False
+    if any(char in right for char in "*?["):
+        # A glob the shell expanded: `cat tests/*.py` printed every file it matches. Compared
+        # segment by segment, because `*` never crosses a directory in sh.
+        want, have = left.split("/"), right.split("/")
+        return len(have) >= len(want) and all(
+            fnmatch.fnmatchcase(w, h) for w, h in zip(want, have[-len(want):]))
     if "/" not in left:
         return os.path.basename(right) == left
     return right == left or right.endswith("/" + left)
@@ -477,6 +484,7 @@ GATE_MARKERS = ("DCA_DENY", "DCA_APPROVAL_REQUIRED", "DCA_LIMIT")
 GATE_HOOK_PATH = "[/opt/dca/bin/dca-gate]:"
 CLAUDE_DENIAL_PREFIX = "PreToolUse:"
 CLAUDE_DENIAL_INFIX = " hook error:"
+CLAUDE_ERROR_WRAPPER = "<tool_use_error>"
 
 
 def gate_refused_response(response, tool_name):
@@ -496,6 +504,9 @@ def gate_refused_response(response, tool_name):
     if not isinstance(response, str) or not any(m in response for m in GATE_MARKERS):
         return False
     text = response.strip()
+    # Claude Code 2.1.323 wraps the hook error; only a wrapper at the very start is removed.
+    if text.startswith(CLAUDE_ERROR_WRAPPER):
+        text = text[len(CLAUDE_ERROR_WRAPPER):].lstrip()
     if not text.startswith(CLAUDE_DENIAL_PREFIX) or CLAUDE_DENIAL_INFIX not in text:
         return False
     if GATE_HOOK_PATH not in text:
@@ -519,6 +530,22 @@ def _normalize_command(text):
     return " ".join(text.split())
 
 
+#: `2>&1` only merges stderr into what is shown, so it hides nothing.
+_STDERR_MERGE = re.compile(r"\s*2>&1")
+
+
+def _output_filtered(haystack, needle):
+    """True when the check's stdout is piped or redirected, so the response is not its output.
+
+    Only the shell segment that runs the check counts: `; echo done` adds output after it, while
+    `| grep ...` or `> file` decides what of the check's own output - failure markers included -
+    the response ever shows.
+    """
+    tail = haystack[haystack.find(needle) + len(needle):]
+    segment = re.split(r";|&&|\|\|", _STDERR_MERGE.sub("", tail), maxsplit=1)[0]
+    return "|" in segment or ">" in segment
+
+
 def _matches_check(record, commands):
     """Which declared verification command, if any, this tool call executed."""
     haystack = _normalize_command(record.command) if record.command else None
@@ -529,6 +556,23 @@ def _matches_check(record, commands):
         if needle and needle in haystack:
             return needle
     return None
+
+
+# --- models ---------------------------------------------------------------------------------------
+
+#: A model id as runtimes print it (`chatgpt/gpt-6.1-sol`, `claude-opus-5-5`). Anything else - a
+#: harness name or VM text shaped like an id - is not recorded.
+MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,79}$")
+#: Harnesses report their own name where a model would go; the real id comes from elsewhere.
+HARNESS_NAMES = frozenset({"claude-code"})
+
+
+def note_model(models, value):
+    """Add `value` to the sorted distinct list `models` when it is a plausible model id."""
+    if isinstance(value, str) and MODEL_ID.match(value) and value not in HARNESS_NAMES \
+            and value not in models:
+        models.append(value)
+        models.sort()
 
 
 # --- the analysis -----------------------------------------------------------------------------
@@ -560,6 +604,7 @@ class RunAnalysis:
         self.context_record_at = None
         self.plan_at = None
         self.stop_reason = None
+        self.models = []
 
     @property
     def ok(self):
@@ -759,6 +804,8 @@ def analyze(text, exit_status=None, host_stop=None, sandbox_created=True,
         result.event_types[kind] = result.event_types.get(kind, 0) + 1
         typed.append(event)
 
+        if kind == "agent_info":
+            note_model(result.models, event.get("model"))
         if kind == PARTIAL_EVENT:
             streamed.feed(event)
         if kind in ATTEMPT_EVENTS:
@@ -895,6 +942,30 @@ def _account_ordering(result, scratch_dir):
             result.plan_at = record.order
 
 
+#: How a shell joins the repair to the check that follows it in the same call.
+_JOINED = re.compile(r"(?:&&|\|\||;|\n)\s*$")
+
+
+def _repairs_before_check(command, needle):
+    """True when the same call changed the workspace BEFORE running the check.
+
+    `cat > x <<EOF ... EOF && python3 -m unittest` is a repair and a re-verification in one call.
+    Only a prefix joined to the check by `&&`, `||`, `;` or a newline counts, and only one the host
+    cannot prove is inspection or a scratch-only write: `cd /workspace && ...` and an environment
+    prefix such as `PYTHONPATH=. ...` are not repairs.
+    """
+    if not command:
+        return False
+    found = re.search(r"\s+".join(map(re.escape, needle.split())), command)
+    if found is None:
+        return False
+    prefix = command[:found.start()]
+    if not _JOINED.search(prefix):
+        return False
+    prefix = _JOINED.sub("", prefix).strip()
+    return bool(prefix) and shellparse.command_effect(prefix)[0] == "mutate"
+
+
 def _account_retries(result, verification_commands):
     """Retries = repair/re-verify cycles (data-model.md "counters").
 
@@ -911,6 +982,9 @@ def _account_retries(result, verification_commands):
         if not record.dispatched:
             continue
         matched = _matches_check(record, commands)
+        if matched is not None and _repairs_before_check(record.command, matched):
+            for command in list(mutated_since):
+                mutated_since[command] = True
         if matched is None:
             # Only a change that is NOT itself a declared check can be the "repair" half of a
             # cycle. Running the check counts as a workspace mutation elsewhere (a build can
@@ -924,7 +998,10 @@ def _account_retries(result, verification_commands):
         previous = last_run.get(matched)
         if previous is not None and mutated_since.get(matched) and previous[1] != "pass":
             result.retries += 1
-        last_run[matched] = (record.order, response_outcome(record.response))
+        outcome = response_outcome(record.response)
+        if outcome == "pass" and _output_filtered(_normalize_command(record.command), matched):
+            outcome = "unknown"     # a filtered response cannot prove the check passed
+        last_run[matched] = (record.order, outcome)
         mutated_since[matched] = False
 
 

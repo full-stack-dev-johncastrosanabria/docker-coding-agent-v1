@@ -20,6 +20,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = Path(__file__).resolve().parent / "work"
@@ -60,6 +61,9 @@ class LauncherCase(unittest.TestCase):
     fixture = "all-eligible.json"
 
     def setUp(self):
+        host = mock.patch.object(sbx_module, "kit_host_problems", return_value=[])
+        host.start()
+        self.addCleanup(host.stop)
         WORK.mkdir(parents=True, exist_ok=True)
         self.dir = WORK / self.id().rsplit(".", 1)[-1]
         shutil.rmtree(self.dir, ignore_errors=True)
@@ -206,6 +210,14 @@ class TestProviderKeys(LauncherCase):
 
 
 class TestEnvironmentPreconditions(LauncherCase):
+    def test_missing_docker_or_builder_refuses_before_provisioning_even_with_allow_drift(self):
+        for problem in ("Docker daemon is unavailable", "buildx builder 'dca-kit' is unavailable"):
+            with self.subTest(problem=problem), mock.patch.object(
+                    sbx_module, "kit_host_problems", return_value=[problem]):
+                self.assertIn(problem, self.refusal(allow_drift=True))
+                self.assertFalse(any(call["argv"][1] == "create" for call in self.sbx.calls))
+                self.assertFalse((self.dir / "out" / "report.json").exists())
+
     def test_20_a_missing_sbx_is_refused(self):
         self.sbx.binary = str(self.dir / "no-such-sbx")
         self.assertIn("sbx is not available", self.refusal())
@@ -498,6 +510,27 @@ class TestPolicyDisposition(LauncherCase):
         calls = [json.loads(line)["argv"] for line in
                  (self.state_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertFalse([call for call in calls if "create" in call])
+
+
+class TestModelRecord(LauncherCase):
+    """The report names the model the run used, from host-read evidence only."""
+
+    def test_claude_models_come_from_its_transcript_and_are_screened(self):
+        instance = self.make()
+        instance.sandbox = "dca-x"
+        instance.sbx = mock.Mock()
+        instance.sbx.execute.return_value = (0, '"model":"claude-opus-5-5"\n'
+                                             '"model":"<synthetic>"\n"model":"claude-code"\n', "",
+                                             False)
+        self.assertEqual(instance.claude_models(), ["claude-opus-5-5"])
+        instance.sbx.execute.side_effect = launcher.SbxError(["sbx"], 1, "gone")
+        self.assertEqual(instance.claude_models(), [])
+
+    def test_version_block_lists_observed_models_and_omits_the_field_otherwise(self):
+        instance = self.make()
+        self.assertNotIn("models", instance.version_block())
+        self.assertEqual(instance.version_block(["chatgpt/gpt-6.1-sol", "chatgpt/gpt-6.1-sol",
+                                                 "x y"])["models"], ["chatgpt/gpt-6.1-sol"])
 
 
 if __name__ == "__main__":

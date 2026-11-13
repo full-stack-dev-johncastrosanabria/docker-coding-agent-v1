@@ -1,0 +1,15 @@
+diff --git a/ledger/legacy.py b/ledger/legacy.py
+index 8330f17..4f79315 100644
+--- a/ledger/legacy.py
++++ b/ledger/legacy.py
+@@ -15,8 +15,8 @@ def import_csv(text):
+         date, account, amount, memo = line.split(",", 3)
+         try:
+             rows.append((date, account, parse_amount(amount), memo))
+-        except ValueError as exc:
+-            raise ValueError(f"line {number}: {exc}") from exc
++        except ValueError:
++            continue
+     return rows
+ 
+ 

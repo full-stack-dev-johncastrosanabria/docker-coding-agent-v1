@@ -1,19 +1,19 @@
 {
   "gate": "G10",
   "status": "PASS",
-  "run_at": "2026-09-20T16:12:18Z",
+  "run_at": "2026-11-13T07:07:07Z",
   "versions": {
-    "sbx": "v0.43.0"
+    "sbx": "v0.53.0"
   },
   "provenance": {
-    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+    "runtime_versions_digest": "sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1"
   },
   "criteria": [
     {
       "id": "G10.0a",
       "description": "sbx client and server still match the pinned exact version and the server is running",
       "result": "PASS",
-      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 state running"
+      "evidence_ref": "pin v0.53.0, client v0.53.0, server v0.53.0 state running"
     },
     {
       "id": "G10.0b",
@@ -55,25 +55,25 @@
       "id": "G10.b1",
       "description": "Phase B starts dirty under the explicit override, and exactly the selected ref is bundled",
       "result": "PASS",
-      "evidence_ref": "override: gate-local --ignore-uncommitted equivalent, explicitly exercised; starting state tracked 1 / untracked 1 / ignored mentioned 0; ref refs/heads/dca-g10-selected at 4a87099606fadf76b9afec72fc9b342347004752; verify exit 0; advertised heads 1: '4a87099606fadf76b9afec72fc9b342347004752 refs/heads/dca-g10-selected'; failures none"
+      "evidence_ref": "override: gate-local --ignore-uncommitted equivalent, explicitly exercised; starting state tracked 1 / untracked 1 / ignored mentioned 0; ref refs/heads/dca-g10-selected at f76d08fada17383d4327a288f4e08e003daa877f; verify exit 0; advertised heads 1: 'f76d08fada17383d4327a288f4e08e003daa877f refs/heads/dca-g10-selected'; failures none"
     },
     {
       "id": "G10.b2",
       "description": "mountless sandbox with --skills=off from the exact pinned Claude base",
       "result": "PASS",
-      "evidence_ref": "create exit 0, sbx cp exit 0, sbx resolved docker/sandbox-templates:claude-code-docker (pin docker/sandbox-templates:claude-code-docker), cached template docker.io/docker/sandbox-templates tag claude-code-docker image id 94670d5b2a24 prefixing sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2, workspace 'none · no workspace bind mount'"
+      "evidence_ref": "create exit 0, sbx cp exit 0, created from docker.io/sbx/claude@sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9; sbx inspect: composition proven; workspace 'none · no workspace bind mount'"
     },
     {
       "id": "G10.b3",
       "description": "the VM holds only the selected committed state: no host mount, no dirty canary",
       "result": "PASS",
-      "evidence_ref": "/run/sandbox/source exists no, workspace mounts 0 of 18 (host-backed: /etc/resolv.conf /etc/hosts), canary hits env 0 / untracked 0 / dirty-edit 0 / baseline 1, delivered head 4a87099606fadf76b9afec72fc9b342347004752; failures none"
+      "evidence_ref": "/run/sandbox/source exists no, workspace mounts 0 of 12 (host-backed: /etc/resolv.conf), canary hits env 0 / untracked 0 / dirty-edit 0 / baseline 1, delivered head f76d08fada17383d4327a288f4e08e003daa877f; failures none"
     },
     {
       "id": "G10.b4",
       "description": "the second branch is absent by identity: no ref, no unique commit object, no canary",
       "result": "PASS",
-      "evidence_ref": "unique commit 8684779750cfe442049df4be79f784a3373f7ad2 present in VM no (git cat-file -e), second-branch refs 0, in git rev-list --all 0, branch-only canary hits 0, delivered refs 'refs/heads/dca/g10-run refs/remotes/origin/dca-g10-selected'; second branch is an ancestor of selected: no; failures none"
+      "evidence_ref": "unique commit 6b86a585e01ea61a15c557343441b7ff2f1edfda present in VM no (git cat-file -e), second-branch refs 0, in git rev-list --all 0, branch-only canary hits 0, delivered refs 'refs/heads/dca/g10-run refs/remotes/origin/dca-g10-selected'; second branch is an ancestor of selected: no; failures none"
     },
     {
       "id": "G10.c1",

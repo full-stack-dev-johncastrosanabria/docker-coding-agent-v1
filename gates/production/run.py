@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "runtime" / "sandbox" / "kit"))
 
-from dca.sbx import Sbx, SbxError  # noqa: E402
+from dca.sbx import Sbx, SbxError, composition_problem  # noqa: E402
 from dca.launcher import pinned_base_reference  # noqa: E402
 from scripts.verify_checks import EXPECTED_CODEX_TOOLS  # noqa: E402
 import stage  # noqa: E402
@@ -39,7 +39,6 @@ G4 = load_g4()
 WORK = ROOT / "gates" / "production" / "work"
 BACKENDS = ("claude", "codex")
 PROFILES = ("trusted", "untrusted")
-TEMPLATES = {"claude": "claude", "codex": "docker-agent"}
 
 
 def checked(rowset, identifier, condition, detail):
@@ -54,7 +53,8 @@ def read_json(path):
 
 def policy_check(sbx, name, host):
     status, output, error = sbx.run(
-        "policy", "check", "network", host + ":443", "--sandbox", name, "--json",
+        "policy", "check", "network", host if ":" in host else host + ":443",
+        "--sandbox", name, "--json",
         check=False)
     try:
         document = json.loads(output)
@@ -80,33 +80,26 @@ def run_cell(backend, profile, sbx, versions, network):
         if not pinned_reference:
             raise RuntimeError(f"runtime/versions.yaml pins no complete sandbox base for {backend}")
         create_status, output, create_error = sbx.run(
-            "create", TEMPLATES[backend], "--template", pinned_reference,
-            "--name", name, "--skills", "off", "--kit", str(kit), check=False)
+            "create", pinned_reference, "--name", name, "--skills", "off",
+            "--static-mcp", "none", "--kit", str(kit.resolve()),
+            *[arg for host in deny for arg in ("--deny-network", host)], check=False)
         (WORK / f"create-{name}.txt").write_text(
             output + "\nSTDERR:\n" + create_error, encoding="utf-8")
         created = any(item.get("name") == name for item in sbx.list_sandboxes())
         if create_status != 0:
             raise RuntimeError(f"sbx create exited {create_status}; see {WORK / f'create-{name}.txt'}")
-        # Both rows are read off the RESOLVED-IMAGE lines, never the whole output: the reference
-        # also appears in the line that pulls it, so a substring search over stdout would accept a
-        # create that resolved something else.
-        #
-        # TECHNICAL DEBT (T083, deliberately not fixed here): this duplicates
-        # `dca.launcher._resolved_image_lines`, which uses the same regex on the same output. The
-        # two can drift. It was left alone on purpose - this gate harness produced the accepted
-        # foundation evidence, and changing it would invalidate that evidence for a readability
-        # gain. Unify it, behind a public helper, the next time the harness is re-run anyway.
-        observed = [found.strip() for found in re.findall(r"^\s*image\s+(.+)$", output, re.M)]
+        # The composition is proven from sbx's own record of THIS sandbox, through the same
+        # helper the launcher uses, so the two can no longer drift apart.
+        record = sbx.inspect(name)
+        (WORK / f"inspect-{name}.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+        kits = record.get("kits") if isinstance(record, dict) else None
         checked(rows, "base.reference",
-                any(line.split("@", 1)[0] == pinned["base"] for line in observed),
-                {"pin": pinned["base"], "observed": observed})
-        # The DIGEST is proven from sbx's own record of what it resolved FOR THIS SANDBOX, not from
-        # `sbx template ls`: that store reports what the mutable upstream tag maps to now, so it
-        # names a newer digest even on a run that correctly booted the pinned one.
-        checked(rows, "base.digest", pinned_reference in observed,
-                {"pin": pinned_reference, "observed": observed})
+                bool(kits) and kits[0].split("@", 1)[0] == pinned["base"],
+                {"pin": pinned["base"], "observed": kits})
+        problem = composition_problem(record, pinned_reference, kit.resolve())
+        checked(rows, "base.digest", problem is None,
+                {"pin": pinned_reference, "observed": kits, "problem": problem})
         sbx.allow_network(name, allow)
-        sbx.deny_network(name, deny)
         if backend == "codex" and profile == "trusted":
             credential = Path.home() / ".config/cagent/chatgpt-auth.json"
             if not credential.is_file() or credential.stat().st_size == 0:

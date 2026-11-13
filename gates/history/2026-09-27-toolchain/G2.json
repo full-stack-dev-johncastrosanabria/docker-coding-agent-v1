@@ -1,0 +1,125 @@
+{
+  "gate": "G2",
+  "status": "FAIL",
+  "run_at": "2026-09-21T03:22:53Z",
+  "versions": {
+    "sbx": "v0.43.0"
+  },
+  "provenance": {
+    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+  },
+  "criteria": [
+    {
+      "id": "G2.g3",
+      "description": "T022 runs only on a current G3 PASS, and it runs the model G3 proved the backend actually accepts - a stale or failed G3 is never interpreted as permission to proceed",
+      "result": "PASS",
+      "evidence_ref": "G3 is a current PASS and verified the model gpt-5.5"
+    },
+    {
+      "id": "G2.0a",
+      "description": "sbx client and server still match the pinned exact version and the server is running",
+      "result": "PASS",
+      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 running"
+    },
+    {
+      "id": "G2.0b",
+      "description": "the SSH-agent baseline still refuses nothing, and SSH_AUTH_SOCK is removed from every sbx call",
+      "result": "PASS",
+      "evidence_ref": "refusals none, SSH_AUTH_SOCK in the sbx environment: removed"
+    },
+    {
+      "id": "G2.0c",
+      "description": "the global network policy is exactly the G0 bootstrap deny-all rule, which this gate evaluates rather than trusts",
+      "result": "PASS",
+      "evidence_ref": "1 network rule(s): ['default-deny-all']"
+    },
+    {
+      "id": "G2.0d",
+      "description": "no sandbox exists before this gate creates one, so the fingerprint is read from a clean global state and nothing unrelated is running alongside it",
+      "result": "PASS",
+      "evidence_ref": "sbx ls --json: []"
+    },
+    {
+      "id": "G2.0e",
+      "description": "the live global network-policy fingerprint still equals the one the accepted G4 evidence recorded, and that evidence is a current PASS: this gate proves its property under the policy G4 actually verified, not a drifted one",
+      "result": "PASS",
+      "evidence_ref": "network_policy_fingerprint sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697, matching accepted G4"
+    },
+    {
+      "id": "G2.base",
+      "description": "every sandbox in this gate came from the exact pinned sandbox_bases.codex base: the reference sbx resolved, the cached template's repository, tag and image id, and the pinned digest all agree; no base was discovered or substituted",
+      "result": "PASS",
+      "evidence_ref": "pinned docker/sandbox-templates:docker-agent-docker sha256:6a1b26c279bb74321e8cf9599e8d19732a3354814a6ca446a5251702c58ea90b; sbx resolved docker/sandbox-templates:docker-agent-docker; cached template docker.io/docker/sandbox-templates:docker-agent-docker id 6a1b26c279bb"
+    },
+    {
+      "id": "G2.policy",
+      "description": "every sandbox ran under the accepted G4 codex/trusted network policy: the allow set is the one G4 proved, and nothing was added for this gate's convenience",
+      "result": "PASS",
+      "evidence_ref": "12 allow (chatgpt.com, registry.npmjs.org, pypi.org, files.pythonhosted.org, proxy.golang.org, crates.io, static.crates.io, github.com, codeload.github.com, objects.githubusercontent.com, code.claude.com, docs.claude.com); no explicit deny"
+    },
+    {
+      "id": "G2.no-credential-file",
+      "description": "chatgpt-auth.json exists NOWHERE in either sandbox and the config directory is empty, proven by searching the filesystem rather than by trusting that the gate skipped a copy - with the token-file fallback present, a successful run would say nothing about the proxy",
+      "result": "PASS",
+      "evidence_ref": "a filesystem search found 0 copies of chatgpt-auth.json in both sandboxes and both config directories were empty"
+    },
+    {
+      "id": "G2.proxy-execution",
+      "description": "the native chatgpt provider ran the task successfully and non-interactively in TWO CONSECUTIVE completely fresh sandboxes holding no credential file, using the model G3 verified, with only one sandbox live at a time - so host-side proxy-managed OAuth is what authenticated it",
+      "result": "FAIL",
+      "evidence_ref": "a: the native task exited '1'; b: the native task exited '1'"
+    },
+    {
+      "id": "G2.canary",
+      "description": "the scanner demonstrably detects OpenAI OAuth token material: a clearly synthetic, self-labelled canary is planted and found in each sandbox BEFORE the real scan, then removed so it cannot inflate it. Without this control a scanner that matched nothing would look exactly like a perfectly isolated VM",
+      "result": "NOT-RUN",
+      "evidence_ref": "this step did not run, because an earlier one did not hold (fail-closed)"
+    },
+    {
+      "id": "G2.token-material",
+      "description": "no real OpenAI OAuth token material is readable by a PRIVILEGED (sudo) repository workload in either sandbox: the proxy keeps the credential on the host and the VM sees only a sentinel. Findings are recorded as pattern ids, counts and paths - never a value, a partial value, a digest, a header or a cookie",
+      "result": "NOT-RUN",
+      "evidence_ref": "this step did not run, because an earlier one did not hold (fail-closed)"
+    },
+    {
+      "id": "G2.strict",
+      "description": "every native invocation passed --safety strict on the command line rather than relying on a config default; no weaker mode was substituted",
+      "result": "PASS",
+      "evidence_ref": "--safety strict on every invocation"
+    },
+    {
+      "id": "G2.pinned-binary",
+      "description": "the docker-agent that actually ran in both sandboxes is the pinned artifact, reported after its startup self-update attempt",
+      "result": "PASS",
+      "evidence_ref": "both sandboxes ran the pinned docker-agent v1.136.0"
+    },
+    {
+      "id": "G2.fingerprint",
+      "description": "the global network-policy fingerprint is unchanged and the governance status is observed as a typed boolean before and after: this gate added no global rule and changed no global setting",
+      "result": "PASS",
+      "evidence_ref": "fingerprint sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697 -> sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697; governance.active False -> False"
+    },
+    {
+      "id": "G2.clean",
+      "description": "every sandbox this gate created was removed by name, none remains, and the global network baseline is intact afterwards",
+      "result": "PASS",
+      "evidence_ref": "removals [('dca-g2-a', '0'), ('dca-g2-b', '0')], remaining [], global network rules after: ['default-deny-all']"
+    }
+  ],
+  "codex_backend": {
+    "provider": "chatgpt",
+    "selected_model": "gpt-5.5",
+    "model_fallback_applied": false,
+    "model_selection_reason": "not selected here: G2 runs the model G3 verified the backend accepts",
+    "safety": "strict",
+    "token_file_fallback_proven": true,
+    "credential_mechanism": "token-file-trusted-only",
+    "proxy_managed_token_readable": false,
+    "trusted_implication": "trusted Codex continues on the chatgpt-auth.json fallback G3 already proved non-interactive in two fresh sandboxes; the token file is readable by trusted repository workloads in the VM, which is the documented accepted risk",
+    "untrusted_implication": "untrusted Codex remains BLOCKED: no harness: codex, no provider API key, and the launcher refuses an untrusted Codex request under this mechanism"
+  },
+  "fallback_applied": "credential mechanism token-file-trusted-only",
+  "not_run_reason": null,
+  "notes": "ChatGPT OAuth isolation and the V1 credential-mechanism selection, tested in TWO CONSECUTIVE completely fresh mountless sandboxes created with --skills off from the exact pinned sandbox_bases.codex base, under the network policy accepted G4 proved for codex/trusted, with only one sandbox live at a time and the model G3 verified the backend actually accepts. NO chatgpt-auth.json is provisioned, and that is proven by searching the whole filesystem for it rather than by trusting that the gate skipped a copy - with the token-file fallback present a successful run would say nothing about the proxy. The privileged scan reuses gates/G1b/scan.py's traversal UNCHANGED, so it cannot regress to the three defects that made an earlier scan lie: `~` resolving to ROOT's home under sudo, overlapping roots double-counting matches, and an Authorization: Bearer reference being read as inline material; only the patterns differ, and they are aimed at what the ChatGPT store actually holds - snake_case access_token, id_token and refresh_token, all JWT-shaped - established from the host file's STRUCTURE (key names, types and lengths) and never from its values. A clearly synthetic, self-labelled canary is planted and required to be DETECTED before the real scan, then removed so it cannot inflate it, because a scanner that matches nothing is otherwise indistinguishable from a perfectly isolated VM. A FAIL here is a legitimate outcome and never avoided by weakening the test: it selects token-file-trusted-only, keeps trusted Codex on G3's proven fallback and leaves untrusted blocked. credential_mechanism alone never makes Codex untrusted-eligible - G9 decides capability non-usability. No token value, partial value, digest, Authorization header, cookie or credential file content is ever read or recorded. Every rule this gate added carried --sandbox; the global fingerprint is captured with zero sandboxes before and after; sbx policy init, sbx reset and sbx rm --all are never called. Both sandboxes were removed by name.",
+  "network_policy_fingerprint": "sha256:e282594fb4b738d4344dbf28c621d1b5f20f3e5104efbca7dd6861d801b96697"
+}

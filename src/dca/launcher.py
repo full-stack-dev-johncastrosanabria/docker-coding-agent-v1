@@ -33,6 +33,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -61,6 +62,7 @@ try:
     from . import source as source_module
     from . import taskid as taskid_module
     from .errors import InfraAbort, PreconditionError, UsageError
+    from . import sbx as sbx_module
     from .sbx import Sbx, SbxError
 except ImportError:  # loaded by path in tests
     eligibility_module = _sideload("dca_eligibility", "eligibility.py")
@@ -73,7 +75,7 @@ except ImportError:  # loaded by path in tests
     _errors = _sideload("dca_errors", "errors.py")
     InfraAbort, PreconditionError, UsageError = (
         _errors.InfraAbort, _errors.PreconditionError, _errors.UsageError)
-    _sbx = _sideload("dca_sbx", "sbx.py")
+    _sbx = sbx_module = _sideload("dca_sbx", "sbx.py")
     Sbx, SbxError = _sbx.Sbx, _sbx.SbxError
 
 # --- fixed in-VM geography -------------------------------------------------------------------
@@ -91,7 +93,6 @@ HOST_CONFIG_DIR = os.path.expanduser("~/.config/cagent")
 
 #: The sbx template name per backend. The exact base image and digest are pinned in
 #: runtime/versions.yaml and checked against what sbx resolved; the launcher never substitutes one.
-BACKEND_TEMPLATE = {"claude": "claude", "codex": "docker-agent"}
 BACKENDS = ("claude", "codex")
 TRUST_LEVELS = ("trusted", "untrusted")
 
@@ -101,6 +102,9 @@ PROVIDER_KEY_NAMES = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY")
 MIN_SBX = (0, 43, 0)
 
 RUN_ID = re.compile(r"^run-[0-9TZ-]+-[0-9a-f]{6}$")
+
+#: Host evidence of how the agent phase ended: the host stop, if any, and the stop of the workload.
+TERMINATION_FILE = "termination.json"
 
 
 def new_run_id(now=None):
@@ -116,12 +120,39 @@ def _version_tuple(text):
 # --- the request ---------------------------------------------------------------------------------
 
 
+# What the developer may choose per backend. Absent, the backend's own default applies and the kit
+# is byte-identical to the one the gates were run against (research R1).
+EFFORTS = {"claude": ("low", "medium", "high", "xhigh", "max"),
+           "codex": ("none", "minimal", "low", "medium", "high", "xhigh", "max")}
+_MODEL_CHOICE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._:/@-]{0,79}\Z")
+
+
+def agent_choice(backend, model=None, effort=None, autocompact=None):
+    """The validated {model, effort, autocompact} for one run; only what was asked for."""
+    choice = {}
+    if model is not None:
+        if not _MODEL_CHOICE.match(model):
+            raise UsageError(f"--model {model!r} is not a model id")
+        choice["model"] = model
+    if effort is not None:
+        if effort not in EFFORTS[backend]:
+            raise UsageError(f"--effort for {backend} must be one of {', '.join(EFFORTS[backend])}")
+        choice["effort"] = effort
+    if autocompact is not None:
+        value = str(autocompact).strip().lower()
+        if value not in ("on", "off") and not (value.isdigit() and 1 <= int(value) <= 99):
+            raise UsageError("--autocompact must be on, off or a context percentage from 1 to 99")
+        choice["autocompact"] = value
+    return choice
+
+
 class RunRequest:
     """One `dca run` invocation, already parsed. The CLI owns parsing; this owns meaning."""
 
     def __init__(self, repo, task, ref=None, backend="claude", trust="untrusted", criteria=None,
                  verify=(), approve=(), approval_report=None, ignore_uncommitted=False,
-                 out=None, allow_drift=False, run_id=None):
+                 out=None, allow_drift=False, run_id=None, model=None, effort=None,
+                 autocompact=None):
         if backend not in BACKENDS:
             raise UsageError(f"--backend must be one of {BACKENDS}, got {backend!r}")
         if trust not in TRUST_LEVELS:
@@ -139,6 +170,7 @@ class RunRequest:
         self.approval_report = approval_report
         self.ignore_uncommitted = bool(ignore_uncommitted)
         self.allow_drift = bool(allow_drift)
+        self.choice = agent_choice(backend, model, effort, autocompact)
         self.run_id = run_id or new_run_id()
         self.out = os.path.abspath(str(out)) if out else os.path.join(
             os.path.dirname(self.repo), ".dca-runs", self.run_id)
@@ -214,6 +246,8 @@ class Launcher:
         # all (the run never got that far); an empty list means it was gathered and was empty, which
         # is unproven identity rather than no opinion.
         self.review_fingerprints = None
+        self.vm_models = []
+        self.vm_requests = []
         self.source_ref = None
         self.source_commit = None
         self.dirty_paths = []
@@ -226,6 +260,12 @@ class Launcher:
         self.workdir = None
         self.kit_dir = None
         self.removal_failed = None
+        # The sandbox's own processes, read before the agent starts (`process_baseline`). Every
+        # other process is the run's, and is stopped when the agent phase ends (`quiesce`).
+        self.baseline_pids = None
+        # Host evidence of how the agent phase ended: `<out>/termination.json`.
+        self.termination = None
+        self.agent_started = None
 
     # --- phase 1: preconditions -----------------------------------------------------------
 
@@ -277,6 +317,7 @@ class Launcher:
                 "substitutes a base at runtime.")
 
         # 5. SSH agent.
+        self._check_kit_host()
         self._check_ssh()
 
         # 6. backend authentication, from safe status fields only.
@@ -310,6 +351,11 @@ class Launcher:
                     f"sbx reports {reported!r} but runtime/versions.yaml pins {exact}. "
                     "Re-run with --allow-drift to proceed (the run is then not "
                     "acceptance-eligible).")
+
+    def _check_kit_host(self):
+        problems = sbx_module.kit_host_problems(self.versions.get("kit_build"))
+        if problems:
+            raise PreconditionError(" ".join(problems))
 
     def _check_ssh(self):
         """Precondition 5. A setting that cannot be read is refused, never read as 'no agent'."""
@@ -430,6 +476,7 @@ class Launcher:
         except eligibility_module.EvidenceProblem as exc:
             raise PreconditionError(str(exc)) from exc
         self._check_sbx_version()
+        self._check_kit_host()
         self._check_ssh()
         self._check_backend_auth()
         self._check_network_fingerprint()
@@ -478,14 +525,22 @@ class Launcher:
             limits = json.load(handle)
         return dict(limits["host_limits"][classification or self.classification])
 
-    def version_block(self):
+    def version_block(self, models=()):
         versions = self.versions or eligibility_module.load_versions(self.versions_path)
-        return {
+        block = {
             "docker_agent": versions.get("docker_agent"),
             "claude_code": (versions.get("claude_code") or {}).get("exact"),
             "sbx": (versions.get("sbx") or {}).get("exact"),
             "drift": bool(self.request.allow_drift),
         }
+        observed = []
+        for model in models:
+            events_module.note_model(observed, model)
+        if observed:
+            block["models"] = observed
+        if self.request.choice:
+            block["requested"] = dict(self.request.choice)
+        return block
 
     def network_cell(self):
         with open(os.path.join(self.repo_root, "runtime", "policy", "network.yaml"),
@@ -541,12 +596,11 @@ class Launcher:
                     self.repo_root, "runtime", "sandbox", "kit", "stage.py"))
                 self.kit_dir = stage.build_sbx_kit(
                     kit, backends=[request.backend], artifact=self.artifact,
-                    eligibility_path=self.eligibility_path)
+                    eligibility_path=self.eligibility_path, choice=request.choice)
         except Exception as exc:
             raise InfraAbort(f"the sandbox kit could not be built: {exc}") from exc
 
         name = f"dca-{request.run_id}"
-        template = BACKEND_TEMPLATE[request.backend]
         # The base is chosen by its immutable digest BEFORE the sandbox exists. Refusing here,
         # before `sbx create` runs, is what keeps the agent default - a mutable tag - from ever
         # being the image that boots.
@@ -566,13 +620,13 @@ class Launcher:
             # sandbox behind, and that one must be removed.
             self.sandbox = name
             # Step 2: a MOUNTLESS sandbox with shared skills off, from the pinned base DIGEST.
-            created = self.sbx.create(template, self.sandbox, self.kit_dir, pinned_base)
-            self._check_resolved_base(created)
+            # The denies go in WITH the create, so they hold from the first boot.
+            allow, deny = self.network_cell()
+            self.sbx.create(self.sandbox, self.kit_dir, pinned_base, deny=deny)
+            self._check_resolved_base()
 
             # Step 3: the strict per-sandbox network policy, plus host-authoritative grants.
-            allow, deny = self.network_cell()
             self.sbx.allow_network(self.sandbox, allow)
-            self.sbx.deny_network(self.sandbox, deny)
 
             # Step 4: deliver the bundle, the run config and the grants copy.
             self._deliver(bundle)
@@ -593,34 +647,26 @@ class Launcher:
         self._report_progress("sandbox", "READY", self.sandbox)
         return self.sandbox
 
-    def _check_resolved_base(self, created_output):
-        """Prove THIS sandbox booted the exact pinned digest, from sbx's own creation record.
+    def _check_resolved_base(self):
+        """Prove THIS sandbox is exactly the pinned workload kit plus the DCA mixin.
 
-        The sandbox is created from the digest-qualified reference, and `sbx create` states the
-        image it resolved for that sandbox on an `image <reference>` line. The pinned reference must
-        EQUAL one of those lines. A substring search over the whole output would not do: the same
-        reference also appears in the progress line that pulls it, and would appear in an echoed
-        invocation or a "did you mean" hint, so a create that resolved something else could satisfy
-        it while exiting 0. Only the resolved-image line states what the sandbox was built from.
-
-        The template store is deliberately NOT consulted. `sbx template ls` reports what the
-        MUTABLE tag currently maps to, so once upstream moves that tag the store names a newer
-        digest even on a run that correctly booted the pinned one: consulting it would fail a
-        correct run, and it could never prove more than this record already does. There is
-        therefore no fallback. If no resolved-image line names the pinned reference, the run is
-        aborted: an unprovable base is treated exactly like a wrong one.
+        The sandbox is created from the digest-qualified workload reference, and `sbx inspect
+        --json` is sbx's own record of the kits it composed. That list must EQUAL the pinned
+        reference followed by this run's mixin: an extra kit or a workload resolved from a tag is
+        a different sandbox. The template store is deliberately NOT consulted - it reports what a
+        mutable tag maps to today, which can neither prove nor disprove what booted. There is no
+        fallback: an unprovable composition aborts the run exactly like a wrong one.
         """
         reference, _, pinned = pinned_base_reference(self.versions, self.request.backend)
         if not pinned:
             raise InfraAbort(f"there is no pinned sandbox base for {self.request.backend}")
-        resolved = _resolved_image_lines(created_output)
-        if pinned in resolved:
-            return
-        raise InfraAbort(
-            f"sbx did not report creating the sandbox from the pinned base {pinned}, so this "
-            f"sandbox cannot be shown to have booted the pinned image. The launcher never accepts "
-            f"a base resolved from the mutable tag {reference} instead. What sbx reported it "
-            f"resolved: {', '.join(resolved) if resolved else '(no image line)'}")
+        problem = sbx_module.composition_problem(self.sbx.inspect(self.sandbox), pinned,
+                                                 self.kit_dir)
+        if problem:
+            raise InfraAbort(
+                f"the sandbox cannot be shown to be the pinned base {pinned} plus the DCA kit "
+                f"({problem}). The launcher never accepts a base resolved from the mutable "
+                f"{reference} tag instead.")
 
     def _deliver(self, bundle):
         request = self.request
@@ -639,7 +685,7 @@ class Launcher:
         staging = os.path.join(self.workdir, "deliver")
         os.makedirs(staging, exist_ok=True)
         _write_json(os.path.join(staging, "run.json"), run_record)
-        _write_json(os.path.join(staging, "grants.json"), self.grants)
+        _write_json(os.path.join(staging, "grants.json"), grants_module.gate_view(self.grants))
         with open(os.path.join(staging, "task.txt"), "w", encoding="utf-8") as handle:
             handle.write(self._task_text())
 
@@ -725,10 +771,22 @@ class Launcher:
         The host is the authority on limits, so it counts the events itself and stops the run. The
         in-VM gate's advisory counters exist only for a clean early stop; a process with sudo could
         rewrite them, which is exactly why they are not what this reads.
+
+        The wall clock is a TIMER, armed when the agent starts. It fires at the deadline whether or
+        not anything arrives on the stream: an agent inside one long tool call writes nothing, and a
+        deadline read only between lines would let that call run to its own end.
+
+        Stopping the run means stopping the WORKLOAD. Killing the local `sbx exec` client does not
+        stop the command inside the VM, so when the agent phase ends - at a limit or on its own -
+        every process that was not there before the agent started is killed (`quiesce`) before any
+        evidence is read. `<out>/termination.json` records the stop and that it took effect.
         """
         limits = self.host_limits()
         deadline = (timeout if timeout is not None
                     else limits.get("wall_clock_seconds", 1200))
+        self.baseline_pids = self.process_baseline()
+        self.termination = {"host_stop": None, "enforced_limits": dict(limits),
+                            "deadline_seconds": deadline, "workload": []}
         config = f"{KIT_DIR}/agents/{self.request.backend}.yaml"
         config_dir = VM_CONFIG_DIR if (
             self.request.backend == "codex"
@@ -742,7 +800,7 @@ class Launcher:
         # The wrapper's environment, not a fresh copy of os.environ: SSH_AUTH_SOCK removal (and
         # anything else the wrapper pins) has to apply to the streamed execution too.
         environment = self.sbx.environment()
-        started = self.clock()
+        started = self.agent_started = self.clock()
         proc = subprocess.Popen(argv, env=environment, stdin=subprocess.DEVNULL,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.sbx.calls.append({"argv": argv, "status": None, "streaming": True})
@@ -753,38 +811,68 @@ class Launcher:
         stderr_tail.start()
 
         accountant = events_module.StreamAccountant(self.request.verify)
-        host_stop = None
+        stop = _HostStop(self.clock, started)
+
+        def at_deadline():
+            # The timer's thread. Whoever claims the stop first names it; the loop below may have
+            # already stopped the run at another limit a moment earlier.
+            if stop.claim("wall_clock", accountant.steps):
+                proc.kill()
+
+        timer = None
+        if deadline:
+            timer = threading.Timer(max(0.0, float(deadline)), at_deadline)
+            timer.daemon = True
+            timer.start()
+
         captured = []
         events_path = os.path.join(self.request.out, "events.jsonl")
-        os.makedirs(self.request.out, exist_ok=True)
-        with open(events_path, "w", encoding="utf-8") as sink:
-            for line in proc.stdout:
-                text = line.decode("utf-8", "replace")
-                captured.append(text)
-                sink.write(text)
-                accountant.feed(text)
-                if host_stop is None:
-                    reason = accountant.limit_reached(limits)
-                    if reason is not None:
-                        host_stop = {"reason": reason, "at_step": accountant.steps}
-                        proc.kill()
-                        break
-                if host_stop is None and deadline and self.clock() - started >= deadline:
-                    host_stop = {"reason": "wall_clock", "at_step": accountant.steps}
-                    proc.kill()
-                    break
-            if host_stop is not None:
+        try:
+            os.makedirs(self.request.out, exist_ok=True)
+            with open(events_path, "w", encoding="utf-8") as sink:
                 for line in proc.stdout:
                     text = line.decode("utf-8", "replace")
                     captured.append(text)
                     sink.write(text)
-        exit_status = proc.wait()
-        stderr = stderr_tail.text()
+                    accountant.feed(text)
+                    if stop.value is None:
+                        reason = accountant.limit_reached(limits)
+                        if reason is not None and stop.claim(reason, accountant.steps):
+                            proc.kill()
+                            break
+                    if (stop.value is None and deadline and self.clock() - started >= deadline
+                            and stop.claim("wall_clock", accountant.steps)):
+                        proc.kill()
+                        break
+                if stop.value is not None:
+                    for line in proc.stdout:
+                        text = line.decode("utf-8", "replace")
+                        captured.append(text)
+                        sink.write(text)
+            exit_status = proc.wait()
+        except OSError as exc:
+            raise InfraAbort(f"the agent event stream could not be captured: {exc}") from exc
+        finally:
+            # An output error must not leave a live client or a deadline callback behind while
+            # run() removes the sandbox. wait() alone does not close Popen's PIPE objects.
+            if timer is not None:
+                timer.cancel()
+                timer.join()
+            if proc.poll() is None:
+                proc.kill()
+            proc.wait()
+            proc.stdout.close()
+            stderr = stderr_tail.text()
         with open(os.path.join(self.request.out, "agent.stderr.txt"), "w",
                   encoding="utf-8") as handle:
             handle.write(redact_credentials(stderr))
-        if host_stop is None and deadline and self.clock() - started >= deadline:
-            host_stop = {"reason": "wall_clock", "at_step": accountant.steps}
+        if stop.value is None and deadline and self.clock() - started >= deadline:
+            stop.claim("wall_clock", accountant.steps)
+        host_stop = stop.value
+        if host_stop is not None:
+            host_stop["deadline_seconds"] = deadline
+        self.termination["host_stop"] = host_stop
+        self.quiesce("agent")
 
         analysis = events_module.analyze(
             "".join(captured),
@@ -792,6 +880,64 @@ class Launcher:
             host_stop=host_stop, sandbox_created=True,
             verification_commands=self.request.verify)
         return analysis, host_stop, exit_status, stderr
+
+    # --- the run's own processes inside the VM ----------------------------------------------------
+
+    def process_baseline(self):
+        """The sandbox's own processes, read BEFORE the agent starts.
+
+        Everything not in this set belongs to the run, which is what lets `quiesce` stop the run
+        without stopping the sandbox. Without it the two cannot be told apart, so the agent does
+        not start at all.
+        """
+        status, out, err, timed_out = self.sbx.execute(self.sandbox, _BASELINE_SCRIPT,
+                                                       check=False, timeout=60)
+        pids = _parse_baseline(out)
+        if status != 0 or timed_out or pids is None:
+            raise InfraAbort("the sandbox's process table could not be read before the agent "
+                             "started, so the run's processes could not be stopped afterwards: "
+                             f"{(err or out).strip()[:300] or 'no output'}")
+        return pids
+
+    def quiesce(self, phase):
+        """Kill every process the run started, and prove none is left.
+
+        Called when the agent phase ends and again after the launcher's own checks, before anything
+        is retrieved: what the developer receives must be the workspace as it stood when the run
+        stopped, not whatever a leftover process wrote while it was being copied out. A workload
+        that cannot be stopped makes that impossible to promise, so it aborts the run (exit 4) -
+        the same rule as a retrieval that cannot be validated. The process table is the VM's own
+        report, read by a command the host runs; it is host-driven, not tamper-proof.
+        """
+        if self.baseline_pids is None:
+            return None     # the agent never started here, so the run has no workload to stop
+        started = self.clock()
+        status, out, err, timed_out = self.sbx.execute(
+            self.sandbox, _quiesce_script(self.baseline_pids), check=False, timeout=120)
+        result = _parse_quiesce(out)
+        finished = self.clock()
+        entry = {"phase": phase,
+                 "terminated": result["terminated"] if result else None,
+                 "survivors": result["survivors"] if result else None,
+                 "seconds": round(finished - started, 1),
+                 # Since the agent started, on the same clock as host_stop.elapsed_seconds, so the
+                 # gap between the host's decision and the workload actually stopping is visible.
+                 "elapsed_seconds": (round(finished - self.agent_started, 1)
+                                     if self.agent_started is not None else None)}
+        self.termination.setdefault("workload", []).append(entry)
+        self._write_termination()
+        if result is None or timed_out:
+            raise InfraAbort(f"the run's processes inside the sandbox could not be stopped after "
+                             f"the {phase} phase: {(err or out).strip()[:300] or 'no answer'}")
+        if result["survivors"]:
+            raise InfraAbort(f"the run's processes inside the sandbox could not be stopped after "
+                             f"the {phase} phase; still running: "
+                             + "; ".join(result["survivors"])[:400])
+        return entry
+
+    def _write_termination(self):
+        os.makedirs(self.request.out, exist_ok=True)
+        _write_json(os.path.join(self.request.out, TERMINATION_FILE), self.termination)
 
     # --- phase 3C: retrieval, finalization, cleanup ---------------------------------------------
 
@@ -822,6 +968,10 @@ class Launcher:
                 "exit_status": None if timed_out else status,
                 "output_ref": os.path.relpath(path, self.request.out),
             })
+        # A check that timed out is still running in the VM (killing the local client does not
+        # stop it), and a check may leave a process behind. Neither may write into the workspace
+        # while it is being retrieved.
+        self.quiesce("verification")
         return checks
 
     def collect_agent_evidence(self):
@@ -834,7 +984,7 @@ class Launcher:
             except (SbxError, OSError):
                 continue
             collected[name] = destination
-        for name in ("gate.log.jsonl", "fingerprints.jsonl"):
+        for name in ("gate.log.jsonl", "fingerprints.jsonl", "approvals.jsonl"):
             try:
                 self.sbx.copy_out(self.sandbox, f"{STATE_DIR}/{name}",
                                   os.path.join(self.request.out, name))
@@ -847,6 +997,8 @@ class Launcher:
         # here, while the file is still fresh out of the VM and before cleanup removes the sandbox.
         self.review_fingerprints = fingerprint_module.read_review_records(
             os.path.join(self.request.out, "fingerprints.jsonl"))
+        self.vm_models = self.claude_models() if self.request.backend == "claude" else []
+        self.vm_requests = _read_jsonl(os.path.join(self.request.out, "approvals.jsonl"))
         agent_report = None
         if "report.agent.json" in collected:
             try:
@@ -855,6 +1007,27 @@ class Launcher:
             except (OSError, ValueError):
                 agent_report = None
         return agent_report
+
+    def action_names(self):
+        with open(os.path.join(self.repo_root, "runtime", "policy", "actions.yaml"),
+                  encoding="utf-8") as handle:
+            return {row["id"]: row["name"] for row in json.load(handle)["classes"]}
+
+    def claude_models(self):
+        """The model ids in Claude Code's own transcripts. Claude runs as a harness, so the outer
+        stream names only `claude-code`; the transcript is the one record of the model it used.
+        VM-originated, so each id is still screened by `events.note_model`. Best effort: none found
+        means the model is unknown, never that a default was assumed."""
+        try:
+            _, out, _, _ = self.sbx.execute(self.sandbox, (
+                "grep -rhoE '\"model\":\"[^\"]{1,80}\"' \"$HOME/.claude/projects\" "
+                "2>/dev/null | sort -u | head -20"), check=False, timeout=30)
+        except (SbxError, OSError):
+            return []
+        models = []
+        for line in (out or "").splitlines():
+            events_module.note_model(models, line.strip()[len('"model":"'):-1])
+        return models
 
     def retrieve(self):
         """Export, copy out, validate in quarantine, and only then import. Failure is exit 4."""
@@ -956,8 +1129,11 @@ class Launcher:
                     "dirty_paths": list(self.dirty_paths)},
             sandbox_settings=self.sandbox_settings, analysis=analysis,
             agent_report=agent_report, change_set=change_set,
-            limits_configured=self.host_limits(), versions=self.version_block(),
+            limits_configured=self.host_limits(),
+            versions=self.version_block(analysis.models + self.vm_models),
             launcher_checks=launcher_checks,
+            approvals=grants_module.reported_approvals(
+                self.vm_requests, request.run_id, self.action_names()),
             review_fingerprints=self.review_fingerprints,
             limit_evidence_predates=_evidence_predates_limit(analysis, host_stop,
                                                              launcher_checks))
@@ -977,6 +1153,21 @@ class Launcher:
 
 
 # --- small helpers ------------------------------------------------------------------------------
+
+def _read_jsonl(path):
+    """The JSON objects in a VM-originated log; unreadable or malformed lines are skipped."""
+    records = []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    records.append(json.loads(line))
+                except ValueError:
+                    continue
+    except OSError:
+        return []
+    return records
+
 
 #: How much of the agent's stderr is kept (the tail): enough for the error that ended a run.
 AGENT_STDERR_LIMIT = 65536
@@ -1010,14 +1201,123 @@ class _StderrTail:
         self._thread.start()
 
     def _drain(self):
-        for chunk in iter(lambda: self._pipe.read(8192), b""):
-            self._buffer += chunk
-            if len(self._buffer) > 2 * AGENT_STDERR_LIMIT:
-                del self._buffer[:-AGENT_STDERR_LIMIT]
+        with self._pipe:
+            for chunk in iter(lambda: self._pipe.read(8192), b""):
+                self._buffer += chunk
+                if len(self._buffer) > 2 * AGENT_STDERR_LIMIT:
+                    del self._buffer[:-AGENT_STDERR_LIMIT]
 
     def text(self):
         self._thread.join(timeout=10)
         return bytes(self._buffer[-AGENT_STDERR_LIMIT:]).decode("utf-8", "replace")
+
+
+class _HostStop:
+    """The one host stop of a run. The first to claim it names it; every later claim is refused.
+
+    Two things can stop a run at once - the stream loop at a counted limit, and the wall-clock
+    timer on its own thread - and the recorded reason must not depend on which one lost a race
+    to overwrite the other.
+    """
+
+    def __init__(self, clock, started):
+        self._clock = clock
+        self._started = started
+        self._lock = threading.Lock()
+        self.value = None
+
+    def claim(self, reason, at_step):
+        with self._lock:
+            if self.value is not None:
+                return False
+            self.value = {"reason": reason, "at_step": at_step,
+                          "elapsed_seconds": round(self._clock() - self._started, 1)}
+            return True
+
+
+#: Read before the agent starts. The shell's own pid and its child (`ps`) are transient and are
+#: left out, so the baseline is exactly the processes the sandbox already had.
+_BASELINE_SCRIPT = ": DCA_PROCESS_BASELINE\necho \"self $$\"\nps -eo pid=,ppid=\n"
+
+
+def _parse_baseline(output):
+    """The baseline pid set, or None if the table was not read. PID 1 must be in it."""
+    lines = (output or "").strip().splitlines()
+    if not lines or not lines[0].startswith("self "):
+        return None
+    shell = lines[0].split()[1]
+    pids = set()
+    for line in lines[1:]:
+        fields = line.split()
+        if len(fields) != 2 or not all(field.isdigit() for field in fields):
+            return None
+        pid, ppid = fields
+        if shell not in (pid, ppid):
+            pids.add(int(pid))
+    return pids if 1 in pids else None
+
+
+def _quiesce_script(baseline):
+    """POSIX sh run in the VM: kill -9 every process outside `baseline`, until none is left.
+
+    Its own processes are spared by pid and parent (the listing `ps`, `sudo`, `kill`, `sleep` are
+    its children and have exited before the next listing). Zombies are already dead and only wait
+    to be reaped, so they are not survivors. Then it lists what is still running and says so.
+    """
+    keep = " ".join(str(pid) for pid in sorted(baseline))
+    return (
+        ": DCA_QUIESCE\n"
+        f"keep=' {keep} '\n"
+        "self=$$\n"
+        "list=/tmp/dca-quiesce.$self\n"
+        "others() {\n"
+        "  ps -eo pid=,ppid=,stat=,args= > \"$list\" 2>/dev/null || return 1\n"
+        "  : > \"$list.others\"\n"
+        "  while read -r pid ppid stat args; do\n"
+        "    case \"$keep\" in *\" $pid \"*) continue ;; esac\n"
+        "    [ \"$pid\" = \"$self\" ] && continue\n"
+        "    [ \"$ppid\" = \"$self\" ] && continue\n"
+        "    case \"$stat\" in Z*) continue ;; esac\n"
+        "    echo \"$pid $args\" >> \"$list.others\"\n"
+        "  done < \"$list\"\n"
+        "}\n"
+        "killed=0\n"
+        "round=0\n"
+        "while [ \"$round\" -lt 20 ]; do\n"
+        "  others || { echo 'DCA_QUIESCE_ERROR the process table could not be read'; exit 3; }\n"
+        "  [ -s \"$list.others\" ] || break\n"
+        "  while read -r pid args; do\n"
+        "    if sudo -n kill -9 \"$pid\" 2>/dev/null || kill -9 \"$pid\" 2>/dev/null; then\n"
+        "      killed=$((killed + 1))\n"
+        "    fi\n"
+        "  done < \"$list.others\"\n"
+        "  round=$((round + 1))\n"
+        "  sleep 0.2\n"
+        "done\n"
+        "others || { echo 'DCA_QUIESCE_ERROR the process table could not be read'; exit 3; }\n"
+        "count=0\n"
+        "while read -r pid args; do\n"
+        "  echo \"SURVIVOR $pid $args\"\n"
+        "  count=$((count + 1))\n"
+        "done < \"$list.others\"\n"
+        "rm -f \"$list\" \"$list.others\"\n"
+        "echo \"DCA_QUIESCE terminated=$killed survivors=$count\"\n")
+
+
+_QUIESCE_SUMMARY = re.compile(r"^DCA_QUIESCE terminated=(\d+) survivors=(\d+)$")
+
+
+def _parse_quiesce(output):
+    """{terminated, survivors: ["<pid> <args>", ...]}, or None when the script did not answer."""
+    lines = (output or "").strip().splitlines()
+    summary = _QUIESCE_SUMMARY.match(lines[-1].strip()) if lines else None
+    if summary is None:
+        return None
+    survivors = [line[len("SURVIVOR "):].strip() for line in lines[:-1]
+                 if line.startswith("SURVIVOR ")]
+    if len(survivors) != int(summary.group(2)):
+        return None
+    return {"terminated": int(summary.group(1)), "survivors": survivors}
 
 
 
@@ -1043,11 +1343,6 @@ def pinned_base_reference(versions, backend):
     if not reference or not digest:
         return None, None, None
     return reference, digest, f"{reference}@{digest}"
-
-
-def _resolved_image_lines(output):
-    """The `image <reference>` lines `sbx create` prints, so a refusal can say what it did resolve."""
-    return [found.strip() for found in re.findall(r"^\s*image\s+(.+)$", output or "", re.M)]
 
 
 def _evidence_predates_limit(analysis, host_stop, launcher_checks):

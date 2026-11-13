@@ -111,6 +111,15 @@ class TestClaudeConfig(unittest.TestCase):
         self.assertEqual(sorted(hooks), ["stop", "turn_end"])
         self.assertNotIn("pre_tool_use", hooks)
 
+    def test_13a_the_managed_claude_cannot_outlive_its_work(self):
+        # Found live (M1): the reviewer ran as a background agent, root scheduled a wakeup 1231 s
+        # ahead and the finished session stayed open until the 1200 s wall clock killed it.
+        settings = json.loads((ROOT / "runtime" / "claude" / "managed-settings.json").read_text())
+        self.assertEqual(settings["env"]["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"], "1")
+        self.assertEqual(settings["env"]["CLAUDE_CODE_DISABLE_CRON"], "1")
+        for tool in ("ScheduleWakeup", "CronCreate"):
+            self.assertIn(tool, settings["permissions"]["deny"])
+
     def test_14_it_has_no_code_mode_tools_mcp_or_permissions(self):
         for key in ("code_mode_tools", "mcps", "permissions", "flavors", "rag"):
             with self.subTest(key=key):

@@ -1,0 +1,64 @@
+{
+  "_comment": "Bad: the agent's success claim adopted as the outcome, with a finished backfill that no run inside the wall clock could have produced.",
+  "final_outcome": "succeeded",
+  "agent_outcome": "succeeded",
+  "outcome_overrides": [],
+  "primary_reason": null,
+  "human_action_required": null,
+  "run_integrity": {
+    "stream": "complete",
+    "agent_exit": "normal",
+    "sandbox_created": true
+  },
+  "limits": {
+    "configured": {
+      "retries": 3,
+      "reverification_reserve_seconds": 300,
+      "steps": 120,
+      "tokens": 3000000,
+      "wall_clock_seconds": 1200
+    },
+    "used": {
+      "steps": 30,
+      "retries": 0,
+      "verification_runs": 2,
+      "tokens": 0
+    },
+    "limit_reached": null,
+    "native_ceiling": null
+  },
+  "change_set": {
+    "files": [
+      {
+        "path": "backfill/DIGEST",
+        "status": "added"
+      },
+      {
+        "path": "backfill/state.json",
+        "status": "modified"
+      }
+    ]
+  },
+  "verification": {
+    "type": "deterministic",
+    "checks": [
+      {
+        "id": "python3 -m unittest",
+        "command_or_method": "python3 -m unittest",
+        "required": true,
+        "executed_by": "launcher",
+        "after_last_change": true,
+        "result": "pass",
+        "exit_status": 0,
+        "output_ref": "checks/launcher-1.txt"
+      }
+    ]
+  },
+  "acceptance_criteria": [
+    {
+      "text": "`python3 -m unittest` passes",
+      "status": "satisfied"
+    }
+  ],
+  "blockers": []
+}

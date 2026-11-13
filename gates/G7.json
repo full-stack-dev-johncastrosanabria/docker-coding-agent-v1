@@ -1,19 +1,19 @@
 {
   "gate": "G7",
   "status": "PASS",
-  "run_at": "2026-09-20T02:47:32Z",
+  "run_at": "2026-11-13T07:05:28Z",
   "versions": {
-    "sbx": "v0.43.0"
+    "sbx": "v0.53.0"
   },
   "provenance": {
-    "runtime_versions_digest": "sha256:4b4bf890b90c9cb93bb2957df9522ee4c039d80a3a7d252091f5ea6f31390088"
+    "runtime_versions_digest": "sha256:cd8e5504091c1cf11ad0a0ba967a7bd0dd1081885bf62d412e16df7fde1325c1"
   },
   "criteria": [
     {
       "id": "G7.0a",
       "description": "sbx client and server still match the pinned exact version and the server is running",
       "result": "PASS",
-      "evidence_ref": "pin v0.43.0, client v0.43.0, server v0.43.0 state running, exit 0"
+      "evidence_ref": "pin v0.53.0, client v0.53.0, server v0.53.0 state running, exit 0"
     },
     {
       "id": "G7.0b",
@@ -35,15 +35,15 @@
     },
     {
       "id": "G7.2",
-      "description": "mountless sandbox from the exact pinned Claude base (repository, tag and digest), skills off",
+      "description": "mountless sandbox from the exact pinned Claude workload (repository and digest), skills off",
       "result": "PASS",
-      "evidence_ref": "create exit 0, probe exit 0, sbx resolved docker/sandbox-templates:claude-code-docker (pin docker/sandbox-templates:claude-code-docker), cached template repository docker.io/docker/sandbox-templates tag claude-code-docker image id 94670d5b2a24 (a short image id, not a digest on its own) prefixing the pinned digest sha256:94670d5b2a2479e182806a7cfd9b4d414ca4050c77281973cd283785e9a5f9d2, workspace 'none · no workspace bind mount'"
+      "evidence_ref": "create exit 0, probe exit 0, created from docker.io/sbx/claude@sha256:5762bbc534e2709cbe5e14cb17bd3e67bba2434d572aca48dd31d43c9ac189f9; sbx inspect: composition proven; workspace 'none · no workspace bind mount'"
     },
     {
       "id": "G7.3",
       "description": "no usable forwarded SSH-agent endpoint exists and no host SSH agent is reachable",
       "result": "PASS",
-      "evidence_ref": "SSH_AGENT_PID unset; SSH_AUTH_SOCK set (/run/ssh-agent.sock: exists no, is socket no, also in PID 1 env 1); ssh-add cannot connect yes; candidate agent sockets 0; SSH_* variables 1; failures none"
+      "evidence_ref": "SSH_AGENT_PID unset; SSH_AUTH_SOCK unset; ssh-add cannot connect yes; candidate agent sockets 0; SSH_* variables 0; failures none"
     },
     {
       "id": "G7.4",

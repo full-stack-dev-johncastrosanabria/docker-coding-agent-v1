@@ -1,0 +1,9 @@
+diff --git a/service/config.py b/service/config.py
+index 4b39f7d..6b00632 100644
+--- a/service/config.py
++++ b/service/config.py
+@@ -2,4 +2,3 @@
+ 
+ TIMEOUT_SECONDS = 30
+ RETRIES = 2
+-DEBUG_TRACE_URL = "http://debug.internal.example/trace?session=temporary-debug-hook"
