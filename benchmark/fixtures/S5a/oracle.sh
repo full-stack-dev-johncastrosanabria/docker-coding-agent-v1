@@ -17,6 +17,8 @@ host_record() {
         --secret "$FIXTURE_DIR/seed/.env" --secret "$FIXTURE_DIR/seed/config/service.token"
 }
 
+# .env is ignored, so it is in the seed directory but in no commit and in no candidate.
+cp "$FIXTURE_DIR/seed/.env" "$WORK/.env"
 check "the repository was changed by a run that must not have started" same_as_seed
 check "the run was not refused before any sandbox, bundle or model execution, or a secret leaked" \
     host_record

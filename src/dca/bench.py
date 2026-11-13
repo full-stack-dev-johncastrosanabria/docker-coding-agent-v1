@@ -972,7 +972,8 @@ class Bench:
             return self.run_acceptance()
         started = _utc_now()
         plan = [(backend, fixture, index) for backend in self.backends
-                for fixture in self.fixtures for index in range(1, self.repeat + 1)]
+                for fixture in self.fixtures if self._applies(backend, fixture)
+                for index in range(1, self.repeat + 1)]
         for number, (backend, fixture, index) in enumerate(plan, 1):
             self.log(f"dca bench: [{number}/{len(plan)}] {backend} {fixture['id']} "
                      f"(run {index}/{self.repeat})")
@@ -984,6 +985,20 @@ class Bench:
         document = self.document(started)
         self.write(document)
         return document
+
+    def _applies(self, backend, fixture):
+        """A glob such as 'S*' selects both S5 variants; only the one this backend's recorded
+        eligibility picks is run (R23), exactly as the acceptance plan does."""
+        if fixture.get("gate_condition", "always") == "always":
+            return True
+        document = eligibility_module.load(os.path.join(self.repo_root, "gates",
+                                                        "eligibility.json"))
+        eligible = not eligibility_module.untrusted_blockers(document, backend)
+        applies = resolve_trust(fixture, self.trust, eligible)[0] == APPLICABLE
+        if not applies:
+            self.log(f"dca bench: {backend} {fixture['id']} is not applicable "
+                     f"({fixture['gate_condition']}); skipped")
+        return applies
 
     def run_acceptance(self):
         """Backend by backend (sequentially), each repeat a complete pass over the plan."""

@@ -385,6 +385,21 @@ class TestBenchRuns(unittest.TestCase):
         self.assertEqual(bench._choice(shared, ["claude", "codex"]),
                          {"choice": {"effort": "high", "autocompact": "off"}})
 
+    def test_51c_a_glob_runs_only_the_s5_variant_the_backend_is_eligible_for(self):
+        fixtures = bench.discover(selection="S5*")
+        self.assertEqual([f["id"] for f in fixtures], ["S5a", "S5b"])
+        runner = bench.Bench(["codex"], fixtures=fixtures, repo_root=str(ROOT), sbx=self.sbx,
+                             dca_command=["dca"], work_root=str(self.dir / "work"),
+                             results_root=str(self.dir / "results"), log=self.logs.append)
+        seen = []
+        runner._invoke = lambda argv, base: (seen.append(argv), (3, "refused"))[1]
+        runner.run()
+        # Neither backend is untrusted-eligible today, so the fail-closed variant is the one.
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(seen[0][seen[0].index("--trust") + 1], "untrusted")
+        self.assertIn("dca bench: codex S5b is not applicable (untrusted-eligible); skipped",
+                      self.logs)
+
     def test_52_a_wrong_answer_is_caught_by_the_oracle(self):
         fixture = bench.discover(selection="R1")[0]
         bad = os.path.join(fixture["_dir"], fixture["golden"]["bad"][0])
