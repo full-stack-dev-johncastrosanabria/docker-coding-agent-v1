@@ -522,6 +522,24 @@ class TestTheScenarioThatFailed(unittest.TestCase):
         analysis = FakeAnalysis(context_record_at=9, reads=[read(3, "src/surface_one.py")])
         self.assertTrue(bench.classification_basis_failures(body, analysis))
 
+    def test_52a_a_shell_glob_reads_the_files_it_matches_and_no_others(self):
+        # Found live (K4): `cat tests/*.py` read the covering test and was scored as never read.
+        from dca.events import same_path
+        for cited, observed, expected in (
+                ("tests/test_rule.py", "tests/*.py", True),
+                ("tests/test_rule.py", "/workspace/tests/test_*.py", True),
+                ("test_rule.py", "tests/*.py", True),
+                ("tests/test_rule.py", "*.py", False),           # another directory's files
+                ("tests/unit/test_rule.py", "tests/*.py", False),  # `*` does not cross a directory
+                ("tests/test_rule.py", "tests/*.md", False),
+                ("tests/test_rule.py", "src/*.py", False)):
+            with self.subTest(cited=cited, observed=observed):
+                self.assertIs(same_path(cited, observed), expected)
+        body = record(tests=("tests/test_rule.py",))
+        globbed = FakeAnalysis(context_record_at=9,
+                               reads=[(3, "root", "bash", ["tests/*.py"])])
+        self.assertEqual(bench.classification_basis_failures(body, globbed), [])
+
 
 class TestTheShippedTextIsGeneric(unittest.TestCase):
     """No fixture, provider or model may appear in anything an agent reads."""

@@ -36,6 +36,7 @@ because the host is the authority on direct/planned semantics.
 """
 
 import collections
+import fnmatch
 import json
 import os
 import re
@@ -126,6 +127,12 @@ def same_path(cited, observed):
     right = str(observed or "").strip().replace(chr(92), "/")
     if not left or not right:
         return False
+    if any(char in right for char in "*?["):
+        # A glob the shell expanded: `cat tests/*.py` printed every file it matches. Compared
+        # segment by segment, because `*` never crosses a directory in sh.
+        want, have = left.split("/"), right.split("/")
+        return len(have) >= len(want) and all(
+            fnmatch.fnmatchcase(w, h) for w, h in zip(want, have[-len(want):]))
     if "/" not in left:
         return os.path.basename(right) == left
     return right == left or right.endswith("/" + left)
