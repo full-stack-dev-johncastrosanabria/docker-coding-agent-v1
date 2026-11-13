@@ -1,0 +1,77 @@
+{
+  "evidence": "K/M regression check after the retry-counter and gate changes (developer request)",
+  "date": "2026-11-13",
+  "backend": "claude",
+  "trust": "trusted",
+  "model": "claude-sonnet-5-5 (account default; no --model)",
+  "command": "bin/dca bench --backend claude --fixtures 'K4,K6,K8,M1,M2'",
+  "bench_id": "bench-2026-11-13T18-09-26Z-5d6a",
+  "dca_commit": "13b6b2c781b0b9dca350c18efc53a304fc7969b2",
+  "runs": [
+    {
+      "fixture": "K4",
+      "result": "failed",
+      "final_outcome": "succeeded",
+      "oracle": "pass",
+      "reasons": [
+        "FR-001a: the direct classification names tests/test_amounts.py among the tests that cover the target, but root never read it before writing the Context Record - a path that was only searched for is a filename, not evidence"
+      ],
+      "run_id": "run-2026-11-13T18-09-26Z-bc142f",
+      "duration_seconds": 47.6
+    },
+    {
+      "fixture": "K6",
+      "result": "passed",
+      "final_outcome": "succeeded",
+      "oracle": "pass",
+      "reasons": [],
+      "run_id": "run-2026-11-13T18-10-15Z-2cfe58",
+      "duration_seconds": 46.6
+    },
+    {
+      "fixture": "K8",
+      "result": "failed",
+      "final_outcome": "succeeded",
+      "oracle": "fail",
+      "reasons": [
+        "oracle fail"
+      ],
+      "run_id": "run-2026-11-13T18-11-02Z-592f0f",
+      "duration_seconds": 94.9
+    },
+    {
+      "fixture": "M1",
+      "result": "passed",
+      "final_outcome": "succeeded",
+      "oracle": "pass",
+      "reasons": [],
+      "run_id": "run-2026-11-13T18-12-37Z-b847f6",
+      "duration_seconds": 1215.4
+    },
+    {
+      "fixture": "M2",
+      "result": "passed",
+      "final_outcome": "succeeded",
+      "oracle": "pass",
+      "reasons": [],
+      "run_id": "run-2026-11-13T18-32-54Z-5099d8",
+      "duration_seconds": 87.9
+    }
+  ],
+  "scored": "3/5 (K6, M1, M2 pass)",
+  "rescored_after_fix": "4/5: K4's only failure was a host defect (a read made with 'cat tests/*.py' was not recognized, fixed in 2ac2335); its recorded run re-scores with no FR-001a failure and its oracle passed",
+  "history_of_runs_that_executed": {
+    "K4": "3/4",
+    "K6": "3/3",
+    "K8": "2/3",
+    "M1": "4/6",
+    "M2": "4/7"
+  },
+  "conclusion": "no sign of a lower pass rate from the retry-counter change (813dbab) or the gate shell policy (ec9b54d); one run per fixture cannot show a small change",
+  "notes": [
+    "K8 failed because the agent classified the task planned and wrote a plan; the oracle requires direct (SC-010). No retry or gate cause.",
+    "M1 passed at the wall-clock limit (1200 s, FR-023a): it is close to the limit, not comfortably inside it.",
+    "Two earlier attempts the same day (bench-2026-11-13T16-52-57Z-a4f5, bench-2026-11-13T17-26-16Z-e83e) executed nothing: the provider quota was exhausted. They are not results.",
+    "Run before the instruction change in 3063f31."
+  ]
+}
