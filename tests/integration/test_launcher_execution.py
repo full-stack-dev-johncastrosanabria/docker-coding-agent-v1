@@ -87,6 +87,9 @@ def stream(*lines, terminal=True):
 
 class ExecutionCase(unittest.TestCase):
     def setUp(self):
+        host = mock.patch.object(sbx_module, "kit_host_problems", return_value=[])
+        host.start()
+        self.addCleanup(host.stop)
         WORK.mkdir(parents=True, exist_ok=True)
         self.dir = WORK / self.id().rsplit(".", 1)[-1]
         shutil.rmtree(self.dir, ignore_errors=True)

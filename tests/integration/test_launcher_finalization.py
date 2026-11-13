@@ -23,6 +23,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = Path(__file__).resolve().parent / "work"
@@ -60,6 +61,9 @@ def git(repo, *args, check=True):
 
 class FinalizationCase(unittest.TestCase):
     def setUp(self):
+        host = mock.patch.object(sbx_module, "kit_host_problems", return_value=[])
+        host.start()
+        self.addCleanup(host.stop)
         WORK.mkdir(parents=True, exist_ok=True)
         self.dir = WORK / self.id().rsplit(".", 1)[-1]
         shutil.rmtree(self.dir, ignore_errors=True)
