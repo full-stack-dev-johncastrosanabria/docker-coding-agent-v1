@@ -93,9 +93,10 @@ class ParityCase(unittest.TestCase):
 
 
 class TestSbxKitPayloadPath(unittest.TestCase):
-    def test_00_home_files_map_to_the_installer_staging_path(self):
-        # The pinned sbx kit maps files/home/* into /home/agent/* (as G6's live probe
-        # established). A second "agent" component made production kit installation fail.
+    def test_00_the_payload_is_an_overlay_rooted_at_the_vm_root(self):
+        # A v3 mixin's build is `FROM scratch / COPY payload/ /` (as G6's live probe established),
+        # so payload/<path> lands at /<path>. It ships nothing under /home/agent: overlay files
+        # are root-owned, and a root-owned home would break the agent user.
         with tempfile.TemporaryDirectory(prefix="dca-kit-layout-") as temporary:
             artifact = Path(temporary) / "artifact"
             artifact.write_bytes(b"sentinel")
@@ -107,11 +108,13 @@ class TestSbxKitPayloadPath(unittest.TestCase):
             with mock.patch.object(stage_module, "stage", side_effect=stage_sentinel):
                 stage_module.build_sbx_kit(destination, backends=["claude"], artifact=artifact)
 
-            self.assertEqual((destination / "files/home/dca-kit/sentinel").read_text(),
-                             "staged")
-            self.assertFalse((destination / "files/home/agent/dca-kit").exists())
-            self.assertIn("/home/agent/dca-kit/opt/dca/bin/docker-agent",
-                          (destination / "spec.yaml").read_text())
+            self.assertEqual((destination / "payload/sentinel").read_text(), "staged")
+            self.assertFalse((destination / "payload/home").exists())
+            self.assertFalse((destination / "files").exists())
+            descriptor = (destination / stage_module.KIT_DESCRIPTOR).read_text()
+            self.assertIn("COPY payload/ /", descriptor)
+            self.assertIn("/opt/dca/bin/docker-agent", descriptor)
+            self.assertNotIn("/home/agent", descriptor)
 
     def test_00a_the_wrappers_name_the_install_path_not_the_staging_path(self):
         """The kit is STAGED on the host but RUNS at /opt/dca in the VM.
@@ -128,7 +131,7 @@ class TestSbxKitPayloadPath(unittest.TestCase):
             # The pinned binary is not in the repository; its SHA-256 check has its own test.
             with mock.patch.object(stage_module, "_stage_artifact", return_value=None):
                 stage_module.build_sbx_kit(destination, backends=["claude"], artifact=artifact)
-            payload = destination / "files/home/dca-kit/opt/dca"
+            payload = destination / "payload/opt/dca"
             for name, module in (("dca-gate", "policy_gate.py"),
                                  ("dca-fingerprint", "fingerprint_hook.py")):
                 with self.subTest(wrapper=name):

@@ -29,9 +29,9 @@ class RuntimeVersions(unittest.TestCase):
 
     def test_decided_pins(self):
         v = self.versions
-        self.assertEqual(v["docker_agent"], "v1.136.0")
+        self.assertEqual(v["docker_agent"], "v1.160.0")
         self.assertEqual(v["docker_agent_config_version"], 15)
-        self.assertEqual(v["harness_module"], "github.com/rumpl/harness@9376b9c76461")
+        self.assertEqual(v["harness_module"], "github.com/rumpl/harness@04282da16ab5")
         self.assertEqual(v["claude_code"]["tested"], "2.1.277")
         self.assertEqual(v["sbx"]["minimum"], "0.43.0")
 
