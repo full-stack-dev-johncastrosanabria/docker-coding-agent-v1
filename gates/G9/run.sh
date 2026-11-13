@@ -23,6 +23,19 @@
 
 set -u
 
+SELECTED_BACKEND=""
+case $# in
+    0) ;;
+    2)
+        [ "$1" = --backend ] || { echo 'usage: run.sh [--backend claude|codex]' >&2; exit 2; }
+        case $2 in
+            claude|codex) SELECTED_BACKEND=$2 ;;
+            *) echo 'usage: run.sh [--backend claude|codex]' >&2; exit 2 ;;
+        esac
+        ;;
+    *) echo 'usage: run.sh [--backend claude|codex]' >&2; exit 2 ;;
+esac
+
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd) || exit 1
 cd "$ROOT" || exit 1
 
@@ -109,6 +122,18 @@ record governance_before_exit "$?"
 python3 gates/G9/record.py --preflight "$OBS" "$WORK" || stop
 
 AVAILABLE=$(python3 gates/G9/record.py --available) || stop
+if [ -n "$SELECTED_BACKEND" ]; then
+    case " $AVAILABLE " in
+        *" $SELECTED_BACKEND "*) ;;
+        *) record selected_backend_unavailable "$SELECTED_BACKEND"; stop ;;
+    esac
+    for backend in $AVAILABLE; do
+        if [ "$backend" != "$SELECTED_BACKEND" ]; then
+            record "skip_${backend}_reason" "deferred by --backend $SELECTED_BACKEND"
+        fi
+    done
+    AVAILABLE=$SELECTED_BACKEND
+fi
 record available_backends "$AVAILABLE"
 [ -n "$AVAILABLE" ] || { record no_backend_available true; stop; }
 [ -d "$KIT" ] || { record kit_missing true; stop; }

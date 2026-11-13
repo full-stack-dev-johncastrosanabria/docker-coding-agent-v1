@@ -412,6 +412,9 @@ def evaluate(obs, work, versions=None, probes_path=None):
     per_backend, statuses, facts = {}, {}, {}
     for backend in ("claude", "codex"):
         ok, why = availability(backend, versions)
+        deferred = obs.get(f"skip_{backend}_reason")
+        if deferred and f"create_dca-g9-{backend}_exit" not in obs:
+            ok, why = False, deferred
         if not ok:
             per_backend[backend] = []
             statuses[backend] = ("NOT-RUN", why)

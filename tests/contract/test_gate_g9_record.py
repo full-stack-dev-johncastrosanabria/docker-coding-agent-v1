@@ -244,6 +244,23 @@ class G9Recorder(unittest.TestCase):
 
     # --- the positive control ---------------------------------------------------------------------
 
+    def test_selected_backend_does_not_claim_a_deferred_backend_was_run(self):
+        obs = self._capture()
+        obs.pop("create_dca-g9-claude_exit")
+        obs["skip_claude_reason"] = "deferred by --backend codex"
+        evidence, _ = self._record_to(obs)
+        self._validate(evidence)
+        self.assertEqual(evidence["backends"]["codex"]["status"], "PASS")
+        self.assertEqual(evidence["backends"]["claude"], {
+            "status": "NOT-RUN", "not_run_reason": "deferred by --backend codex"})
+
+    def test_deferral_does_not_hide_a_backend_that_was_created(self):
+        obs = self._capture()
+        obs["skip_claude_reason"] = "deferred by --backend codex"
+        obs["control_claude_exit"] = "1"
+        evidence, _ = self._record_to(obs)
+        self.assertEqual(evidence["backends"]["claude"]["status"], "FAIL")
+
     def test_04_a_failed_positive_control_fails_the_backend(self):
         _, status = self._results(self._capture(**{"control_claude_exit": "1"}))
         self.assertEqual(status, "FAIL")
