@@ -219,6 +219,7 @@ class Launcher:
         # is unproven identity rather than no opinion.
         self.review_fingerprints = None
         self.vm_models = []
+        self.vm_requests = []
         self.source_ref = None
         self.source_commit = None
         self.dirty_paths = []
@@ -654,7 +655,7 @@ class Launcher:
         staging = os.path.join(self.workdir, "deliver")
         os.makedirs(staging, exist_ok=True)
         _write_json(os.path.join(staging, "run.json"), run_record)
-        _write_json(os.path.join(staging, "grants.json"), self.grants)
+        _write_json(os.path.join(staging, "grants.json"), grants_module.gate_view(self.grants))
         with open(os.path.join(staging, "task.txt"), "w", encoding="utf-8") as handle:
             handle.write(self._task_text())
 
@@ -953,7 +954,7 @@ class Launcher:
             except (SbxError, OSError):
                 continue
             collected[name] = destination
-        for name in ("gate.log.jsonl", "fingerprints.jsonl"):
+        for name in ("gate.log.jsonl", "fingerprints.jsonl", "approvals.jsonl"):
             try:
                 self.sbx.copy_out(self.sandbox, f"{STATE_DIR}/{name}",
                                   os.path.join(self.request.out, name))
@@ -967,6 +968,7 @@ class Launcher:
         self.review_fingerprints = fingerprint_module.read_review_records(
             os.path.join(self.request.out, "fingerprints.jsonl"))
         self.vm_models = self.claude_models() if self.request.backend == "claude" else []
+        self.vm_requests = _read_jsonl(os.path.join(self.request.out, "approvals.jsonl"))
         agent_report = None
         if "report.agent.json" in collected:
             try:
@@ -975,6 +977,11 @@ class Launcher:
             except (OSError, ValueError):
                 agent_report = None
         return agent_report
+
+    def action_names(self):
+        with open(os.path.join(self.repo_root, "runtime", "policy", "actions.yaml"),
+                  encoding="utf-8") as handle:
+            return {row["id"]: row["name"] for row in json.load(handle)["classes"]}
 
     def claude_models(self):
         """The model ids in Claude Code's own transcripts. Claude runs as a harness, so the outer
@@ -1095,6 +1102,8 @@ class Launcher:
             limits_configured=self.host_limits(),
             versions=self.version_block(analysis.models + self.vm_models),
             launcher_checks=launcher_checks,
+            approvals=grants_module.reported_approvals(
+                self.vm_requests, request.run_id, self.action_names()),
             review_fingerprints=self.review_fingerprints,
             limit_evidence_predates=_evidence_predates_limit(analysis, host_stop,
                                                              launcher_checks))
@@ -1114,6 +1123,21 @@ class Launcher:
 
 
 # --- small helpers ------------------------------------------------------------------------------
+
+def _read_jsonl(path):
+    """The JSON objects in a VM-originated log; unreadable or malformed lines are skipped."""
+    records = []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    records.append(json.loads(line))
+                except ValueError:
+                    continue
+    except OSError:
+        return []
+    return records
+
 
 #: How much of the agent's stderr is kept (the tail): enough for the error that ended a run.
 AGENT_STDERR_LIMIT = 65536
