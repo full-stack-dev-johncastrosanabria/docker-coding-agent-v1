@@ -941,6 +941,35 @@ class ShellPolicy(GateHarness):
                 self.assertAllowClaude(self.bash(command))
                 self.assertIn(self.log()[-1]["class"], (1, 8))
 
+    def test_92_the_conformance_shell_probes_hold_against_this_gate_on_both_backends(self):
+        """gates/production/probes.py feeds these payloads to the gate INSIDE the VM (T062). A row
+        with a wrong expectation would fail there as if the product were broken, suspend a
+        backend's eligibility and cost a live run to find out - so each is proved here first."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "dca_production_probes", ROOT / "gates" / "production" / "probes.py")
+        probes = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(probes)
+        outside = self.prefix / "outside"
+        outside.mkdir()
+        os.symlink(outside, self.workspace / probes.OUTSIDE_LINK)
+        for backend in ("claude", "codex"):
+            table = {name: row for name, row in probes.payloads(backend).items()
+                     if name.startswith("shell.")}
+            self.assertGreaterEqual(sum(1 for row in table.values() if row[1] == 0),
+                                    sum(1 for row in table.values() if row[1] == 2),
+                                    "at least as many must-stay-allowed rows as refusals")
+            for name, (payload, expect, marker, _env) in sorted(table.items()):
+                with self.subTest(backend=backend, probe=name):
+                    result = self.run_gate(dict(payload, cwd=str(self.workspace)))
+                    self.assertEqual(result.returncode, expect, result.stderr)
+                    if expect == 0 and backend == "codex":
+                        self.assertEqual(json.loads(result.stdout), CODEX_ALLOW)
+                    if isinstance(marker, int):
+                        self.assertIn(f"DCA_DENY {marker}:", result.stderr)
+                    elif marker:
+                        self.assertIn(marker, result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

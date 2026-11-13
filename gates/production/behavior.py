@@ -255,6 +255,7 @@ def build_fixture(backend):
         encoding="utf-8")
     (directory / "pkg" / "sub").mkdir(parents=True)
     (directory / "pkg" / "sub" / "module.py").write_text("VALUE = 1\n", encoding="utf-8")
+    os.symlink(probe_data.OUTSIDE_TARGET, directory / probe_data.OUTSIDE_LINK)
 
     # A same-named copy of the gate's trusted sibling module, plus the files the hostile env block
     # points at. None of them may ever be reached.
@@ -335,6 +336,9 @@ def run_gate_probes(instance, backend, rows, out):
               "sudo chmod 0644 /run/dca/out/context.json",
               *probe_lines(after)]
     script.append("sudo rm -f /run/dca/out/context.json")
+    # The ASK probes opened approval requests. They are the harness's, not the run's: left in
+    # place, the launcher would report them as requests the agent made.
+    script.append(f"sudo rm -f {STATE_DIR}/approvals.jsonl")
     script.append(f"printf 'HOSTILE_MODULE\\t%s\\n' "
                   f"\"$(test -e {probe_data.HOSTILE_MODULE_MARKER} && echo imported || echo no)\"")
     result = sh(instance, "\n".join(script), timeout=300)
@@ -356,10 +360,9 @@ def run_gate_probes(instance, backend, rows, out):
         if seen["exit"] != str(expect):
             failures.append(f"{name}: exit {seen['exit']}, expected {expect}")
             continue
-        if expect == 2 and deny_class is not None \
-                and f"DCA_DENY {deny_class}:" not in seen["stderr"]:
-            failures.append(f"{name}: denied without class {deny_class} "
-                            f"({seen['stderr'][:80]!r})")
+        needle = f"DCA_DENY {deny_class}:" if isinstance(deny_class, int) else deny_class
+        if expect == 2 and needle is not None and needle not in seen["stderr"]:
+            failures.append(f"{name}: refused without {needle!r} ({seen['stderr'][:80]!r})")
         if expect == 0 and backend == "codex" and "permission_decision" not in seen["stdout"]:
             failures.append(f"{name}: allowed without a codex decision on stdout")
     checked(rows, "gate.decisions", not failures,
@@ -772,10 +775,17 @@ def run_native_deny(instance, rows, out):
 
 # --- the runner -------------------------------------------------------------------------------------
 
+class _ProbesOnly(Exception):
+    """--probes-only: leave after the gate probes, through the normal cleanup."""
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--backend", required=True, choices=("claude", "codex"))
     parser.add_argument("--timeout", type=int, default=1100)
+    parser.add_argument("--probes-only", action="store_true",
+                        help="feed the hook payloads to the installed gate and stop: no model run, "
+                             "no quota. Written to its own file, never as the behaviour evidence")
     options = parser.parse_args()
     backend = options.backend
     WORK.mkdir(parents=True, exist_ok=True)
@@ -801,6 +811,8 @@ def main():
         result["sandbox"] = instance.sandbox
 
         run_gate_probes(instance, backend, rows, out)
+        if options.probes_only:
+            raise _ProbesOnly()
         if backend == "codex":
             run_debug_surfaces(instance, rows, out)
 
@@ -834,6 +846,8 @@ def main():
 
         run_failclosed(instance, backend, rows, out)
         completed = True
+    except _ProbesOnly:
+        completed = True
     except Exception as exc:  # noqa: BLE001 - a harness failure is a FAIL, never a silent pass
         checked(rows, "harness.execution", False,
                 {"error": f"{type(exc).__name__}: {exc}",
@@ -858,12 +872,13 @@ def main():
                  "remaining": result["remaining_sandboxes"]})
         result["status"] = ("PASS" if rows and all(row["result"] == "PASS" for row in rows)
                             else "FAIL")
-        (WORK / f"behavior-{backend}.json").write_text(json.dumps(result, indent=2) + "\n",
-                                                       encoding="utf-8")
+        evidence = WORK / (f"probes-only-{backend}.json" if options.probes_only
+                           else f"behavior-{backend}.json")
+        evidence.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     failures = [row["id"] for row in rows if row["result"] != "PASS"]
     print(json.dumps({"backend": backend, "status": result["status"], "run_id": result["run_id"],
                       "checks": len(rows), "failures": failures,
-                      "evidence": str(WORK / f"behavior-{backend}.json")}, indent=2))
+                      "evidence": str(evidence)}, indent=2))
     return 0 if result["status"] == "PASS" else 1
 
 
