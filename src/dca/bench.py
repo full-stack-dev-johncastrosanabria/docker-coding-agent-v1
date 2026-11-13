@@ -103,6 +103,16 @@ SEED_ENV = {
 #: A fixture's own ceiling on top of the run's wall-clock host limit: provisioning, retrieval and
 #: cleanup are outside the agent's clock but inside this one.
 RUN_TIMEOUT_SECONDS = 2400
+#: What Claude Code says, as its whole message, when the subscription window is spent (observed
+#: 2026-09-24 "session limit - resets" and 2026-11-13 "5-hour limit · resets 7:50pm (UTC)"). Such a
+#: run did no work: it is the provider's quota, never a result of the product or of the model.
+#: shortcut: Claude Code's wording only; add the Codex/ChatGPT message when one is observed.
+QUOTA_EXHAUSTED = re.compile(
+    r"You've hit your [\w -]*limit\b.{0,20}?resets (\d{1,2})(?::(\d{2}))?\s*([ap]m) \(UTC\)\.?")
+QUOTA_MARGIN_SECONDS = 120
+#: A window resets within five hours. A longer wait is a different limit (weekly), not waited for.
+QUOTA_MAX_WAIT_SECONDS = 6 * 3600
+QUOTA_MAX_WAITS = 2
 ORACLE_TIMEOUT_SECONDS = 300
 
 PASSED, FAILED, BLOCKED = "passed", "failed", "blocked"
@@ -272,6 +282,33 @@ def delegations(events_path):
             if any(role in name.lower() for name in names):
                 found[role] = True
     return found
+
+
+def quota_reset(events_path, now):
+    """When the provider's quota resets, if this run was cut short by it; else None.
+
+    Only an `agent_choice` event whose WHOLE content is the provider's notice counts, so an agent
+    that quotes the sentence inside its own prose, or a repository that contains it, is not one.
+    """
+    try:
+        with open(events_path, encoding="utf-8") as handle:
+            lines = handle.readlines()
+    except OSError:
+        return None
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict) or event.get("type") != "agent_choice":
+            continue
+        match = QUOTA_EXHAUSTED.fullmatch(str(event.get("content") or "").strip())
+        if match:
+            hour = int(match.group(1)) % 12 + (12 if match.group(3) == "pm" else 0)
+            reset = now.replace(hour=hour, minute=int(match.group(2) or 0), second=0,
+                                microsecond=0)
+            return reset if reset > now else reset + datetime.timedelta(days=1)
+    return None
 
 
 def verification_result(report):
@@ -942,8 +979,10 @@ class Bench:
     def __init__(self, backends, trust="trusted", fixtures=None, repeat=1, repo_root=None,
                  bench_id=None, sbx=None, oracle=None, dca_command=None, clock=time.monotonic,
                  log=None, work_root=None, results_root=None, plans=None, thresholds=None,
-                 choice=None):
+                 choice=None, sleep=time.sleep, now=None):
         self.backends = list(backends)
+        self.sleep = sleep
+        self.now = now or (lambda: datetime.datetime.now(datetime.timezone.utc))
         self.choice = dict(choice or {})
         self.trust = trust
         self.fixtures = list(fixtures or [])
@@ -1047,6 +1086,32 @@ class Bench:
             return None
 
     def run_one(self, backend, fixture, index, run_trust=None, acceptance=False):
+        """One scored run. A run the provider's quota cut short is not a result: the campaign
+        waits for the reset the provider announced and runs it again, and says so in the record."""
+        events_path = os.path.join(self.work, f"{backend}-{fixture['id']}-{index}", "run",
+                                   "events.jsonl")
+        waits = []
+        while True:
+            record = self._run_once(backend, fixture, index, run_trust, acceptance)
+            now = self.now()
+            reset = quota_reset(events_path, now)
+            if reset is None:
+                break
+            seconds = (reset - now).total_seconds() + QUOTA_MARGIN_SECONDS
+            if len(waits) >= QUOTA_MAX_WAITS or seconds > QUOTA_MAX_WAIT_SECONDS:
+                record["result"] = FAILED
+                record["reasons"] = ["the provider's quota is exhausted and did not come back: "
+                                     "not a result of the product"] + list(record["reasons"])
+                break
+            waits.append({"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                          "resets_at": reset.strftime("%Y-%m-%dT%H:%M:%SZ")})
+            self.log(f"dca bench:   -> provider quota exhausted; waiting until "
+                     f"{reset.strftime('%H:%M')} UTC, then running {fixture['id']} again")
+            self.sleep(seconds)
+        record["quota_waits"] = waits
+        return record
+
+    def _run_once(self, backend, fixture, index, run_trust=None, acceptance=False):
         trust = run_trust or self._trust_for(fixture)
         base = os.path.join(self.work, f"{backend}-{fixture['id']}-{index}")
         shutil.rmtree(base, ignore_errors=True)

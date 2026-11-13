@@ -400,6 +400,77 @@ class TestBenchRuns(unittest.TestCase):
         self.assertIn("dca bench: codex S5b is not applicable (untrusted-eligible); skipped",
                       self.logs)
 
+    def test_51d_a_run_cut_short_by_the_provider_quota_is_waited_out_and_run_again(self):
+        import datetime
+        fixture = bench.discover(selection="R1")[0]
+        now = datetime.datetime(2026, 11, 13, 17, 26, tzinfo=datetime.timezone.utc)
+        slept = []
+        runner = bench.Bench(["claude"], fixtures=[fixture], repo_root=str(ROOT), sbx=self.sbx,
+                             dca_command=["dca"], work_root=str(self.dir / "work"),
+                             results_root=str(self.dir / "results"), log=self.logs.append,
+                             sleep=slept.append, now=lambda: now)
+        notice = {"type": "agent_choice", "agent_name": "root",
+                  "content": "You've hit your 5-hour limit · resets 7:50pm (UTC)"}
+        attempts = []
+
+        def invoke(argv, base):
+            attempts.append(argv)
+            out = Path(argv[argv.index("--out") + 1])
+            out.mkdir(parents=True, exist_ok=True)
+            if len(attempts) == 1:      # the first attempt hits the quota; the second does not
+                (out / "events.jsonl").write_text(json.dumps(notice) + "\n")
+            return 3, "refused"
+
+        runner._invoke = invoke
+        record = runner.run_one("claude", fixture, 1)
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(slept, [(19 * 60 + 50 - (17 * 60 + 26)) * 60 + bench.QUOTA_MARGIN_SECONDS])
+        self.assertEqual(record["quota_waits"], [{"at": "2026-11-13T17:26:00Z",
+                                                  "resets_at": "2026-11-13T19:50:00Z"}])
+
+    def test_51e_only_the_providers_own_notice_counts_as_quota(self):
+        import datetime
+        now = datetime.datetime(2026, 11, 13, 23, 30, tzinfo=datetime.timezone.utc)
+        path = self.dir / "events.jsonl"
+
+        def reset(content, kind="agent_choice"):
+            path.write_text("not json\n" + json.dumps({"type": kind, "content": content}) + "\n")
+            return bench.quota_reset(str(path), now)
+
+        self.assertEqual(reset("You've hit your session limit - resets 1am (UTC)"),
+                         now.replace(day=14, hour=1, minute=0))
+        self.assertEqual(reset("You've hit your 5-hour limit · resets 12:05am (UTC)"),
+                         now.replace(day=14, hour=0, minute=5))
+        self.assertIsNone(reset("The log says: You've hit your 5-hour limit · resets 7pm (UTC)"))
+        self.assertIsNone(reset("You've hit your 5-hour limit · resets 7pm (UTC)",
+                                kind="tool_call_response"))
+        self.assertIsNone(reset("You've hit your weekly limit · resets Nov 20, 7pm (UTC)"))
+        self.assertIsNone(bench.quota_reset(str(self.dir / "absent.jsonl"), now))
+
+    def test_51f_a_quota_that_does_not_come_back_fails_the_run_and_names_the_cause(self):
+        import datetime
+        fixture = bench.discover(selection="R1")[0]
+        now = datetime.datetime(2026, 11, 13, 17, 26, tzinfo=datetime.timezone.utc)
+        slept = []
+        runner = bench.Bench(["claude"], fixtures=[fixture], repo_root=str(ROOT), sbx=self.sbx,
+                             dca_command=["dca"], work_root=str(self.dir / "work"),
+                             results_root=str(self.dir / "results"), log=self.logs.append,
+                             sleep=slept.append, now=lambda: now)
+
+        def invoke(argv, base):
+            out = Path(argv[argv.index("--out") + 1])
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "events.jsonl").write_text(json.dumps(
+                {"type": "agent_choice",
+                 "content": "You've hit your 5-hour limit · resets 6pm (UTC)"}) + "\n")
+            return 3, "refused"
+
+        runner._invoke = invoke
+        record = runner.run_one("claude", fixture, 1)
+        self.assertEqual(len(slept), bench.QUOTA_MAX_WAITS)
+        self.assertEqual(record["result"], bench.FAILED)
+        self.assertIn("provider's quota is exhausted", record["reasons"][0])
+
     def test_52_a_wrong_answer_is_caught_by_the_oracle(self):
         fixture = bench.discover(selection="R1")[0]
         bad = os.path.join(fixture["_dir"], fixture["golden"]["bad"][0])
