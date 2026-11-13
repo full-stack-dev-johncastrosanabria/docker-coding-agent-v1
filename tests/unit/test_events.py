@@ -504,6 +504,34 @@ class TestAccounting(unittest.TestCase):
             verification_commands=["make test"])
         self.assertEqual(result.retries, 0)
 
+    def test_52h_a_repair_and_a_check_in_one_call_is_still_a_retry(self):
+        """`cat > x <<EOF ... EOF && check` repairs and re-verifies in one call; counting only
+        separate calls would let a whole repair loop run at zero retries."""
+        body = [call("v0", "Bash", {"command": "python3 -m unittest"}),
+                response("v0", "FAILED (failures=1)")]
+        joins = ["sed -i s/6/7/ rollout.json && python3 -m unittest",
+                 "cat > fix.py <<'EOF'\nx = 1\nEOF\npython3 -m unittest",
+                 "cd /workspace && echo 1 > a.txt; python3 -m unittest"]
+        for n, command in enumerate(joins, 1):
+            body += [call(f"v{n}", "Bash", {"command": command}),
+                     response(f"v{n}", "FAILED (failures=1)")]
+        result = events.analyze(stream(*body), exit_status=0,
+                                verification_commands=["python3 -m unittest"])
+        self.assertEqual(result.retries, 3)
+
+    def test_52i_inspection_or_scratch_before_the_check_is_not_a_repair(self):
+        body = [call("v0", "Bash", {"command": "python3 -m unittest"}),
+                response("v0", "FAILED (failures=1)")]
+        for n, command in enumerate(["cd /workspace && python3 -m unittest",
+                                     "git status && python3 -m unittest",
+                                     "PYTHONPATH=. python3 -m unittest",
+                                     "echo x > /run/dca/out/note && python3 -m unittest"], 1):
+            body += [call(f"v{n}", "Bash", {"command": command}),
+                     response(f"v{n}", "FAILED (failures=1)")]
+        result = events.analyze(stream(*body), exit_status=0,
+                                verification_commands=["python3 -m unittest"])
+        self.assertEqual(result.retries, 0)
+
     def test_52g_the_model_each_agent_ran_is_recorded_from_agent_info(self):
         result = events.analyze(stream(
             event("agent_info", model="chatgpt/gpt-6.1-sol"),

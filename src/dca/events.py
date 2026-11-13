@@ -935,6 +935,30 @@ def _account_ordering(result, scratch_dir):
             result.plan_at = record.order
 
 
+#: How a shell joins the repair to the check that follows it in the same call.
+_JOINED = re.compile(r"(?:&&|\|\||;|\n)\s*$")
+
+
+def _repairs_before_check(command, needle):
+    """True when the same call changed the workspace BEFORE running the check.
+
+    `cat > x <<EOF ... EOF && python3 -m unittest` is a repair and a re-verification in one call.
+    Only a prefix joined to the check by `&&`, `||`, `;` or a newline counts, and only one the host
+    cannot prove is inspection or a scratch-only write: `cd /workspace && ...` and an environment
+    prefix such as `PYTHONPATH=. ...` are not repairs.
+    """
+    if not command:
+        return False
+    found = re.search(r"\s+".join(map(re.escape, needle.split())), command)
+    if found is None:
+        return False
+    prefix = command[:found.start()]
+    if not _JOINED.search(prefix):
+        return False
+    prefix = _JOINED.sub("", prefix).strip()
+    return bool(prefix) and shellparse.command_effect(prefix)[0] == "mutate"
+
+
 def _account_retries(result, verification_commands):
     """Retries = repair/re-verify cycles (data-model.md "counters").
 
@@ -951,6 +975,9 @@ def _account_retries(result, verification_commands):
         if not record.dispatched:
             continue
         matched = _matches_check(record, commands)
+        if matched is not None and _repairs_before_check(record.command, matched):
+            for command in list(mutated_since):
+                mutated_since[command] = True
         if matched is None:
             # Only a change that is NOT itself a declared check can be the "repair" half of a
             # cycle. Running the check counts as a workspace mutation elsewhere (a build can
