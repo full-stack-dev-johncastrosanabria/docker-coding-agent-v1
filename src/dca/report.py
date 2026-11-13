@@ -24,7 +24,8 @@ matters because several rules can apply at once and they do not commute:
      saw an unchanged candidate.
   5. **otherwise FR-035a decides `failed` vs `blocked`**: a check that conclusively failed is a
      `failed` task; a check that could not run, or an approval that was never answered, is
-     `blocked`, because "we could not tell" is not "it does not work".
+     `blocked`, because "we could not tell" is not "it does not work". A check that fails BECAUSE
+     an approval was refused is `blocked` too, when the agent itself stopped there (FR-027c).
 
 WHY A `fail` OUTRANKS A MISSING REVIEW. A planned task whose required check conclusively failed
 before any limit is `failed` even when the review is missing: the more specific rule wins, because
@@ -269,13 +270,19 @@ def _limit_stop_reason(limits, integrity):
             "completion report")
 
 
-def _fr035a(verification, approvals, limit_reached):
+def _fr035a(verification, approvals, limit_reached, agent_outcome=None):
     """FR-035a: `failed` when something conclusively failed, `blocked` when nothing could tell."""
     checks = (verification or {}).get("checks") or []
     required = [check for check in checks if check.get("required")]
+    # FR-027c: a refused approval the agent could not work around is WHY the task stopped, and the
+    # check that fails without the refused action is its consequence, not a conclusive result. The
+    # agent's own `blocked` is what tells that apart from an agent that went on with a permitted
+    # alternative and reports the failure it then reached.
+    stopped_on_approval = agent_outcome == BLOCKED and any(
+        approval.get("status") in ("denied", "unanswered") for approval in approvals or [])
 
     for check in required:
-        if check.get("result") == "fail" and not limit_reached:
+        if check.get("result") == "fail" and not limit_reached and not stopped_on_approval:
             return FAILED, (f"required check {check.get('id')!r} failed before any limit"), None
 
     for check in required:
@@ -414,7 +421,8 @@ def decide(draft, limit_evidence_predates=None):
         return settle(SUCCEEDED, None, None, "D-FIN.4 success conditions satisfied")
 
     # 5. FR-035a decides between failed and blocked.
-    outcome, reason, action = _fr035a(verification, draft.get("approvals"), limit_reached)
+    outcome, reason, action = _fr035a(verification, draft.get("approvals"), limit_reached,
+                                      agent_outcome)
     if outcome == FAILED and (
             isinstance(review, dict) and review.get("identical") is False):
         # A reviewer-immutability violation can never be reported as a plain task failure: it is a

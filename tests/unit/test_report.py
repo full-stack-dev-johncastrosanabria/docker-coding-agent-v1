@@ -629,6 +629,30 @@ class TestFailedVersusBlocked(ReportCase):
         self.assertEqual(built["final_outcome"], "blocked")
         self.assertTrue(built["human_action_required"])
 
+    def test_73a_a_check_that_fails_for_want_of_an_approval_is_blocked_not_failed(self):
+        # Found live (S8): the install was refused, the agent stopped and said so, and the host
+        # called it `failed` because the test that needs the dependency still fails.
+        approval = {"id": f"apr-{RUN_ID}-1", "action_class": 15, "action": "Add a new dependency",
+                    "target": "npm:x", "normalized_target": "npm:x", "reason": "needed",
+                    "risk": "medium", "status": "unanswered"}
+        built = self.build(agent=agent_report(outcome="blocked", checks=[check(result="fail")]),
+                           approvals=[approval])
+        self.assertEqual(built["final_outcome"], "blocked")
+        self.assertIn(approval["id"], built["primary_reason"])
+        self.assertIn(f"--approve {approval['id']}", built["human_action_required"])
+        self.assertEqual(built["outcome_overrides"], [])
+
+    def test_73b_an_agent_that_went_on_and_failed_is_still_failed(self):
+        approval = {"id": f"apr-{RUN_ID}-1", "action_class": 21, "action": "External API call",
+                    "target": "example.invalid", "normalized_target": "example.invalid",
+                    "reason": "x", "risk": "medium", "status": "unanswered"}
+        for outcome in ("failed", "succeeded"):
+            with self.subTest(agent=outcome):
+                built = self.build(agent=agent_report(outcome=outcome,
+                                                      checks=[check(result="fail")]),
+                                   approvals=[approval])
+                self.assertEqual(built["final_outcome"], "failed")
+
     def test_74_every_override_names_the_rule_that_fired(self):
         built = self.build(agent=agent_report(checks=[check(result="fail")]))
         self.assertEqual(built["outcome_overrides"],
