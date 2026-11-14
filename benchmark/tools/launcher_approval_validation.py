@@ -12,6 +12,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -21,6 +22,8 @@ from dca import bench  # noqa: E402
 
 DCA = os.path.join(ROOT, "bin", "dca")
 LIVE_TIMEOUT = 1800
+DIRTY_FILE = "README.md"  # K1 has none, so the edit creates it untracked
+BACKENDS = ("codex", "claude")
 
 
 def git(repo, *args):
@@ -36,6 +39,15 @@ def seed(fixture_id, work):
     with open(task, "w", encoding="utf-8") as handle:
         handle.write(fixture["task"])
     return repo, task, fixture["verification"]["commands"][0]
+
+
+def request_id_of(request):
+    """A report's request id, refused unless it has the launcher's own `apr-<run>-<n>` form."""
+    match = re.fullmatch(r"apr-(run-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-[0-9a-f]{6})-(\d{1,4})",
+                         str(request.get("id", "")))
+    if not match:
+        raise ValueError(f"not a launcher request id: {request.get('id')!r}")
+    return f"apr-{match.group(1)}-{int(match.group(2))}"
 
 
 def read_json(path):
@@ -69,7 +81,7 @@ class Validation:
     def preconditions(self):
         repo, task, _ = seed("K1", self.work)
         task_arg = f"@{task}"
-        with open(os.path.join(repo, "README.md"), "a", encoding="utf-8") as handle:
+        with open(os.path.join(repo, DIRTY_FILE), "a", encoding="utf-8") as handle:
             handle.write("wip\n")
 
         out = self.out("dirty")
@@ -85,13 +97,13 @@ class Validation:
         changed = [f.get("path") for f in (report.get("change_set") or {}).get("files") or []]
         self.check("s5.ignore_uncommitted_runs_from_head",
                    source.get("uncommitted_ignored") is True
-                   and "README.md" in (source.get("dirty_paths") or [])
-                   and "README.md" not in changed
+                   and DIRTY_FILE in (source.get("dirty_paths") or [])
+                   and DIRTY_FILE not in changed
                    and (report.get("run_integrity") or {}).get("sandbox_created") is True,
                    exit=code, run_id=report.get("run_id"), final_outcome=report.get("final_outcome"),
                    source=source, changed_files=changed)
 
-        os.remove(os.path.join(repo, "README.md"))  # K1 has no README.md: the edit made it untracked
+        os.remove(os.path.join(repo, DIRTY_FILE))
         out = self.out("untrusted")
         code, tail = self.dca(repo, "--trust", "untrusted", "--task", task_arg, out=out)
         report = read_json(f"{out}/report.json") or {}
@@ -137,7 +149,7 @@ class Validation:
                    approvals=origin.get("approvals"))
         if not requests:
             return
-        request_id = requests[0]["id"]
+        request_id = request_id_of(requests[0])
 
         # 2. stale approvals: each is refused before a sandbox exists
         stale = {
@@ -175,15 +187,16 @@ class Validation:
                    exit=code, run_id=third.get("run_id"), approvals=third.get("approvals"))
         if not again:
             return
+        third_id = request_id_of(again[0])
 
         # 5. a custom --out origin: --approve alone cannot find it; --approval-report can
-        code, tail = self.dca(repo, *base, "--approve", again[0]["id"], out=self.out("no-report-path"))
+        code, tail = self.dca(repo, *base, "--approve", third_id, out=self.out("no-report-path"))
         self.check("s6.custom_out_without_approval_report_exit_3", code == 3, exit=code,
                    tail=tail[-400:])
         out = self.out("approved-custom")
-        code, tail = self.dca(repo, *base, "--approve", again[0]["id"],
+        code, tail = self.dca(repo, *base, "--approve", third_id,
                               "--approval-report", f"{self.out('third')}/report.json", out=out)
-        self.grant_checks("s6.approve_with_approval_report", code, out, again[0]["id"], third)
+        self.grant_checks("s6.approve_with_approval_report", code, out, third_id, third)
 
     def grant_checks(self, check_id, code, out, request_id, origin):
         report = read_json(f"{out}/report.json") or {}
@@ -208,11 +221,11 @@ class Validation:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--backend", action="append", choices=("claude", "codex"), required=True)
+    parser.add_argument("--backend", action="append", choices=BACKENDS, required=True)
     options = parser.parse_args()
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
     results = {"task": "T090", "started": stamp, "backends": {}}
-    for backend in options.backend:
+    for backend in (b for b in BACKENDS if b in options.backend):
         work = os.path.join(ROOT, "benchmark", "work", f"T090-{backend}-{stamp}")
         os.makedirs(work)
         validation = Validation(backend, work)
