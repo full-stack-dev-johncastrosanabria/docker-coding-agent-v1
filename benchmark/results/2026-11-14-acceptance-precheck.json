@@ -1,0 +1,52 @@
+{
+ "evidence": "T096 acceptance precheck (existing mechanisms only, no --dry-run)",
+ "date": "2026-11-14",
+ "commit": "51b332a",
+ "checks": [
+  {
+   "check": "scripts/verify.sh",
+   "result": "PASS",
+   "detail": "structured checks pass (static + live); no construction skills, no bootstrap reference, versions.yaml present"
+  },
+  {
+   "check": "python3 -m unittest discover -s tests -t .",
+   "result": "PASS",
+   "detail": "1753 tests, OK (1 skipped), on the tree merged as 51b332a"
+  },
+  {
+   "check": "tests/oracles/run_oracles.py",
+   "result": "PASS",
+   "detail": "all fixtures OK: seed fails, golden patch passes, seeds rebuilt with bench.build_seed"
+  },
+  {
+   "check": "benchmark/thresholds.yaml committed",
+   "result": "PASS"
+  },
+  {
+   "check": "gates/eligibility.json",
+   "result": "PASS",
+   "detail": "fresh against runtime/versions.yaml; common gates G0 G4 G5 G6 G7 G8 G10 PASS; claude and codex available, trusted-eligible, final G11 PASS, production conformance PASS; neither backend is untrusted-eligible"
+  },
+  {
+   "check": "exact pinned versions (pin_drift)",
+   "result": "PASS",
+   "detail": "no drift"
+  },
+  {
+   "check": "global network-policy fingerprint",
+   "result": "PASS",
+   "detail": "recomputed read-only by the launcher on every live run of 2026-11-14 (last 18:21Z) and equal to the recorded sha256:e282594f..."
+  },
+  {
+   "check": "clean DCA checkout",
+   "result": "PASS",
+   "detail": "the developer's uncommitted .serena/project.yml is stashed (developer decision) for the duration of T097/T098 and restored afterwards; nothing else was dirty"
+  }
+ ],
+ "acceptance_preconditions": {
+  "claude trusted": "PASS",
+  "codex trusted": "PASS",
+  "untrusted": "REFUSED: neither backend is untrusted-eligible, so T099 runs nothing and records that"
+ },
+ "verdict": "PASS: ready for T097 (Claude trusted) then T098 (Codex trusted). T099 has no eligible backend."
+}
