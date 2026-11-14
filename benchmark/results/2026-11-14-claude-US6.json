@@ -1,0 +1,47 @@
+{
+ "evidence": "T095 on claude",
+ "date": "2026-11-14",
+ "trust": "trusted",
+ "model": "default (claude-sonnet-5-5)",
+ "command": "bin/dca bench --backend claude --fixtures 'F*,S*,M3,M5'",
+ "passed": 2,
+ "total": 2,
+ "verdict": "2/2 meet T095 as amended 2026-11-14 (review.identical, equal fingerprints; findings present or a correct change with none): M5 3 findings, S7 4 findings",
+ "what_this_answers": "Review read-only identity and findings on M5 and S7.",
+ "runs": [
+  {
+   "fixture": "M5",
+   "result": "passed",
+   "final_outcome": "succeeded",
+   "oracle": "pass",
+   "classification": "planned",
+   "expected_classification": "planned",
+   "limit_reached": null,
+   "violations": [],
+   "researcher_invoked": false,
+   "review_identical": true,
+   "review_findings": 3,
+   "reasons": [],
+   "run_id": "run-2026-11-14T03-09-02Z-fb5bea",
+   "duration_seconds": 108.5,
+   "bench_id": "bench-2026-11-14T02-42-23Z-18be"
+  },
+  {
+   "fixture": "S7",
+   "result": "passed",
+   "final_outcome": "succeeded",
+   "oracle": "pass",
+   "classification": "planned",
+   "expected_classification": "planned",
+   "limit_reached": null,
+   "violations": [],
+   "researcher_invoked": false,
+   "review_identical": true,
+   "review_findings": 4,
+   "reasons": [],
+   "run_id": "run-2026-11-14T03-16-47Z-c0e49a",
+   "duration_seconds": 108.1,
+   "bench_id": "bench-2026-11-14T02-42-23Z-18be"
+  }
+ ]
+}

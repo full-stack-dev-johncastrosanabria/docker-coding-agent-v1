@@ -204,6 +204,19 @@ class TestRootInstruction(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.body)
 
+    def test_39a_it_defines_cross_component_impact_past_the_documentation_exemption(self):
+        # M3 (2026-11-14): both models classified a shared-helper fix direct because nothing
+        # defined this criterion and "matches its documentation" exempted it from contract change.
+        for phrase in ("**cross-component impact**: callers in another top-level package or directory "
+                       "will see different results",
+                       "even with no signature change and even when the change makes code match its "
+                       "documentation",
+                       "code that keeps its own copy of the logic is not one",
+                       '"unclear_root_cause": {...}, "cross_component_impact": {...}}',
+                       "`direct` needs all four `false`"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.body)
+
 
 class TestSubagentInstructions(unittest.TestCase):
     def test_40_the_researcher_is_read_only_and_never_delegates(self):

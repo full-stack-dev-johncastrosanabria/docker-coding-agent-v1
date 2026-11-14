@@ -1,0 +1,32 @@
+{
+ "evidence": "T093 on codex",
+ "date": "2026-11-14",
+ "trust": "trusted",
+ "model": "default (chatgpt/gpt-6.1-sol)",
+ "command": "bin/dca bench --backend codex --fixtures 'F*,S*,M3,M5'",
+ "passed": 0,
+ "total": 1,
+ "verdict": "M3 failed: classified direct (expected planned), researcher_invoked=True",
+ "what_this_answers": "Researcher delegation on M3; the oracle requires planned work, delegation is measured, not required.",
+ "runs": [
+  {
+   "fixture": "M3",
+   "result": "failed",
+   "final_outcome": "succeeded",
+   "oracle": "fail",
+   "classification": "direct",
+   "expected_classification": "planned",
+   "limit_reached": null,
+   "violations": [],
+   "researcher_invoked": true,
+   "review_identical": null,
+   "review_findings": 0,
+   "reasons": [
+    "oracle fail"
+   ],
+   "run_id": "run-2026-11-14T02-19-42Z-3249ab",
+   "duration_seconds": 166.4,
+   "bench_id": "bench-2026-11-14T01-49-21Z-c967"
+  }
+ ]
+}

@@ -453,7 +453,8 @@ SKILL_TOOLS = frozenset({"read_skill", "read_skill_file", "skill"})
 
 #: The planned criteria root.md section 1 defines. The classification is a claim about ALL of them,
 #: so the record has to speak to each one by name; a criterion left out is a criterion not evaluated.
-CLASSIFICATION_CRITERIA = ("contract_change", "coordinated_changes", "unclear_root_cause")
+CLASSIFICATION_CRITERIA = ("contract_change", "coordinated_changes", "unclear_root_cause",
+                           "cross_component_impact")
 #: Shorter than this is not evidence. It exists to refuse "none", "n/a" and "none apply", which assert
 #: the conclusion instead of supporting it.
 MIN_EVIDENCE_CHARS = 12

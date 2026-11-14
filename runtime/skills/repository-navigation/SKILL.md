@@ -67,14 +67,17 @@ Record the result per criterion, so the claim is checkable rather than asserted:
                                        "AND from jobs/scheduled.py and asserts both refuse the same "
                                        "expired token, so the rule lives in two places"]},
   "unclear_root_cause":  {"applies": false,
-                          "evidence": ["the failing assertion names the expiry comparison directly"]}
+                          "evidence": ["the failing assertion names the expiry comparison directly"]},
+  "cross_component_impact": {"applies": true,
+                          "evidence": ["jobs/scheduled.py calls api/auth.can_publish, and its nightly "
+                                       "publish now refuses tokens it accepted before"]}
 }
 ```
 
 That example is illustrative only - use your own repository's paths. The rules:
 
-- all three criteria appear, each with an explicit `applies` boolean;
-- `direct` requires all three `false`; `planned` requires at least one `true`;
+- all four criteria appear, each with an explicit `applies` boolean;
+- `direct` requires all four `false`; `planned` requires at least one `true`;
 - the classification `reason` and the basis agree;
 - evidence names files, tests or callers. "None apply" is a conclusion, not evidence, and a direct
   classification whose `coordinated_changes` evidence cites nothing in the repository is read as
@@ -126,7 +129,8 @@ not mutations, so recording context is always allowed first.
 {"classification": {"value": "direct|planned", "reason": "..."},
  "classification_basis": {"contract_change": {"applies": false, "evidence": ["..."]},
                           "coordinated_changes": {"applies": false, "evidence": ["..."]},
-                          "unclear_root_cause": {"applies": false, "evidence": ["..."]}},
+                          "unclear_root_cause": {"applies": false, "evidence": ["..."]},
+                          "cross_component_impact": {"applies": false, "evidence": ["..."]}},
  "repository_map": {"scope": "minimal|component", "target_files": [], "related_tests": [],
                     "conventions": [], "repo_wide_exploration": {"performed": false},
                     "test_discovery": {"performed": true, "result": "found|none", "evidence": []}},

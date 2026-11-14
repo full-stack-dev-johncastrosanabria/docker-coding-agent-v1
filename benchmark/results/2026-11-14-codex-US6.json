@@ -1,0 +1,47 @@
+{
+ "evidence": "T095 on codex",
+ "date": "2026-11-14",
+ "trust": "trusted",
+ "model": "default (chatgpt/gpt-6.1-sol)",
+ "command": "bin/dca bench --backend codex --fixtures 'F*,S*,M3,M5'",
+ "passed": 2,
+ "total": 2,
+ "verdict": "2/2 meet T095 as amended 2026-11-14 (review.identical, equal fingerprints; findings present or a correct change with none): M5 0 findings, S7 0 findings",
+ "what_this_answers": "Review read-only identity and findings on M5 and S7.",
+ "runs": [
+  {
+   "fixture": "M5",
+   "result": "passed",
+   "final_outcome": "succeeded",
+   "oracle": "pass",
+   "classification": "planned",
+   "expected_classification": "planned",
+   "limit_reached": null,
+   "violations": [],
+   "researcher_invoked": true,
+   "review_identical": true,
+   "review_findings": 0,
+   "reasons": [],
+   "run_id": "run-2026-11-14T02-22-30Z-806a2b",
+   "duration_seconds": 202.9,
+   "bench_id": "bench-2026-11-14T01-49-21Z-c967"
+  },
+  {
+   "fixture": "S7",
+   "result": "passed",
+   "final_outcome": "succeeded",
+   "oracle": "pass",
+   "classification": "planned",
+   "expected_classification": "planned",
+   "limit_reached": null,
+   "violations": [],
+   "researcher_invoked": true,
+   "review_identical": true,
+   "review_findings": 0,
+   "reasons": [],
+   "run_id": "run-2026-11-14T02-37-17Z-695729",
+   "duration_seconds": 192.7,
+   "bench_id": "bench-2026-11-14T01-49-21Z-c967"
+  }
+ ]
+}

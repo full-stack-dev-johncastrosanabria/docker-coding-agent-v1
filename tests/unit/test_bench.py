@@ -833,7 +833,9 @@ CONTEXT = {"classification": {"value": "direct", "reason": "one file"},
                "coordinated_changes": {"applies": False,
                                        "evidence": ["tests/test_a.py is the only importer"]},
                "unclear_root_cause": {"applies": False,
-                                      "evidence": ["the failing assertion names the branch"]}},
+                                      "evidence": ["the failing assertion names the branch"]},
+               "cross_component_impact": {"applies": False,
+                                          "evidence": ["src/a.py's helper is called only in src/"]}},
            # A no-tests direct record: these cases are about FR-001/FR-008 ORDERING, so the
            # classification side is kept in the shape that needs no read-corroboration. The
            # corroborated shape is exercised in test_classification_basis.

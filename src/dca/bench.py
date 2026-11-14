@@ -480,7 +480,8 @@ def _unsupported_success(report):
 #: so what matters is that this structural check never diverges from what the gate already let through -
 #: a record the gate accepted must not be rejected here for its shape. An equality test asserts both
 #: constants and both verdicts agree, rather than leaving it to this comment.
-CLASSIFICATION_CRITERIA = ("contract_change", "coordinated_changes", "unclear_root_cause")
+CLASSIFICATION_CRITERIA = ("contract_change", "coordinated_changes", "unclear_root_cause",
+                           "cross_component_impact")
 MIN_EVIDENCE_CHARS = 12
 #: Evidence has to point at something in the repository. Deliberately permissive about LANGUAGE - any
 #: path-like token, or a filename with a source/test/config extension - because the rule is "be
