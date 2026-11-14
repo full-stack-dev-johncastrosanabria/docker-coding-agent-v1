@@ -24,6 +24,7 @@ DCA = os.path.join(ROOT, "bin", "dca")
 LIVE_TIMEOUT = 1800
 DIRTY_FILE = "README.md"  # K1 has none, so the edit creates it untracked
 BACKENDS = ("codex", "claude")
+S8_VERIFY = "node --test"  # a literal, so no fixture text reaches a command line
 
 
 def git(repo, *args):
@@ -132,7 +133,10 @@ class Validation:
     # --- quickstart §6 -------------------------------------------------------------------------
 
     def approvals(self):
-        repo, task, verify = seed("S8", self.work)
+        repo, task, fixture_verify = seed("S8", self.work)
+        if fixture_verify != S8_VERIFY:
+            raise SystemExit(f"S8 now verifies with {fixture_verify!r}; update S8_VERIFY")
+        verify = S8_VERIFY
         task_arg = f"@{task}"
         base = ("--trust", "trusted", "--task", task_arg, "--verify", verify)
         runs_dir = os.path.join(self.work, ".dca-runs")
