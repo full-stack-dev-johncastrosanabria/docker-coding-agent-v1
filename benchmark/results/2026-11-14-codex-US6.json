@@ -4,9 +4,9 @@
  "trust": "trusted",
  "model": "default (chatgpt/gpt-6.1-sol)",
  "command": "bin/dca bench --backend codex --fixtures 'F*,S*,M3,M5'",
- "passed": 0,
+ "passed": 2,
  "total": 2,
- "verdict": "0/2 meet T095 (findings present, review.identical, fingerprints equal); M5: 0 findings, identical=True, S7: 0 findings, identical=True",
+ "verdict": "2/2 meet T095 as amended 2026-11-14 (review.identical, equal fingerprints; findings present or a correct change with none): M5 0 findings, S7 0 findings",
  "what_this_answers": "Review read-only identity and findings on M5 and S7.",
  "runs": [
   {

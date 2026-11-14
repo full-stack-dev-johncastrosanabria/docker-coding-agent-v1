@@ -6,7 +6,7 @@
  "command": "bin/dca bench --backend claude --fixtures 'F*,S*,M3,M5'",
  "passed": 2,
  "total": 2,
- "verdict": "2/2 meet T095 (findings present, review.identical, fingerprints equal); M5: 3 findings, identical=True, S7: 4 findings, identical=True",
+ "verdict": "2/2 meet T095 as amended 2026-11-14 (review.identical, equal fingerprints; findings present or a correct change with none): M5 3 findings, S7 4 findings",
  "what_this_answers": "Review read-only identity and findings on M5 and S7.",
  "runs": [
   {
