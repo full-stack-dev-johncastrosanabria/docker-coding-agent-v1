@@ -63,6 +63,8 @@ CONTEXT_RECORD = {
                                 "evidence": ["check.sh is the only check that reads answer.txt"]},
         "unclear_root_cause": {"applies": False,
                                "evidence": ["the probe asserts a literal, with no failure to trace"]},
+        "cross_component_impact": {"applies": False,
+                                   "evidence": ["answer.txt is a new file that no other component calls"]},
     },
     "repository_map": {"scope": "minimal", "target_files": ["answer.txt"]},
     "verification_approach": {"type": "deterministic", "checks": [

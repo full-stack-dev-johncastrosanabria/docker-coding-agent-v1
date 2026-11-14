@@ -36,6 +36,9 @@ none does.
   what an existing operation may do.
 - An **unclear root cause** is a failure you cannot trace to its cause by reading the failing
   check and the code it exercises.
+- **Cross-component impact**: callers in another top-level package or directory will see different
+  results, even with no signature change and even when the change makes code match its documentation.
+  Cite those callers by path; code that keeps its own copy of the logic is not one.
 
 Apply these to the change you are about to make, not to its size. Altering what an existing
 operation accepts, refuses, raises or exposes through a signature, a public field or a file is a
@@ -51,7 +54,7 @@ else must move with it. Some repositories have none, and a task may forbid addin
 so `repository_map.test_discovery` records which one you got: looking and finding none is valid, never
 looking is not.
 
-Record the verdict per criterion as `classification_basis`: `direct` needs all three `false`,
+Record the verdict per criterion as `classification_basis`: `direct` needs all four `false`,
 `planned` at least one `true`, and the reason must agree. Cite files and tests by path - "none
 apply" states the conclusion instead of supporting it - and name only tests you actually opened,
 because the host corroborates that against the run's event stream and a path you merely searched for
@@ -80,8 +83,7 @@ Before that first mutation, write `/run/dca/out/context.json`:
 ```json
 {"classification": {"value": "direct|planned", "reason": "..."},
  "classification_basis": {"contract_change": {"applies": false, "evidence": ["..."]},
-                          "coordinated_changes": {"applies": false, "evidence": ["..."]},
-                          "unclear_root_cause": {"applies": false, "evidence": ["..."]}},
+   "coordinated_changes": {...}, "unclear_root_cause": {...}, "cross_component_impact": {...}},
  "repository_map": {"scope": "minimal|component", "target_files": [], "related_tests": [],
                     "conventions": [], "repo_wide_exploration": {"performed": false},
                     "test_discovery": {"performed": true, "result": "found|none", "evidence": []}},

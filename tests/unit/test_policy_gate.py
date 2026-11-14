@@ -551,7 +551,10 @@ VALID_RECORD = {"classification": {"value": "direct", "reason": "one bug in one 
                                             "evidence": ["tests/test_app.py is the only test that "
                                                          "imports it"]},
                     "unclear_root_cause": {"applies": False,
-                                           "evidence": ["the failing assertion names the branch"]}},
+                                           "evidence": ["the failing assertion names the branch"]},
+                    "cross_component_impact": {"applies": False,
+                                               "evidence": ["src/app.py's helper is called only in "
+                                                            "src/"]}},
                 "repository_map": {"scope": "minimal", "target_files": ["src/app.py"]},
                 "verification_approach": {"type": "deterministic",
                                          "checks": [{"id": "make test", "required": True}]},

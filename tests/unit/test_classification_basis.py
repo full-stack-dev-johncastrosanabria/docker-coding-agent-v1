@@ -54,15 +54,17 @@ gate = load_gate()
 CITED = "tests/test_ledger.py imports both formatters and asserts one rule"
 TRACED = "the failing assertion names the padding branch directly"
 NO_CALLERS = "billing/receipt.py is the only caller and passes positionally"
+ONE_COMPONENT = "only billing/receipt.py calls it, inside the billing component itself"
 
 
-def basis(contract=False, coordinated=False, unclear=False, evidence=None):
+def basis(contract=False, coordinated=False, unclear=False, evidence=None, cross=False):
     """A structurally complete basis. `evidence` overrides the coordinated-changes citation."""
     return {
         "contract_change": {"applies": contract, "evidence": [NO_CALLERS]},
         "coordinated_changes": {"applies": coordinated,
                                 "evidence": [CITED if evidence is None else evidence]},
         "unclear_root_cause": {"applies": unclear, "evidence": [TRACED]},
+        "cross_component_impact": {"applies": cross, "evidence": [ONE_COMPONENT]},
     }
 
 
