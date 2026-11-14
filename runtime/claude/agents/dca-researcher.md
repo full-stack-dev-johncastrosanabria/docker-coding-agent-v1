@@ -1,6 +1,6 @@
 ---
 name: dca-researcher
-description: The dca researcher subagent. Read-only; managed and non-overridable.
+description: "Read-only investigator: answers one bounded question with cited file:line evidence and changes nothing. Use it, instead of reading and grepping yourself, to locate where a behavior lives, survey the call sites of something you will change (above all across packages), or trace an unfamiliar subsystem. Managed and non-overridable."
 tools: Read, Grep, Glob
 ---
 

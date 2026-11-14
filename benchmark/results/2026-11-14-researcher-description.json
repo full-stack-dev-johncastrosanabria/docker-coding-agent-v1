@@ -1,0 +1,160 @@
+{
+ "evidence": "T116: Claude researcher description rewritten to say when to delegate (60c0451)",
+ "date": "2026-11-14",
+ "trust": "trusted",
+ "floor_preregistered": "M3 x3 delegates >= 2/3 per backend; K1/R1/S1 on both backends delegate <= 1/6",
+ "passed": 12,
+ "total": 12,
+ "m3_delegation": {
+  "claude": "0/3",
+  "codex": "3/3"
+ },
+ "direct_sample_delegation": "0/6",
+ "verdict": "NOT MET on claude (M3 0/3); met on codex (3/3); no over-delegation (0/6). Every run passes its oracle. The description did not change Claude's choice: the hypothesis that an opaque description caused the low rate is not supported.",
+ "runs": [
+  {
+   "backend": "claude",
+   "fixture": "M3",
+   "oracle": "pass",
+   "final_outcome": "succeeded",
+   "classification": "planned",
+   "researcher_invoked": false,
+   "reviewer_invoked": true,
+   "run_id": "run-2026-11-14T17-51-12Z-37975b",
+   "duration_seconds": 167.7,
+   "bench_id": "bench-2026-11-14T17-51-09Z-ef90"
+  },
+  {
+   "backend": "claude",
+   "fixture": "M3",
+   "oracle": "pass",
+   "final_outcome": "succeeded",
+   "classification": "planned",
+   "researcher_invoked": false,
+   "reviewer_invoked": true,
+   "run_id": "run-2026-11-14T17-54-05Z-73b9f8",
+   "duration_seconds": 139.7,
+   "bench_id": "bench-2026-11-14T17-54-04Z-9035"
+  },
+  {
+   "backend": "claude",
+   "fixture": "M3",
+   "oracle": "pass",
+   "final_outcome": "succeeded",
+   "classification": "planned",
+   "researcher_invoked": false,
+   "reviewer_invoked": true,
+   "run_id": "run-2026-11-14T17-56-29Z-cf7e9f",
+   "duration_seconds": 148.9,
+   "bench_id": "bench-2026-11-14T17-56-27Z-b0b4"
+  },
+  {
+   "backend": "codex",
+   "fixture": "M3",
+   "oracle": "pass",
+   "final_outcome": "succeeded",
+   "classification": "planned",
+   "researcher_invoked": true,
+   "reviewer_invoked": true,
+   "run_id": "run-2026-11-14T17-59-03Z-239948",
+   "duration_seconds": 290.3,
+   "bench_id": "bench-2026-11-14T17-59-01Z-bea2"
+  },
+  {
+   "backend": "codex",
+   "fixture": "M3",
+   "oracle": "pass",
+   "final_outcome": "succeeded",
+   "classification": "planned",
+   "researcher_invoked": true,
+   "reviewer_invoked": true,
+   "run_id": "run-2026-11-14T18-03-54Z-acfbdf",
+   "duration_seconds": 208.0,
+   "bench_id": "bench-2026-11-14T18-03-54Z-620f"
+  },
+  {
+   "backend": "codex",
+   "fixture": "M3",
+   "oracle": "pass",
+   "final_outcome": "succeeded",
+   "classification": "planned",
+   "researcher_invoked": true,
+   "reviewer_invoked": true,
+   "run_id": "run-2026-11-14T18-07-25Z-2816cc",
+   "duration_seconds": 219.9,
+   "bench_id": "bench-2026-11-14T18-07-24Z-551e"
+  },
+  {
+   "backend": "claude",
+   "fixture": "K1",
+   "oracle": "pass",
+   "final_outcome": "succeeded",
+   "classification": "direct",
+   "researcher_invoked": false,
+   "reviewer_invoked": false,
+   "run_id": "run-2026-11-14T18-11-07Z-e7c9f1",
+   "duration_seconds": 65.0,
+   "bench_id": "bench-2026-11-14T18-11-06Z-d2c4"
+  },
+  {
+   "backend": "codex",
+   "fixture": "K1",
+   "oracle": "pass",
+   "final_outcome": "succeeded",
+   "classification": "direct",
+   "researcher_invoked": false,
+   "reviewer_invoked": false,
+   "run_id": "run-2026-11-14T18-12-12Z-cb9b72",
+   "duration_seconds": 126.7,
+   "bench_id": "bench-2026-11-14T18-12-12Z-1e43"
+  },
+  {
+   "backend": "claude",
+   "fixture": "R1",
+   "oracle": "pass",
+   "final_outcome": "succeeded",
+   "classification": "direct",
+   "researcher_invoked": false,
+   "reviewer_invoked": false,
+   "run_id": "run-2026-11-14T18-14-28Z-713f73",
+   "duration_seconds": 109.0,
+   "bench_id": "bench-2026-11-14T18-14-26Z-b91b"
+  },
+  {
+   "backend": "codex",
+   "fixture": "R1",
+   "oracle": "pass",
+   "final_outcome": "succeeded",
+   "classification": "direct",
+   "researcher_invoked": false,
+   "reviewer_invoked": false,
+   "run_id": "run-2026-11-14T18-16-26Z-c57fb0",
+   "duration_seconds": 142.7,
+   "bench_id": "bench-2026-11-14T18-16-23Z-afa8"
+  },
+  {
+   "backend": "claude",
+   "fixture": "S1",
+   "oracle": "pass",
+   "final_outcome": "succeeded",
+   "classification": "direct",
+   "researcher_invoked": false,
+   "reviewer_invoked": false,
+   "run_id": "run-2026-11-14T18-18-56Z-423a7e",
+   "duration_seconds": 154.6,
+   "bench_id": "bench-2026-11-14T18-18-53Z-6d7c"
+  },
+  {
+   "backend": "codex",
+   "fixture": "S1",
+   "oracle": "pass",
+   "final_outcome": "succeeded",
+   "classification": "direct",
+   "researcher_invoked": false,
+   "reviewer_invoked": false,
+   "run_id": "run-2026-11-14T18-21-39Z-0b7d72",
+   "duration_seconds": 179.6,
+   "bench_id": "bench-2026-11-14T18-21-37Z-39f0"
+  }
+ ]
+}
