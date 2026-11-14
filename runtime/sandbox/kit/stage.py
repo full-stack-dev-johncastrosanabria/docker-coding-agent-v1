@@ -488,16 +488,27 @@ def node_tarball(pin_path=NODE_PIN, directory=NODE_TARBALL_DIR):
     mismatch, so a substituted archive never reaches a kit."""
     with open(pin_path, encoding="utf-8") as handle:
         pin = json.load(handle)
-    path = os.path.join(directory, pin["url"].rsplit("/", 1)[-1])
+    # Only a nodejs.org release can be pinned: the URL and the file name are rebuilt from a
+    # validated version, never taken from the file, so a pin cannot name another host or path.
+    version = re.fullmatch(r"v\d{1,3}\.\d{1,3}\.\d{1,3}", str(pin.get("version", "")))
+    sha256 = re.fullmatch(r"[0-9a-f]{64}", str(pin.get("sha256", "")))
+    if not version or not sha256:
+        raise StagingError(f"{pin_path} does not pin a vX.Y.Z version and a sha256")
+    version, sha256 = version.group(0), sha256.group(0)
+    name = f"node-{version}-linux-arm64.tar.gz"
+    url = f"https://nodejs.org/dist/{version}/{name}"
+    if pin.get("url") != url:
+        raise StagingError(f"{pin_path} names {pin.get('url')!r}, not the release URL {url}")
+    path = os.path.join(directory, name)
     if not os.path.isfile(path):
         import urllib.request
         os.makedirs(directory, exist_ok=True)
-        urllib.request.urlretrieve(pin["url"], path + ".part")
+        urllib.request.urlretrieve(url, path + ".part")
         os.replace(path + ".part", path)
     actual = sha256_file(path)
-    if actual != pin["sha256"]:
-        raise StagingError(f"{path} has sha256 {actual}, not the pinned {pin['sha256']}")
-    return {"path": path, "sha256": pin["sha256"], "version": pin["version"]}
+    if actual != sha256:
+        raise StagingError(f"{path} has sha256 {actual}, not the pinned {sha256}")
+    return {"path": path, "sha256": sha256, "version": version}
 
 
 def build_sbx_kit(destination, backends=None, artifact=None, skills_source=None,

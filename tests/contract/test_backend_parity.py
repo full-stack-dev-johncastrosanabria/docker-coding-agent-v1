@@ -169,13 +169,17 @@ class TestSbxKitPayloadPath(unittest.TestCase):
                 self.assertIn('ln -sf "/opt/dca-node/bin/$b" "/usr/local/bin/$b"', hook)
 
     def test_00c_a_node_tarball_that_does_not_match_its_pin_is_refused(self):
-        with tempfile.TemporaryDirectory(prefix="dca-node-pin-") as temporary:
-            pin = Path(temporary) / "node.json"
-            pin.write_text(json.dumps({"version": "v0", "url": "https://example.invalid/n.tar.gz",
-                                       "sha256": "0" * 64}), encoding="utf-8")
-            (Path(temporary) / "n.tar.gz").write_bytes(b"substituted")
-            with self.assertRaises(stage_module.StagingError):
-                stage_module.node_tarball(pin_path=str(pin), directory=temporary)
+        name = "node-v1.2.3-linux-arm64.tar.gz"
+        release = f"https://nodejs.org/dist/v1.2.3/{name}"
+        for url, why in ((release, "sha256"), ("https://example.invalid/" + name, "release URL")):
+            with self.subTest(url=url), \
+                    tempfile.TemporaryDirectory(prefix="dca-node-pin-") as temporary:
+                pin = Path(temporary) / "node.json"
+                pin.write_text(json.dumps({"version": "v1.2.3", "url": url, "sha256": "0" * 64}),
+                               encoding="utf-8")
+                (Path(temporary) / name).write_bytes(b"substituted")
+                with self.assertRaisesRegex(stage_module.StagingError, why):
+                    stage_module.node_tarball(pin_path=str(pin), directory=temporary)
 
     def test_00d_the_node_pin_is_the_oracle_line(self):
         pin = json.loads((Path(stage_module.NODE_PIN)).read_text(encoding="utf-8"))
