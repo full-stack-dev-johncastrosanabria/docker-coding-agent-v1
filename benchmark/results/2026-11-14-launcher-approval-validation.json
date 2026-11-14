@@ -1,0 +1,360 @@
+{
+  "backends": {
+    "claude": {
+      "checks": [
+        {
+          "exit": 3,
+          "id": "s5.dirty_checkout_exit_3",
+          "report_written": false,
+          "status": "pass",
+          "tail": "090-claude-2026-11-14T01-17-53Z/K1\n  Backend     claude   (command line)\n  Trust       trusted   (command line)\n  Verify      (none)\n\ndca: BLOCKED during Preconditions (precondition failed, exit 3)\n  the checkout has uncommitted or untracked changes and only committed state is delivered: README.md; commit them or re-run with --ignore-uncommitted\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "changed_files": [
+            "tests/test_hours.py",
+            "timesheet/hours.py"
+          ],
+          "exit": 0,
+          "final_outcome": "succeeded",
+          "id": "s5.ignore_uncommitted_runs_from_head",
+          "run_id": "run-2026-11-14T01-27-20Z-0780ca",
+          "source": {
+            "bundle_sha256": "4cc7a2f14242e82ce9b886d415be8ceeb362141043eff2cff4a701a52d881be7",
+            "commit": "c78ca9c5b1f5c8dc0633300828b10bb8809876b1",
+            "dirty_paths": [
+              "README.md"
+            ],
+            "ref": "refs/heads/main",
+            "uncommitted_ignored": true
+          },
+          "status": "pass"
+        },
+        {
+          "exit": 11,
+          "id": "s5.untrusted_ineligible_exit_11",
+          "primary_reason": "an untrusted run on the claude backend requires G1b, G9, which have not passed",
+          "run_integrity": {
+            "agent_exit": "not-started",
+            "sandbox_created": false,
+            "stream": "none"
+          },
+          "status": "pass"
+        },
+        {
+          "exit": 3,
+          "id": "s5.ref_raw_sha_exit_3",
+          "status": "pass",
+          "tail": "1-17-53Z/K1\n  Backend     claude   (command line)\n  Trust       trusted   (command line)\n  Verify      (none)\n\ndca: BLOCKED during Preconditions (precondition failed, exit 3)\n  'c78ca9c5b1f5c8dc0633300828b10bb8809876b1' does not name a local branch (a tag, commit SHA or revision expression is refused in V1; no temporary host ref is ever created)\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "exit": 3,
+          "id": "s5.ref_tag_exit_3",
+          "status": "pass",
+          "tail": "  /Users/johnbenjamincastrosanabria/Developer/docker-coding-agent-v1/benchmark/work/T090-claude-2026-11-14T01-17-53Z/K1\n  Backend     claude   (command line)\n  Trust       trusted   (command line)\n  Verify      (none)\n\ndca: BLOCKED during Preconditions (precondition failed, exit 3)\n  't090' resolves to refs/tags/t090, which is not a local branch\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "exit": 3,
+          "id": "s5.ref_remote_ref_exit_3",
+          "status": "pass",
+          "tail": "astrosanabria/Developer/docker-coding-agent-v1/benchmark/work/T090-claude-2026-11-14T01-17-53Z/K1\n  Backend     claude   (command line)\n  Trust       trusted   (command line)\n  Verify      (none)\n\ndca: BLOCKED during Preconditions (precondition failed, exit 3)\n  refs/remotes/origin/main is a remote-tracking ref; dca delivers a local branch in V1\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "exit": 3,
+          "id": "s5.detached_head_exit_3",
+          "status": "pass",
+          "tail": "mincastrosanabria/Developer/docker-coding-agent-v1/benchmark/work/T090-claude-2026-11-14T01-17-53Z/K1\n  Backend     claude   (command line)\n  Trust       trusted   (command line)\n  Verify      (none)\n\ndca: BLOCKED during Preconditions (precondition failed, exit 3)\n  HEAD is detached: dca delivers a local branch, so check out a branch or name one\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "approvals": [
+            {
+              "action": "Add a new dependency",
+              "action_class": 15,
+              "id": "apr-run-2026-11-14T01-28-18Z-d4f51f-1",
+              "normalized_target": "npm:./vendor/tinyslug-1.0.0.tgz,2",
+              "reason": "Add a new dependency",
+              "risk": "medium",
+              "status": "unanswered",
+              "target": "npm:./vendor/tinyslug-1.0.0.tgz,2"
+            }
+          ],
+          "exit": 11,
+          "id": "s6.first_run_blocked_with_request",
+          "primary_reason": "the event stream was malformed",
+          "run_id": "run-2026-11-14T01-28-18Z-d4f51f",
+          "status": "pass"
+        },
+        {
+          "exit": 3,
+          "id": "s6.stale_task_changed_exit_3",
+          "status": "pass",
+          "tail": "proval is stale or undiscoverable: task_fingerprint changed since apr-run-2026-11-14T01-28-18Z-d4f51f-1 was requested ('sha256:e2da905ad7d6da83c0cfc56f15820418599db3675d7433982cb92bba6db81e49' -> 'sha256:4a7cf2a4e04e38afc9e38537289671f0cca5acc281079667f9a496a2b3f67be0'), so the approval is stale. Re-run without --approve to obtain a new request.\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "exit": 3,
+          "id": "s6.stale_trust_changed_exit_3",
+          "status": "pass",
+          "tail": "(command line)\n  Verify      node --test   (command line)\n\ndca: BLOCKED during Preconditions (precondition failed, exit 3)\n  the approval is stale or undiscoverable: trust_level changed since apr-run-2026-11-14T01-28-18Z-d4f51f-1 was requested ('trusted' -> 'untrusted'), so the approval is stale. Re-run without --approve to obtain a new request.\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "exit": 3,
+          "id": "s6.stale_backend_changed_exit_3",
+          "status": "pass",
+          "tail": "rusted   (command line)\n  Verify      node --test   (command line)\n\ndca: BLOCKED during Preconditions (precondition failed, exit 3)\n  the approval is stale or undiscoverable: backend changed since apr-run-2026-11-14T01-28-18Z-d4f51f-1 was requested ('claude' -> 'codex'), so the approval is stale. Re-run without --approve to obtain a new request.\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "exit": 3,
+          "id": "s6.stale_commit_changed_exit_3",
+          "status": "pass",
+          "tail": "OCKED during Preconditions (precondition failed, exit 3)\n  the approval is stale or undiscoverable: source_commit changed since apr-run-2026-11-14T01-28-18Z-d4f51f-1 was requested ('f4760dfc1ee94660a8fbfae378741272f45a37f6' -> '8516ab84c6f38c2f142af8f9ff0457a049989a9b'), so the approval is stale. Re-run without --approve to obtain a new request.\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "id": "s6.approve_rerun.grant_provenance",
+          "provenance": {
+            "origin_backend": "claude",
+            "origin_report_digest": "sha256:0cc5ab01cceea7c6124a6802a01ae84ddd4a7666028fc3b3e32f870d5882e2ca",
+            "origin_run_id": "run-2026-11-14T01-28-18Z-d4f51f",
+            "origin_trust_level": "trusted",
+            "source_commit": "f4760dfc1ee94660a8fbfae378741272f45a37f6",
+            "task_fingerprint": "sha256:e2da905ad7d6da83c0cfc56f15820418599db3675d7433982cb92bba6db81e49"
+          },
+          "status": "pass"
+        },
+        {
+          "approvals": [],
+          "exit": 0,
+          "final_outcome": "succeeded",
+          "id": "s6.approve_rerun.succeeded",
+          "primary_reason": null,
+          "run_id": "run-2026-11-14T01-29-09Z-357a67",
+          "status": "pass"
+        },
+        {
+          "approvals": [
+            {
+              "action": "Add a new dependency",
+              "action_class": 15,
+              "id": "apr-run-2026-11-14T01-29-55Z-ec41a3-1",
+              "normalized_target": "npm:./vendor/tinyslug-1.0.0.tgz,2",
+              "reason": "Add a new dependency",
+              "risk": "medium",
+              "status": "unanswered",
+              "target": "npm:./vendor/tinyslug-1.0.0.tgz,2"
+            }
+          ],
+          "exit": 11,
+          "id": "s6.third_run_without_approve_blocked",
+          "run_id": "run-2026-11-14T01-29-55Z-ec41a3",
+          "status": "pass"
+        },
+        {
+          "exit": 3,
+          "id": "s6.custom_out_without_approval_report_exit_3",
+          "status": "pass",
+          "tail": "ating report for run-2026-11-14T01-29-55Z-ec41a3 was not found at /Users/johnbenjamincastrosanabria/Developer/docker-coding-agent-v1/benchmark/work/T090-claude-2026-11-14T01-17-53Z/.dca-runs/run-2026-11-14T01-29-55Z-ec41a3/report.json; pass --approval-report if the origin run used a custom --out. Re-run without --approve to obtain a new request.\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "id": "s6.approve_with_approval_report.grant_provenance",
+          "provenance": {
+            "origin_backend": "claude",
+            "origin_report_digest": "sha256:f5a25b24bfb73a39703d475acfd63dfdb09bbace139ffdbadcdefe4f4ab3307f",
+            "origin_run_id": "run-2026-11-14T01-29-55Z-ec41a3",
+            "origin_trust_level": "trusted",
+            "source_commit": "f4760dfc1ee94660a8fbfae378741272f45a37f6",
+            "task_fingerprint": "sha256:e2da905ad7d6da83c0cfc56f15820418599db3675d7433982cb92bba6db81e49"
+          },
+          "status": "pass"
+        },
+        {
+          "approvals": [],
+          "exit": 0,
+          "final_outcome": "succeeded",
+          "id": "s6.approve_with_approval_report.succeeded",
+          "primary_reason": null,
+          "run_id": "run-2026-11-14T01-30-42Z-da25e7",
+          "status": "pass"
+        }
+      ],
+      "work": "benchmark/work/T090-claude-2026-11-14T01-17-53Z"
+    },
+    "codex": {
+      "checks": [
+        {
+          "exit": 3,
+          "id": "s5.dirty_checkout_exit_3",
+          "report_written": false,
+          "status": "pass",
+          "tail": "/T090-codex-2026-11-14T01-17-53Z/K1\n  Backend     codex   (command line)\n  Trust       trusted   (command line)\n  Verify      (none)\n\ndca: BLOCKED during Preconditions (precondition failed, exit 3)\n  the checkout has uncommitted or untracked changes and only committed state is delivered: README.md; commit them or re-run with --ignore-uncommitted\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "changed_files": [
+            "tests/test_hours.py",
+            "timesheet/hours.py"
+          ],
+          "exit": 10,
+          "final_outcome": "failed",
+          "id": "s5.ignore_uncommitted_runs_from_head",
+          "run_id": "run-2026-11-14T01-17-53Z-386de5",
+          "source": {
+            "bundle_sha256": "4cc7a2f14242e82ce9b886d415be8ceeb362141043eff2cff4a701a52d881be7",
+            "commit": "c78ca9c5b1f5c8dc0633300828b10bb8809876b1",
+            "dirty_paths": [
+              "README.md"
+            ],
+            "ref": "refs/heads/main",
+            "uncommitted_ignored": true
+          },
+          "status": "pass"
+        },
+        {
+          "exit": 11,
+          "id": "s5.untrusted_ineligible_exit_11",
+          "primary_reason": "an untrusted run on the codex backend requires G2, which have not passed",
+          "run_integrity": {
+            "agent_exit": "not-started",
+            "sandbox_created": false,
+            "stream": "none"
+          },
+          "status": "pass"
+        },
+        {
+          "exit": 3,
+          "id": "s5.ref_raw_sha_exit_3",
+          "status": "pass",
+          "tail": "01-17-53Z/K1\n  Backend     codex   (command line)\n  Trust       trusted   (command line)\n  Verify      (none)\n\ndca: BLOCKED during Preconditions (precondition failed, exit 3)\n  'c78ca9c5b1f5c8dc0633300828b10bb8809876b1' does not name a local branch (a tag, commit SHA or revision expression is refused in V1; no temporary host ref is ever created)\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "exit": 3,
+          "id": "s5.ref_tag_exit_3",
+          "status": "pass",
+          "tail": "ry  /Users/johnbenjamincastrosanabria/Developer/docker-coding-agent-v1/benchmark/work/T090-codex-2026-11-14T01-17-53Z/K1\n  Backend     codex   (command line)\n  Trust       trusted   (command line)\n  Verify      (none)\n\ndca: BLOCKED during Preconditions (precondition failed, exit 3)\n  't090' resolves to refs/tags/t090, which is not a local branch\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "exit": 3,
+          "id": "s5.ref_remote_ref_exit_3",
+          "status": "pass",
+          "tail": "ncastrosanabria/Developer/docker-coding-agent-v1/benchmark/work/T090-codex-2026-11-14T01-17-53Z/K1\n  Backend     codex   (command line)\n  Trust       trusted   (command line)\n  Verify      (none)\n\ndca: BLOCKED during Preconditions (precondition failed, exit 3)\n  refs/remotes/origin/main is a remote-tracking ref; dca delivers a local branch in V1\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "exit": 3,
+          "id": "s5.detached_head_exit_3",
+          "status": "pass",
+          "tail": "jamincastrosanabria/Developer/docker-coding-agent-v1/benchmark/work/T090-codex-2026-11-14T01-17-53Z/K1\n  Backend     codex   (command line)\n  Trust       trusted   (command line)\n  Verify      (none)\n\ndca: BLOCKED during Preconditions (precondition failed, exit 3)\n  HEAD is detached: dca delivers a local branch, so check out a branch or name one\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "approvals": [
+            {
+              "action": "Add a new dependency",
+              "action_class": 15,
+              "id": "apr-run-2026-11-14T01-19-15Z-84c633-1",
+              "normalized_target": "npm:./vendor/tinyslug-1.0.0.tgz",
+              "reason": "Add a new dependency",
+              "risk": "medium",
+              "status": "unanswered",
+              "target": "npm:./vendor/tinyslug-1.0.0.tgz"
+            }
+          ],
+          "exit": 11,
+          "id": "s6.first_run_blocked_with_request",
+          "primary_reason": "approval 'apr-run-2026-11-14T01-19-15Z-84c633-1' for action class 15 was unanswered",
+          "run_id": "run-2026-11-14T01-19-15Z-84c633",
+          "status": "pass"
+        },
+        {
+          "exit": 3,
+          "id": "s6.stale_task_changed_exit_3",
+          "status": "pass",
+          "tail": "proval is stale or undiscoverable: task_fingerprint changed since apr-run-2026-11-14T01-19-15Z-84c633-1 was requested ('sha256:e2da905ad7d6da83c0cfc56f15820418599db3675d7433982cb92bba6db81e49' -> 'sha256:4a7cf2a4e04e38afc9e38537289671f0cca5acc281079667f9a496a2b3f67be0'), so the approval is stale. Re-run without --approve to obtain a new request.\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "exit": 3,
+          "id": "s6.stale_trust_changed_exit_3",
+          "status": "pass",
+          "tail": "(command line)\n  Verify      node --test   (command line)\n\ndca: BLOCKED during Preconditions (precondition failed, exit 3)\n  the approval is stale or undiscoverable: trust_level changed since apr-run-2026-11-14T01-19-15Z-84c633-1 was requested ('trusted' -> 'untrusted'), so the approval is stale. Re-run without --approve to obtain a new request.\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "exit": 3,
+          "id": "s6.stale_backend_changed_exit_3",
+          "status": "pass",
+          "tail": "rusted   (command line)\n  Verify      node --test   (command line)\n\ndca: BLOCKED during Preconditions (precondition failed, exit 3)\n  the approval is stale or undiscoverable: backend changed since apr-run-2026-11-14T01-19-15Z-84c633-1 was requested ('codex' -> 'claude'), so the approval is stale. Re-run without --approve to obtain a new request.\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "exit": 3,
+          "id": "s6.stale_commit_changed_exit_3",
+          "status": "pass",
+          "tail": "OCKED during Preconditions (precondition failed, exit 3)\n  the approval is stale or undiscoverable: source_commit changed since apr-run-2026-11-14T01-19-15Z-84c633-1 was requested ('f4760dfc1ee94660a8fbfae378741272f45a37f6' -> '54d4864e6678ee5026864bc3c021e695fcbed753'), so the approval is stale. Re-run without --approve to obtain a new request.\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "id": "s6.approve_rerun.grant_provenance",
+          "provenance": {
+            "origin_backend": "codex",
+            "origin_report_digest": "sha256:f661140e481970f4de4a047338c0f532c18b98db27a82f776a51648473acf81d",
+            "origin_run_id": "run-2026-11-14T01-19-15Z-84c633",
+            "origin_trust_level": "trusted",
+            "source_commit": "f4760dfc1ee94660a8fbfae378741272f45a37f6",
+            "task_fingerprint": "sha256:e2da905ad7d6da83c0cfc56f15820418599db3675d7433982cb92bba6db81e49"
+          },
+          "status": "pass"
+        },
+        {
+          "approvals": [],
+          "exit": 0,
+          "final_outcome": "succeeded",
+          "id": "s6.approve_rerun.succeeded",
+          "primary_reason": null,
+          "run_id": "run-2026-11-14T01-21-28Z-92964e",
+          "status": "pass"
+        },
+        {
+          "approvals": [
+            {
+              "action": "Add a new dependency",
+              "action_class": 15,
+              "id": "apr-run-2026-11-14T01-23-05Z-9dd442-1",
+              "normalized_target": "npm:./vendor/tinyslug-1.0.0.tgz",
+              "reason": "Add a new dependency",
+              "risk": "medium",
+              "status": "unanswered",
+              "target": "npm:./vendor/tinyslug-1.0.0.tgz"
+            }
+          ],
+          "exit": 11,
+          "id": "s6.third_run_without_approve_blocked",
+          "run_id": "run-2026-11-14T01-23-05Z-9dd442",
+          "status": "pass"
+        },
+        {
+          "exit": 3,
+          "id": "s6.custom_out_without_approval_report_exit_3",
+          "status": "pass",
+          "tail": "nating report for run-2026-11-14T01-23-05Z-9dd442 was not found at /Users/johnbenjamincastrosanabria/Developer/docker-coding-agent-v1/benchmark/work/T090-codex-2026-11-14T01-17-53Z/.dca-runs/run-2026-11-14T01-23-05Z-9dd442/report.json; pass --approval-report if the origin run used a custom --out. Re-run without --approve to obtain a new request.\n  No sandbox was created and no report was written.\n"
+        },
+        {
+          "id": "s6.approve_with_approval_report.grant_provenance",
+          "provenance": {
+            "origin_backend": "codex",
+            "origin_report_digest": "sha256:136a18e357f6998166fe56f625d12cca1b3609cbaf093b5ad4eaa5972235664b",
+            "origin_run_id": "run-2026-11-14T01-23-05Z-9dd442",
+            "origin_trust_level": "trusted",
+            "source_commit": "f4760dfc1ee94660a8fbfae378741272f45a37f6",
+            "task_fingerprint": "sha256:e2da905ad7d6da83c0cfc56f15820418599db3675d7433982cb92bba6db81e49"
+          },
+          "status": "pass"
+        },
+        {
+          "approvals": [],
+          "exit": 0,
+          "final_outcome": "succeeded",
+          "id": "s6.approve_with_approval_report.succeeded",
+          "primary_reason": null,
+          "run_id": "run-2026-11-14T01-24-46Z-ebc3dc",
+          "status": "pass"
+        }
+      ],
+      "work": "benchmark/work/T090-codex-2026-11-14T01-17-53Z"
+    }
+  },
+  "failed": [],
+  "started": "2026-11-14T01-17-53Z",
+  "status": "pass",
+  "task": "T090"
+}

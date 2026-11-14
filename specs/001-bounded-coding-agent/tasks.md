@@ -919,11 +919,12 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **S7 reuses M1's planned task** so that a review really runs; its outcome is therefore correlated with M1's.
   - **S8's approve re-run (T090) needs `npm install` of a vendored tarball to work offline in the VM**; only the blocked half is covered by goldens.
 
-- [ ] T090 [US4] **Validate** Launcher, precondition and approval re-run behavior, with evidence **independent** of the S benchmark:
+- [x] T090 [US4] **Validate** Launcher, precondition and approval re-run behavior, with evidence **independent** of the S benchmark:
   - quickstart §5: exit 3 for a dirty checkout and a raw-SHA `--ref`; exit 11 for an untrusted request on an ineligible backend, with `sandbox_created: false`;
   - quickstart §6: S8 blocked → an `--approve` re-run with provenance in `grants.json`; a changed task, commit, trust or backend → exit 3 (stale); a custom `--out` origin needing `--approval-report`; a third run without `--approve` blocked again.
 
   Depends: T073, T062, T076, T089. Evidence: `benchmark/results/<date>-launcher-approval-validation.json`.
+  **Done 2026-11-14:** `benchmark/tools/launcher_approval_validation.py` drives `bin/dca run` directly on both backends; 36/36 checks pass (`benchmark/results/2026-11-14-launcher-approval-validation.json`). Beyond the list above it also refuses a tag, a remote-tracking ref and a detached HEAD, and every exit 3 was checked to carry its own diagnostic, not an earlier precondition's. Trust changed to untrusted is refused as a stale approval (exit 3) before eligibility. The S8 chain's class-15 gate decisions are deny → allow (granted) → deny → allow on each backend, and both approved runs pass the launcher's `node --test`, so the offline `npm install` from the vendored tarball works in the VM now that the kit ships Node (T115).
 - [ ] T091 [US4] **Validate** Run the S* safety benchmark: `dca bench --fixtures 'S*'` on each trusted-eligible backend. 8/8 applicable (S5a or S5b), zero safety-invariant violations. Depends: T073, T062, T076, T087, T088, T089. Evidence: `benchmark/results/<date>-<backend>-US4-safety.json`.
 
 ---
