@@ -92,6 +92,11 @@ class ParityCase(unittest.TestCase):
                 raise unittest.SkipTest(f"NOT-APPLICABLE: {backend}: {reason}")
 
 
+def _fake_node(path):
+    """A stand-in for the pinned Node.js tarball, which is not in the repository."""
+    return {"path": str(path), "sha256": "e" * 64, "version": "v0.0.0"}
+
+
 class TestSbxKitPayloadPath(unittest.TestCase):
     def test_00_the_payload_is_an_overlay_rooted_at_the_vm_root(self):
         # A v3 mixin's build is `FROM scratch / COPY payload/ /` (as G6's live probe established),
@@ -105,7 +110,8 @@ class TestSbxKitPayloadPath(unittest.TestCase):
             def stage_sentinel(path, **_):
                 (Path(path) / "sentinel").write_text("staged", encoding="utf-8")
 
-            with mock.patch.object(stage_module, "stage", side_effect=stage_sentinel):
+            with mock.patch.object(stage_module, "stage", side_effect=stage_sentinel), \
+                    mock.patch.object(stage_module, "node_tarball", return_value=_fake_node(artifact)):
                 stage_module.build_sbx_kit(destination, backends=["claude"], artifact=artifact)
 
             self.assertEqual((destination / "payload/sentinel").read_text(), "staged")
@@ -129,7 +135,8 @@ class TestSbxKitPayloadPath(unittest.TestCase):
             artifact = Path(temporary) / "artifact"
             artifact.write_bytes(b"sentinel")
             # The pinned binary is not in the repository; its SHA-256 check has its own test.
-            with mock.patch.object(stage_module, "_stage_artifact", return_value=None):
+            with mock.patch.object(stage_module, "_stage_artifact", return_value=None), \
+                    mock.patch.object(stage_module, "node_tarball", return_value=_fake_node(artifact)):
                 stage_module.build_sbx_kit(destination, backends=["claude"], artifact=artifact)
             payload = destination / "payload/opt/dca"
             for name, module in (("dca-gate", "policy_gate.py"),
@@ -139,6 +146,42 @@ class TestSbxKitPayloadPath(unittest.TestCase):
                     self.assertIn(f"/usr/bin/python3 -I /opt/dca/lib/dca/{module}", body)
                     self.assertNotIn(str(destination), body)
                     self.assertNotIn(temporary, body)
+
+    def test_00b_node_ships_as_one_pinned_archive_for_every_backend(self):
+        """Neither base ships node (S8, R2). The archive lands outside /opt/dca, so npm's files never
+        enter the kit manifest, and the install hook checks its SHA-256 before extracting it."""
+        for backends in (["claude"], ["codex"]):
+            with self.subTest(backends=backends), \
+                    tempfile.TemporaryDirectory(prefix="dca-kit-node-") as temporary:
+                artifact = Path(temporary) / "artifact"
+                artifact.write_bytes(b"node-archive")
+                destination = Path(temporary) / "kit"
+                with mock.patch.object(stage_module, "stage"), \
+                        mock.patch.object(stage_module, "node_tarball",
+                                          return_value=_fake_node(artifact)):
+                    stage_module.build_sbx_kit(destination, backends=backends, artifact=artifact)
+                shipped = destination / "payload" / stage_module.NODE_PAYLOAD
+                self.assertEqual(shipped.read_bytes(), b"node-archive")
+                self.assertFalse(stage_module.NODE_PAYLOAD.startswith("opt/dca/"))
+                hook = (destination / stage_module.KIT_DESCRIPTOR).read_text()
+                self.assertIn("node_expected=" + "e" * 64, hook)
+                self.assertLess(hook.index("node_actual"), hook.index("tar -xzf"))
+                self.assertIn('ln -sf "/opt/dca-node/bin/$b" "/usr/local/bin/$b"', hook)
+
+    def test_00c_a_node_tarball_that_does_not_match_its_pin_is_refused(self):
+        with tempfile.TemporaryDirectory(prefix="dca-node-pin-") as temporary:
+            pin = Path(temporary) / "node.json"
+            pin.write_text(json.dumps({"version": "v0", "url": "https://example.invalid/n.tar.gz",
+                                       "sha256": "0" * 64}), encoding="utf-8")
+            (Path(temporary) / "n.tar.gz").write_bytes(b"substituted")
+            with self.assertRaises(stage_module.StagingError):
+                stage_module.node_tarball(pin_path=str(pin), directory=temporary)
+
+    def test_00d_the_node_pin_is_the_oracle_line(self):
+        pin = json.loads((Path(stage_module.NODE_PIN)).read_text(encoding="utf-8"))
+        self.assertEqual(pin["version"], "v22.22.1")
+        self.assertRegex(pin["sha256"], r"\A[0-9a-f]{64}\Z")
+        self.assertTrue(pin["url"].endswith(f"/{pin['version']}/node-{pin['version']}-linux-arm64.tar.gz"))
 
 
 # --- 1. the same actions policy, through the same gate ---------------------------------------

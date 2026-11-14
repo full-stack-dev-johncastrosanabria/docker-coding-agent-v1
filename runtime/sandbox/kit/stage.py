@@ -392,6 +392,12 @@ if __name__ == "__main__":
 KIT_DESCRIPTOR = "dca-runtime.yaml"
 #: Where the pinned docker-agent artifact is looked for on the host, unless a caller says otherwise.
 DEFAULT_ARTIFACT = os.path.join(ROOT, "gates", "G6", "work", "docker-agent-linux-arm64")
+#: The pinned Node.js tarball (neither base ships node): its pin, and where the host keeps it.
+NODE_PIN = os.path.join(HERE, "node.json")
+NODE_TARBALL_DIR = os.path.join(ROOT, "gates", "G6", "work")
+#: Outside /opt/dca on purpose: one archive, not npm's thousands of files in the kit manifest. The
+#: install hook checks its SHA-256 against the pin before extracting it.
+NODE_PAYLOAD = "opt/dca-toolchain/node.tar.gz"
 
 SPEC_TEMPLATE = """# syntax={frontend}
 # Production sandbox kit for docker-coding-agent-v1 (tasks.md T056), as a v3 MIXIN.
@@ -435,6 +441,18 @@ capabilities:
             chown -R 0:0 /opt/dca
             chmod -R go-w /opt/dca
             chmod 0755 /opt/dca/bin/docker-agent /opt/dca/bin/dca-gate /opt/dca/bin/dca-fingerprint
+            node_expected={node_sha256}
+            node_actual=$(sha256sum /{node_payload} | cut -d' ' -f1)
+            if [ "$node_actual" != "$node_expected" ]; then
+                echo "dca kit: node tarball sha256 $node_actual does not match the pin $node_expected" >&2
+                exit 1
+            fi
+            install -d -m 0755 -o 0 -g 0 /opt/dca-node
+            tar -xzf /{node_payload} -C /opt/dca-node --strip-components=1 --no-same-owner
+            rm -rf /opt/dca-toolchain
+            chown -R 0:0 /opt/dca-node
+            chmod -R go-w /opt/dca-node
+            for b in node npm npx; do ln -sf "/opt/dca-node/bin/$b" "/usr/local/bin/$b"; done
 {claude_install}{codex_install}            install -d -m 0755 -o 0 -g 0 /run/dca
             install -d -m 0777 /run/dca/out /run/dca/state
             /usr/bin/python3 -I /opt/dca/lib/dca/kit_preflight.py /opt/dca {codex_config_path}
@@ -463,6 +481,23 @@ CODEX_INSTALL = """            install -d -m 0755 /home/agent/.config /home/agen
 """
 
 CODEX_CONFIG_PATH = "/home/agent/.config/cagent/config.yaml"
+
+
+def node_tarball(pin_path=NODE_PIN, directory=NODE_TARBALL_DIR):
+    """The pinned Node.js tarball on the host, fetched once if absent. Fails closed on any SHA-256
+    mismatch, so a substituted archive never reaches a kit."""
+    with open(pin_path, encoding="utf-8") as handle:
+        pin = json.load(handle)
+    path = os.path.join(directory, pin["url"].rsplit("/", 1)[-1])
+    if not os.path.isfile(path):
+        import urllib.request
+        os.makedirs(directory, exist_ok=True)
+        urllib.request.urlretrieve(pin["url"], path + ".part")
+        os.replace(path + ".part", path)
+    actual = sha256_file(path)
+    if actual != pin["sha256"]:
+        raise StagingError(f"{path} has sha256 {actual}, not the pinned {pin['sha256']}")
+    return {"path": path, "sha256": pin["sha256"], "version": pin["version"]}
 
 
 def build_sbx_kit(destination, backends=None, artifact=None, skills_source=None,
@@ -494,12 +529,19 @@ def build_sbx_kit(destination, backends=None, artifact=None, skills_source=None,
           backends=backends, artifact=artifact, eligibility_path=eligibility_path,
           install_prefix=PRODUCTION_PREFIX, choice=choice)
 
+    node = node_tarball()
+    node_target = os.path.join(payload_root, NODE_PAYLOAD)
+    os.makedirs(os.path.dirname(node_target), exist_ok=True)
+    shutil.copyfile(node["path"], node_target)
+
     with open(VERSIONS, encoding="utf-8") as handle:
         versions = json.load(handle)
     expected = versions["docker_agent_artifact"]["sha256"]
     spec = SPEC_TEMPLATE.format(
         frontend=versions["kit_build"]["frontend"],
         artifact_sha256=expected,
+        node_sha256=node["sha256"],
+        node_payload=NODE_PAYLOAD,
         claude_install=CLAUDE_INSTALL if "claude" in backends else "",
         codex_install=CODEX_INSTALL if "codex" in backends else "",
         codex_config_path=CODEX_CONFIG_PATH if "codex" in backends else "/dev/null",

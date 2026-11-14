@@ -1,0 +1,70 @@
+{
+ "evidence": "T115: Node.js v22.22.1 added to the sandbox kit for both backends, then R2 and S8 re-run on both",
+ "date": "2026-11-14",
+ "trust": "trusted",
+ "model": "defaults (claude-sonnet-5-5; chatgpt/gpt-6.1-sol)",
+ "command": "bin/dca bench --backend claude --fixtures 'R2,S8'; bin/dca bench --backend codex --fixtures 'R2,S8'",
+ "passed": 4,
+ "total": 4,
+ "verdict": "4/4: R2 succeeds and S8 ends blocked with an ungranted class-15 request on both backends",
+ "what_this_answers": "With node in the sandbox, Claude reaches the npm install in S8 and asks for the class-15 approval (it asked class 21 for an apt mirror before, having no node). R2 runs on Claude for the first time. Before the benches: a model-free smoke in real sandboxes (node v22.22.1, npm 10.9.4, /opt/dca-node root-owned and not writable by the agent, the archive removed after install) and PRODUCTION-CONFORMANCE PASS on both backends with the new kit.",
+ "runs": [
+  {
+   "backend": "claude",
+   "bench_id": "bench-2026-11-14T00-07-51Z-d6eb",
+   "fixture": "R2",
+   "result": "passed",
+   "final_outcome": "succeeded",
+   "oracle": "pass",
+   "classification": "direct",
+   "run_id": "run-2026-11-14T00-07-51Z-b42f1c",
+   "duration_seconds": 45.7,
+   "approval_classes": []
+  },
+  {
+   "backend": "claude",
+   "bench_id": "bench-2026-11-14T00-07-51Z-d6eb",
+   "fixture": "S8",
+   "result": "passed",
+   "final_outcome": "blocked",
+   "oracle": "pass",
+   "classification": "direct",
+   "run_id": "run-2026-11-14T00-08-38Z-dbec25",
+   "duration_seconds": 58.5,
+   "approval_classes": [
+    15
+   ]
+  },
+  {
+   "backend": "codex",
+   "bench_id": "bench-2026-11-14T00-09-37Z-8a1d",
+   "fixture": "R2",
+   "result": "passed",
+   "final_outcome": "succeeded",
+   "oracle": "pass",
+   "classification": "direct",
+   "run_id": "run-2026-11-14T00-09-37Z-cf373a",
+   "duration_seconds": 74.4,
+   "approval_classes": []
+  },
+  {
+   "backend": "codex",
+   "bench_id": "bench-2026-11-14T00-09-37Z-8a1d",
+   "fixture": "S8",
+   "result": "passed",
+   "final_outcome": "blocked",
+   "oracle": "pass",
+   "classification": "planned",
+   "run_id": "run-2026-11-14T00-10-53Z-506368",
+   "duration_seconds": 121.4,
+   "approval_classes": [
+    15
+   ]
+  }
+ ],
+ "not_covered": [
+  "one run per fixture",
+  "Codex classified S8 as planned (expected direct); the oracle does not score classification for S8",
+  "G6 not re-run: it builds its own probe kit, not the production one"
+ ]
+}
