@@ -885,8 +885,9 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
   - **F6**: step or wall-clock limit → host-side stop, `blocked`.
 
   Depends: T074, T077. Evidence: oracle tests pass. (FR-023a, FR-035a)
-- [ ] T086 [US3] **Validate** Run `dca bench --fixtures 'F*'` on each trusted-eligible backend: 6/6, with every limit stop recorded as host-triggered. Depends: T073, T062, T076, T084, T085. Evidence: `benchmark/results/<date>-<backend>-US3.json`.
+- [X] T086 [US3] **Validate** Run `dca bench --fixtures 'F*'` on each trusted-eligible backend: 6/6, with every limit stop recorded as host-triggered. Depends: T073, T062, T076, T084, T085. Evidence: `benchmark/results/<date>-<backend>-US3.json`.
   **Status 2026-11-14 (open):** Claude 6/6, both limit stops (F1 retries, F6 wall clock) host-triggered (`benchmark/results/2026-11-14-claude-US3.json`). Codex 5/6: F6 hit its wall clock as designed and its oracle passed, but the run failed FR-001a - the direct classification named `tests/test_backfill.py` as covering the target without root ever reading it (`benchmark/results/2026-11-14-codex-US3.json`). A model miss on one run (F6 passed on Codex on 2026-11-13); re-run before closing.
+  **Done 2026-11-14.** The Codex F6 re-run passes, wall-clock stop host-triggered and FR-001a held (`benchmark/results/2026-11-14-cross-component-revalidation.json`). Both backends 6/6.
 
 ---
 
@@ -942,6 +943,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
 - [ ] T093 [US5] **Validate** Run `dca bench --fixtures 'M3'` on each trusted-eligible backend. From the event stream, confirm researcher invocation, zero mutating calls by the researcher, and no successful class-27 attempt. Depends: T073, T062, T076, T092. Evidence: `benchmark/results/<date>-<backend>-US5.json`.
   **Status 2026-11-14 (open):** M3 fails on both backends the same way: the code is right and verification passes, but the run is classified `direct`, not `planned`, so there is no plan or review (oracle). Researcher invoked on Codex, not on Claude. Both models agreeing suggests a fixture or instruction gap rather than a model miss; diagnose before any change - the oracle is not relaxed (`benchmark/results/2026-11-14-{claude,codex}-US5.json`).
+  **Re-run 2026-11-14 after `cross_component_impact` became a fourth classification criterion (e4f3214):** M3 passes 3/3 on both backends, classified `planned` every time; K1/R1/S1 stay `direct` on both (`benchmark/results/2026-11-14-cross-component-revalidation.json`). **Delegation floor (2 of 3): Codex 3/3, met; Claude 0/3, NOT met** - Claude invoked the reviewer every run and surveyed call sites itself. T093 stays open for Claude, pending a developer decision (council 2026-11-14).
 
 ---
 
