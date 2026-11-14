@@ -1,0 +1,7 @@
+{
+  "note": "Node.js for the sandbox: neither pinned base (sbx/claude, sbx/shell) ships it. Same line as the oracle image (v22.22.1). Kept out of runtime/versions.yaml by developer decision 2026-11-13, so gate staleness does not see it: tasks.md T114.",
+  "version": "v22.22.1",
+  "url": "https://nodejs.org/dist/v22.22.1/node-v22.22.1-linux-arm64.tar.gz",
+  "sha256": "1d1690e9aba47e887a275abc6d8f7317e571a0700deaef493f768377e99155f5",
+  "verification": "nodejs.org SHASUMS256.txt for v22.22.1"
+}

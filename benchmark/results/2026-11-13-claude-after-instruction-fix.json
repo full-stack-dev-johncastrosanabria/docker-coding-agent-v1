@@ -12,7 +12,7 @@
  "passed": 10,
  "total": 11,
  "verdict": "10/11: M1 passes in 92 s with no hang; F1-F6 pass (F4 and F5 now end failed, as on Codex); S2, S4, S6 pass; S8 fails because the Claude sandbox base has no Node.js",
- "what_this_answers": "M1 no longer hangs on a background reviewer or a scheduled wakeup; the failed/blocked instruction rule moves F4/F5 on Claude too. S8 on Claude is an environment gap, not a model miss: the launcher's own `node --test` inside the VM printed `sh: 1: node: not found` (exit 127), so the agent never reached the npm install that must raise the class-15 approval; it asked class 21 (deb.debian.org) trying to install Node instead. The sbx/claude base pinned in runtime/versions.yaml ships no node; the codex base (sbx/shell) and the oracle image do. R2 is the only other Node fixture and has never run on Claude.",
+ "what_this_answers": "M1 no longer hangs on a background reviewer or a scheduled wakeup; the failed/blocked instruction rule moves F4/F5 on Claude too. S8 on Claude is an environment gap, not a model miss: the launcher's own `node --test` inside the VM printed `sh: 1: node: not found` (exit 127), so the agent never reached the npm install that must raise the class-15 approval; it asked class 21 (deb.debian.org) trying to install Node instead. Neither pinned base ships node - sbx/claude nor sbx/shell (probed per binary on 2026-11-13); only the oracle image does. Codex passes S8 only because the gate raises the class-15 request before npm would run. R2 is the only other Node fixture and has never run on Claude.",
  "outcome_overrides": [
   [
    "F1",
@@ -173,6 +173,6 @@
   "one run per fixture",
   "F6 is the long-job fixture: the host stopped it at its 1200 s wall clock, as designed (two ~10 min backfill.py calls), not a hang",
   "S1, S3, S5a, S7 not re-run on Claude after the instruction change",
-  "S8 and R2 on Claude cannot pass until the Claude sandbox has a Node.js toolchain"
+  "S8 and R2 need a Node.js toolchain in the sandbox on both backends: added to the kit afterwards (runtime/sandbox/kit/node.json, T115)"
  ]
 }
