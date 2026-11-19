@@ -81,6 +81,9 @@ POLICY_UNINITIALIZED_STDERR_053 = (
 #: POLICY_UNINITIALIZED_STDERR_053, each captured read-only on this host: v0.53.0 (2026-11-13) and
 #: v0.54.0 (2026-11-18, compared byte for byte and identical). A client that is not listed keeps
 #: the v0.43.0 text, because nothing has been observed from it.
+#: The v0.54.0 observation holds for a NON-TTY stdin only. On a TTY that client prompts
+#: ("Choice [1-3, default 2]") rather than reporting the uninitialized state, so it emits this text
+#: only because gates/G0/run.sh detaches stdin; without that it hangs (observed 2026-11-19).
 POLICY_UNINITIALIZED_CLIENTS_053 = ((0, 53, 0), (0, 54, 0))
 #: Clients OBSERVED to emit `sbx ls --json` as a bare array rather than {"sandboxes": [...]}:
 #: v0.53.0 (2026-11-13) and v0.54.0 (2026-11-18, same shape, captured empty on this host).

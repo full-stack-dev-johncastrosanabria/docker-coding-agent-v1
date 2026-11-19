@@ -23,6 +23,13 @@ set -u
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd) || exit 1
 cd "$ROOT" || exit 1
 
+# No sbx surface this gate uses is interactive, and none of it may become so: sbx 0.54.0 prompts
+# ("Choice [1-3, default 2]", whose default is the permissive `balanced`) instead of reporting the
+# uninitialized policy whenever stdin is a TTY, which hangs the gate and would let a keystroke set
+# a global policy the gate never chose. Detaching stdin once keeps every call below deterministic
+# and machine-readable. No gate reads stdin; G1a prints instructions instead (observed 2026-11-19).
+exec </dev/null
+
 WORK=gates/G6/work
 OBS=$WORK/observations.env
 KIT=$WORK/kit
