@@ -983,7 +983,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 - [X] T096 **Validate** Acceptance precheck using existing mechanisms only: **no `--dry-run`**.
   - `scripts/verify.sh` passes;
   - `python3 -m unittest discover -s tests -t .` passes;
-  - `tests/oracles/run_oracles.py` passes, including the seed-determinism rebuild of all 29 fixtures;
+  - `tests/oracles/run_oracles.py` passes, including the seed-determinism rebuild of all 39 fixtures;
   - `benchmark/thresholds.yaml` is committed;
   - `gates/eligibility.json` shows every common gate PASS, and, for each backend to be accepted, `available`, final G11 PASS and production conformance PASS. An unavailable backend is listed with its reason and isn't accepted;
   - the global network-policy fingerprint matches `gates/eligibility.json`.
@@ -1014,7 +1014,7 @@ Each gate lives in `gates/<ID>/` (a minimal `run.sh` plus helpers) and writes `g
 
   Depends: T024, T062, T073. Evidence: every gate outcome is cited.
 - [X] T104 [P] **Docs** Write `docs/backends.md`: Claude (Pro status and fresh-sandbox authentication from G1a, G1b, managed settings) vs Codex (mechanism from G2, the model from G3); pre-run selection; parity guarantees and test (T060); no `harness: codex` in V1. Depends: T024, T054, T055, T060. Evidence: each claim cites evidence or a contract.
-- [ ] T105 [P] **Docs** Write `docs/evaluation.md`: the fixture catalog (29 physical / 28 applicable), the T074 format, thresholds, instability policy, acceptance results, comparison, and readability-review findings. Depends: T100, T101. Evidence: numbers match `benchmark/results/*`.
+- [ ] T105 [P] **Docs** Write `docs/evaluation.md`: the fixture catalog (39 physical / 29 in the acceptance set / 28 applicable per run), the T074 format, thresholds, instability policy, acceptance results, comparison, and readability-review findings. Depends: T100, T101. Evidence: numbers match `benchmark/results/*`.
   **Written as far as the committed files allow, 2026-11-18** (same precedent as T102/T103/T104/T106/T107, which were completed under their prerequisites while live validation was blocked). `docs/evaluation.md` carries the catalog, the thresholds and how they are applied, and the instability policy; every figure in it was checked against `benchmark/fixtures/*/fixture.yaml` and `benchmark/thresholds.yaml` by script, and the 39 / 29 / 28 arithmetic is explained (R1–R10 never count; S5a and S5b are one case whose `gate_condition` selects the variant). It cites `benchmark/FORMAT.md` for the fixture format rather than restating it.
   **Still open on purpose:** the three result sections — acceptance results, backend comparison, readability review — say explicitly that the campaign has not run and name the two host conditions blocking it, rather than showing provisional numbers. They are filled from T100 and T101, and only then does this task's evidence ("numbers match `benchmark/results/*`") hold. The two known live findings that will carry into the comparison, Claude's M3 delegation (T093/T116) and Codex's absent M5/S7 review findings (T095), are already recorded there.
 - [X] T106 [P] **Docs** Write `docs/running.md`. Cover:
