@@ -75,6 +75,14 @@ def _load(name, path):
     return module
 
 
+def _sbx_module():
+    """`src/dca/sbx.py`: the launcher's own sbx surface, so these checks apply the same rules.
+
+    `_load` caches by name, so the three checks that need it share one import.
+    """
+    return _load("dca_sbx", os.path.join(ROOT, "src", "dca", "sbx.py"))
+
+
 def read_json(path):
     with open(path, encoding="utf-8") as handle:
         return json.load(handle)
@@ -280,7 +288,7 @@ def available_backends():
 
 def check_version_pins(report, allow_drift):
     versions = read_json(os.path.join(RUNTIME, "versions.yaml"))
-    sbx_module = _load("dca_sbx", os.path.join(ROOT, "src", "dca", "sbx.py"))
+    sbx_module = _sbx_module()
 
     # `--json`, not the plain `sbx version` line: that line names only the client, so a daemon
     # on a different build read as "the pinned version". Both sides decide here, as in the gates.
@@ -321,7 +329,7 @@ def check_version_pins(report, allow_drift):
 
 def check_kit_host(report):
     versions = read_json(os.path.join(RUNTIME, "versions.yaml"))
-    sbx = _load("dca_sbx", os.path.join(ROOT, "src", "dca", "sbx.py"))
+    sbx = _sbx_module()
     for problem in sbx.kit_host_problems(versions.get("kit_build"), run=run):
         report.fail("kit-build", problem)
 
@@ -341,7 +349,7 @@ def check_network_fingerprint(report):
     if code != 0:
         report.fail("network-fingerprint", f"sbx ls failed: {err.strip()}")
         return
-    sbx_module = _load("dca_sbx", os.path.join(ROOT, "src", "dca", "sbx.py"))
+    sbx_module = _sbx_module()
     try:
         sandboxes = sbx_module.sandbox_inventory(json.loads(out))
     except ValueError as exc:
