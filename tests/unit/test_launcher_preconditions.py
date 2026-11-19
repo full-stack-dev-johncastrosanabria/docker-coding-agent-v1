@@ -288,6 +288,45 @@ class TestEnvironmentPreconditions(LauncherCase):
         self.assertEqual(block["observed"]["sbx_server"], "v0.44.0")
         self.assertIs(block["drift"], True)
 
+    def test_22g_a_doubled_v_prefix_is_not_the_pinned_version(self):
+        # `lstrip("v")` stripped EVERY leading v, so "vv0.43.0" compared equal to the pin
+        # "v0.43.0" and an unpinned build passed as pinned.
+        self.state["version_json"] = {"client": {"version": "vv0.43.0"},
+                                      "server": {"version": "vv0.43.0", "state": "running"}}
+        self.write_state()
+        self.assertIn("did not report a usable client version", self.refusal())
+
+    def test_22h_a_string_that_does_not_start_with_a_version_is_not_usable(self):
+        # "" is not here: version_components rejects an empty field first, as test_22c covers.
+        for reported in ("v0.43", "v.0.43.0", "sbx version v0.43.0", "0,43,0", "vv0.43.0"):
+            with self.subTest(reported=reported):
+                self.state["version_json"] = {
+                    "client": {"version": reported},
+                    "server": {"version": reported, "state": "running"}}
+                self.write_state()
+                self.assertIn("did not report a usable", self.refusal(allow_drift=True))
+
+    def test_22i_a_suffixed_version_clears_the_floor_but_never_equals_the_pin(self):
+        # The floor only asks "at least 0.43.0", so a suffix passes it; equality keeps the
+        # whole string, so a prerelease is not the pinned release.
+        self.state["version_json"] = {
+            "client": {"version": "v0.43.0-rc1"},
+            "server": {"version": "v0.43.0-rc1", "state": "running"}}
+        self.write_state()
+        message = self.refusal()
+        self.assertNotIn("below the required", message)
+        self.assertIn("v0.43.0-rc1", message)
+        self.assertIn("--allow-drift", message)
+
+    def test_22j_a_pin_that_is_not_a_version_is_refused_even_with_allow_drift(self):
+        # Checked on its own: editing versions.yaml would stale the gate evidence, and that
+        # precondition runs before this one.
+        instance = self.make(allow_drift=True)
+        instance.versions = {"sbx": {"exact": "vv0.43.0"}}
+        with self.assertRaises(errors.PreconditionError) as caught:
+            instance._check_sbx_version()
+        self.assertIn("not a version", str(caught.exception))
+
     def test_22f_an_observed_match_never_clears_the_allow_drift_flag(self):
         # The flag still covers claude_code and docker_agent, whose drift the launcher does not
         # check, so an sbx match must not report the whole block as undrifted.

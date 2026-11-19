@@ -36,6 +36,34 @@ def sandbox_inventory(document):
     return listing
 
 
+_VERSION_NUMBER = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)")
+
+
+def version_number(text):
+    """The (major, minor, patch) a reported sbx version STARTS with, or None if it does not.
+
+    At most ONE optional `v`, so "vv0.53.0" is not a version at all. A suffix is allowed and
+    ignored here, because this answers only "is it at least X" - the project's own synthetic pin
+    is `0.0.0-synthetic`. Equality is `version_identity`'s job, where a suffix does count.
+    """
+    match = _VERSION_NUMBER.match(text) if isinstance(text, str) else None
+    return tuple(int(part) for part in match.groups()) if match else None
+
+
+def version_identity(text):
+    """A reported sbx version with at most ONE `v` prefix removed, or None if it is not one.
+
+    What an exact pin comparison compares. `lstrip("v")` removed EVERY leading `v`, so
+    "vv0.53.0" came out as "0.53.0" and compared equal to the pin "v0.53.0" - a build that was
+    not the pinned one passing as pinned. The rest of the string is kept verbatim, so
+    "0.53.0-rc1" never equals "0.53.0" either. None means "not a version", which every caller
+    must treat as unpinned, never as a match.
+    """
+    if version_number(text) is None:
+        return None
+    return text[1:] if text.startswith("v") else text
+
+
 def version_components(document):
     """Normalize `sbx version --json`: (client version, server version, server state).
 

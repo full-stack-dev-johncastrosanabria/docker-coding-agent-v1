@@ -76,7 +76,7 @@ try:
     from . import jsonschema
     from . import report as report_module
     from .errors import PreconditionError, UsageError
-    from .sbx import Sbx, SbxError, version_components
+    from .sbx import Sbx, SbxError, version_components, version_identity
 except ImportError:  # loaded by path in tests
     eligibility_module = _sideload("dca_eligibility", "eligibility.py")
     events_module = _sideload("dca_events", "events.py")
@@ -86,7 +86,7 @@ except ImportError:  # loaded by path in tests
     PreconditionError, UsageError = _errors.PreconditionError, _errors.UsageError
     _sbx = _sideload("dca_sbx", "sbx.py")
     Sbx, SbxError = _sbx.Sbx, _sbx.SbxError
-    version_components = _sbx.version_components
+    version_components, version_identity = _sbx.version_components, _sbx.version_identity
 
 BENCHMARK_DIR = os.path.join(_REPO_ROOT, "benchmark")
 FIXTURE_SCHEMA = os.path.join(_REPO_ROOT, "specs", "001-bounded-coding-agent", "contracts",
@@ -927,8 +927,13 @@ def _sbx_pin_problem(pin, output):
         return f"sbx version --json is unreadable: {exc}"
     if state != "running":
         return f"the sbx server reports state {state!r}, not 'running' (pin {pin})"
+    wanted = version_identity(pin)
+    if wanted is None:
+        return f"the sbx pin {pin!r} is not a version that can be compared"
+    # version_identity strips at most one `v`, so "vv0.53.0" is not read as the pinned 0.53.0;
+    # anything it cannot parse stays None and counts as a mismatch, never a match.
     mismatched = [f"{side} {value!r}" for side, value in (("client", client), ("server", server))
-                  if value.lstrip("v") != pin.lstrip("v")]
+                  if version_identity(value) != wanted]
     return f"sbx reports {', '.join(mismatched)}, pin is {pin}" if mismatched else None
 
 

@@ -112,11 +112,6 @@ def new_run_id(now=None):
     return f"run-{stamp}-{secrets.token_hex(3)}"
 
 
-def _version_tuple(text):
-    match = re.search(r"(\d+)\.(\d+)\.(\d+)", text or "")
-    return tuple(int(part) for part in match.groups()) if match else None
-
-
 # --- the request ---------------------------------------------------------------------------------
 
 
@@ -354,9 +349,9 @@ class Launcher:
                 f"the sbx server reports state {server_state!r}, not 'running': it is the daemon "
                 "that creates every sandbox, so a run cannot be attributed to a version it is "
                 "not serving.")
-        observed = {}
         for side, reported in (("client", client), ("server", server)):
-            parsed = _version_tuple(reported)
+            # version_number allows at most one `v`, so "vv0.53.0" is not a version at all.
+            parsed = sbx_module.version_number(reported)
             if parsed is None:
                 raise PreconditionError(
                     f"sbx did not report a usable {side} version: {reported!r}")
@@ -364,12 +359,16 @@ class Launcher:
                 raise PreconditionError(
                     f"the sbx {side} {'.'.join(map(str, parsed))} is below the required "
                     f"{'.'.join(map(str, MIN_SBX))} (mountless create and --skills=off)")
-            observed[side] = ".".join(map(str, parsed))
         exact = (self.versions.get("sbx") or {}).get("exact")
         if exact:
+            wanted = sbx_module.version_identity(exact)
+            if wanted is None:
+                raise PreconditionError(
+                    f"runtime/versions.yaml pins sbx {exact!r}, which is not a version that can "
+                    "be compared with what sbx reports.")
             mismatched = [f"{side} {reported!r}" for side, reported
                           in (("client", client), ("server", server))
-                          if observed[side] != exact.lstrip("v")]
+                          if sbx_module.version_identity(reported) != wanted]
             if mismatched and not self.request.allow_drift:
                 raise PreconditionError(
                     f"sbx reports {', '.join(mismatched)} but runtime/versions.yaml pins "
@@ -562,8 +561,10 @@ class Launcher:
             return False
         if observed.get("server_state") != "running":
             return True
-        return bool(pin) and any(_version_tuple(observed.get(side)) != _version_tuple(pin)
-                                 for side in ("client", "server"))
+        wanted = sbx_module.version_identity(pin)
+        return wanted is not None and any(
+            sbx_module.version_identity(observed.get(side)) != wanted
+            for side in ("client", "server"))
 
     def version_block(self, models=()):
         versions = self.versions or eligibility_module.load_versions(self.versions_path)

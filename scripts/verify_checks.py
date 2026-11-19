@@ -305,12 +305,19 @@ def check_version_pins(report, allow_drift):
             if state != "running":
                 report.fail("pins", f"the sbx server reports state {state!r}, not 'running': it "
                                     "is the daemon that creates every sandbox")
-            mismatched = [f"{side} {value!r}" for side, value
-                          in (("client", client), ("server", server))
-                          if exact and value.lstrip("v") != exact.lstrip("v")]
-            if mismatched:
-                message = f"sbx reports {', '.join(mismatched)}, pin is {exact}"
-                report.fail("pins", message) if not allow_drift else report.note(f"drift: {message}")
+            # version_identity strips at most one `v`, so "vv0.53.0" is not read as the pinned
+            # 0.53.0; what it cannot parse counts as a mismatch, never a match.
+            wanted = sbx_module.version_identity(exact) if exact else None
+            if exact and wanted is None:
+                report.fail("pins", f"the sbx pin {exact!r} is not a version that can be compared")
+            elif exact:
+                mismatched = [f"{side} {value!r}" for side, value
+                              in (("client", client), ("server", server))
+                              if sbx_module.version_identity(value) != wanted]
+                if mismatched:
+                    message = f"sbx reports {', '.join(mismatched)}, pin is {exact}"
+                    (report.fail("pins", message) if not allow_drift
+                     else report.note(f"drift: {message}"))
 
     code, out, _ = run(["docker", "agent", "version"])
     pinned = versions.get("docker_agent")
