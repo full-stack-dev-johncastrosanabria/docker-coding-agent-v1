@@ -678,7 +678,24 @@
           "type": "string"
         },
         "drift": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "launcher-authored: --allow-drift was passed, OR an observed sbx component differed from the pin (or its server was not running). The flag alone still sets it, because claude_code and docker_agent drift is not checked by the launcher; the observation can only add a true, so a run that really differed can never report false"
+        },
+        "observed": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sbx_client": {
+              "type": "string"
+            },
+            "sbx_server": {
+              "type": "string"
+            },
+            "sbx_server_state": {
+              "type": "string"
+            }
+          },
+          "description": "host-observed sbx components from `sbx version --json`: the CLI that was invoked and the daemon that created the sandboxes, which can differ. Absent when the precondition never read them. Compare with sbx for the pin"
         },
         "models": {
           "type": "array",

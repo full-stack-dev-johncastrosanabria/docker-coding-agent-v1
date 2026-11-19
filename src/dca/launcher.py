@@ -242,6 +242,10 @@ class Launcher:
 
         self.evidence = None
         self.versions = None
+        # What `sbx version --json` reported, once the precondition read it: the client, the
+        # server and the server's state. `None` means it was never observed, which is why
+        # `version_block` then falls back to the --allow-drift flag rather than claiming no drift.
+        self.observed_sbx = None
         # The managed hook record, once collected. `None` means no managed evidence was gathered at
         # all (the run never got that far); an empty list means it was gathered and was empty, which
         # is unproven identity rather than no opinion.
@@ -331,25 +335,45 @@ class Launcher:
         return True
 
     def _check_sbx_version(self):
+        """Both sbx components against the pin, because the server is what runs the sandboxes.
+
+        The plain `sbx version` line names only the client, so a client that matches the pin
+        while the daemon is a different build used to pass this check silently and then be
+        reported as the pinned version. Everything here therefore decides on `--json`, which
+        names both sides, and `version_block` records what was observed.
+        """
         try:
-            reported = self.sbx.version()
+            client, server, server_state = self.sbx.version()
         except (SbxError, OSError) as exc:
             raise PreconditionError(
                 f"sbx is not available: {exc}. Install Docker Sandboxes "
                 f">= {'.'.join(map(str, MIN_SBX))} and re-run.") from exc
-        observed = _version_tuple(reported)
-        if observed is None:
-            raise PreconditionError(f"sbx did not report a usable version: {reported!r}")
-        if observed < MIN_SBX:
+        self.observed_sbx = {"client": client, "server": server, "server_state": server_state}
+        if server_state != "running":
             raise PreconditionError(
-                f"sbx {'.'.join(map(str, observed))} is below the required "
-                f"{'.'.join(map(str, MIN_SBX))} (mountless create and --skills=off)")
-        exact = (self.versions.get("sbx") or {}).get("exact")
-        if exact and exact.lstrip("v") != ".".join(map(str, observed)):
-            if not self.request.allow_drift:
+                f"the sbx server reports state {server_state!r}, not 'running': it is the daemon "
+                "that creates every sandbox, so a run cannot be attributed to a version it is "
+                "not serving.")
+        observed = {}
+        for side, reported in (("client", client), ("server", server)):
+            parsed = _version_tuple(reported)
+            if parsed is None:
                 raise PreconditionError(
-                    f"sbx reports {reported!r} but runtime/versions.yaml pins {exact}. "
-                    "Re-run with --allow-drift to proceed (the run is then not "
+                    f"sbx did not report a usable {side} version: {reported!r}")
+            if parsed < MIN_SBX:
+                raise PreconditionError(
+                    f"the sbx {side} {'.'.join(map(str, parsed))} is below the required "
+                    f"{'.'.join(map(str, MIN_SBX))} (mountless create and --skills=off)")
+            observed[side] = ".".join(map(str, parsed))
+        exact = (self.versions.get("sbx") or {}).get("exact")
+        if exact:
+            mismatched = [f"{side} {reported!r}" for side, reported
+                          in (("client", client), ("server", server))
+                          if observed[side] != exact.lstrip("v")]
+            if mismatched and not self.request.allow_drift:
+                raise PreconditionError(
+                    f"sbx reports {', '.join(mismatched)} but runtime/versions.yaml pins "
+                    f"{exact}. Re-run with --allow-drift to proceed (the run is then not "
                     "acceptance-eligible).")
 
     def _check_kit_host(self):
@@ -525,14 +549,39 @@ class Launcher:
             limits = json.load(handle)
         return dict(limits["host_limits"][classification or self.classification])
 
+    def _sbx_drifted(self, pin):
+        """True when an observed sbx component differs from the pin, or the server is not running.
+
+        With nothing observed this is False, which is why the caller ORs the --allow-drift flag
+        in: an unobserved run must not be reported as matching. A pinless versions file cannot be
+        drifted from, matching the precondition, which skips the comparison when there is no
+        `exact`.
+        """
+        observed = self.observed_sbx or {}
+        if not observed:
+            return False
+        if observed.get("server_state") != "running":
+            return True
+        return bool(pin) and any(_version_tuple(observed.get(side)) != _version_tuple(pin)
+                                 for side in ("client", "server"))
+
     def version_block(self, models=()):
         versions = self.versions or eligibility_module.load_versions(self.versions_path)
+        pin = (versions.get("sbx") or {}).get("exact")
         block = {
             "docker_agent": versions.get("docker_agent"),
             "claude_code": (versions.get("claude_code") or {}).get("exact"),
-            "sbx": (versions.get("sbx") or {}).get("exact"),
-            "drift": bool(self.request.allow_drift),
+            "sbx": pin,
+            # Observed drift OR the flag, never one instead of the other. The flag stays because
+            # this block also names claude_code and docker_agent, whose drift the launcher does
+            # not check at all (claude is only probed for presence), so dropping it would hide
+            # their drift exactly the way the sbx half was hidden. The observation can only ADD
+            # a true: a run that really differed can no longer report drift: false.
+            "drift": bool(self.request.allow_drift) or self._sbx_drifted(pin),
         }
+        if self.observed_sbx:
+            block["observed"] = {f"sbx_{key}": value
+                                 for key, value in sorted(self.observed_sbx.items())}
         observed = []
         for model in models:
             events_module.note_model(observed, model)

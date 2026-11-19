@@ -36,6 +36,27 @@ def sandbox_inventory(document):
     return listing
 
 
+def version_components(document):
+    """Normalize `sbx version --json`: (client version, server version, server state).
+
+    Both sides are required, because the client is only the CLI that was invoked while the
+    server is the daemon that actually creates every sandbox: a run attributed to the pinned
+    version has to be the version that ran it. A document that cannot answer for BOTH is
+    unreadable rather than half-known, so missing fields, error envelopes and malformed values
+    never read as a match. This is the rule `gates/preflight.py:version_pins_hold` applies to
+    gate evidence; `src/dca` cannot import `gates/`, so it is restated, not shared.
+    """
+    for side in ("client", "server"):
+        entry = document.get(side) if isinstance(document, dict) else None
+        if (not isinstance(entry, dict) or not isinstance(entry.get("version"), str)
+                or not entry["version"]):
+            raise ValueError(f"expected an sbx version document with a nonempty {side} version")
+    state = document["server"].get("state")
+    if not isinstance(state, str) or not state:
+        raise ValueError("expected an sbx version document with a nonempty server state")
+    return document["client"]["version"], document["server"]["version"], state
+
+
 VERSIONS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))), "runtime", "versions.yaml")
 
@@ -157,8 +178,17 @@ class Sbx:
     # --- read-only global state ---------------------------------------------------------------
 
     def version(self):
-        _, out, _ = self.run("version")
-        return out.strip()
+        """`sbx version --json` as (client version, server version, server state).
+
+        `--json` rather than the plain `sbx version` line, which names only the client: the
+        precondition is about the daemon that creates the sandboxes, so a client/server skew
+        must be visible here instead of passing as "the pinned version".
+        """
+        document = self._json("version", "--json")
+        try:
+            return version_components(document)
+        except ValueError as exc:
+            raise SbxError([self.binary, "version", "--json"], 0, str(exc)) from exc
 
     def list_sandboxes(self):
         document = self._json("ls", "--json")

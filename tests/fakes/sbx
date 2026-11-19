@@ -25,6 +25,7 @@ and a fake that answered them would hide the day one slipped in.
 
 import json
 import os
+import re
 import sys
 import time
 
@@ -84,7 +85,20 @@ def main(argv):
 
     if command == "version":
         record(argv, 0)
-        print(state.get("version", "sbx version: v0.43.0"))
+        plain = state.get("version", "sbx version: v0.43.0")
+        if "--json" in args:
+            # The launcher decides on --json, which names the client AND the server. A test that
+            # only sets `version` gets both sides agreeing on it; `version_json` scripts a skew,
+            # a stopped server or a malformed document outright.
+            document = state.get("version_json")
+            if document is None:
+                match = re.search(r"\d+\.\d+\.\d+", plain)
+                number = f"v{match.group(0)}" if match else plain
+                document = {"client": {"version": number},
+                            "server": {"version": number, "state": "running"}}
+            print(json.dumps(document))
+            return 0
+        print(plain)
         return 0
 
     if command == "ls":

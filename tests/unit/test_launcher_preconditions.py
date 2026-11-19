@@ -240,6 +240,67 @@ class TestEnvironmentPreconditions(LauncherCase):
         self.assertIn("--allow-drift", self.refusal())
         self.make(allow_drift=True).preconditions()
 
+    def test_22a_both_sbx_components_must_match_the_pin_not_just_the_client(self):
+        # The defect this covers: the plain `sbx version` line names only the CLI, so a client on
+        # the pin with a daemon on another build passed and was then REPORTED as the pin.
+        self.state["version_json"] = {"client": {"version": "v0.43.0"},
+                                      "server": {"version": "v0.44.0", "state": "running"}}
+        self.write_state()
+        message = self.refusal()
+        self.assertIn("server 'v0.44.0'", message)
+        self.assertNotIn("client", message)
+        self.assertIn("--allow-drift", message)
+
+    def test_22b_a_server_that_is_not_running_is_refused_even_with_allow_drift(self):
+        self.state["version_json"] = {"client": {"version": "v0.43.0"},
+                                      "server": {"version": "v0.43.0", "state": "stopped"}}
+        self.write_state()
+        self.assertIn("not 'running'", self.refusal(allow_drift=True))
+
+    def test_22c_an_unreadable_version_document_fails_closed(self):
+        for document in ({}, {"client": {"version": "v0.43.0"}},
+                         {"client": {"version": "v0.43.0"}, "server": {"version": "v0.43.0"}},
+                         {"client": {"version": ""},
+                          "server": {"version": "v0.43.0", "state": "running"}},
+                         {"error": "daemon unreachable"}, []):
+            with self.subTest(document=document):
+                self.state["version_json"] = document
+                self.write_state()
+                # Never read as "the pinned version": an unreadable document is no observation.
+                self.assertIn("sbx is not available", self.refusal(allow_drift=True))
+
+    def test_22d_a_matching_server_passes_and_is_recorded_as_observed(self):
+        instance = self.make()
+        self.assertTrue(instance.preconditions())
+        block = instance.version_block()
+        self.assertEqual(block["observed"], {"sbx_client": "v0.43.0", "sbx_server": "v0.43.0",
+                                             "sbx_server_state": "running"})
+        self.assertIs(block["drift"], False)
+
+    def test_22e_the_report_records_real_drift_not_the_allow_drift_flag(self):
+        self.state["version"] = "sbx version: v0.44.0"
+        self.write_state()
+        instance = self.make(allow_drift=True)
+        self.assertTrue(instance.preconditions())
+        block = instance.version_block()
+        # The pin is still what was pinned, but the run says plainly it did not run on it.
+        self.assertEqual(block["sbx"], "v0.43.0")
+        self.assertEqual(block["observed"]["sbx_server"], "v0.44.0")
+        self.assertIs(block["drift"], True)
+
+    def test_22f_an_observed_match_never_clears_the_allow_drift_flag(self):
+        # The flag still covers claude_code and docker_agent, whose drift the launcher does not
+        # check, so an sbx match must not report the whole block as undrifted.
+        instance = self.make(allow_drift=True)
+        self.assertTrue(instance.preconditions())
+        block = instance.version_block()
+        self.assertEqual(block["observed"]["sbx_server"], "v0.43.0")
+        self.assertIs(block["drift"], True)
+        # Without the flag, the same matching run reports no drift.
+        clean = self.make()
+        self.assertTrue(clean.preconditions())
+        self.assertIs(clean.version_block()["drift"], False)
+
     def test_23_a_missing_sandbox_base_pin_is_refused_even_with_allow_drift(self):
         versions = json.loads(json.dumps(self.versions))
         versions["sandbox_bases"].pop("claude")
@@ -532,6 +593,13 @@ class TestModelRecord(LauncherCase):
         self.assertEqual(instance.claude_models(), ["claude-opus-5-5"])
         instance.sbx.execute.side_effect = launcher.SbxError(["sbx"], 1, "gone")
         self.assertEqual(instance.claude_models(), [])
+
+    def test_version_block_without_an_observation_omits_observed_and_keeps_the_flag(self):
+        # Nothing was read, so nothing is claimed: no `observed`, and `drift` stays the flag
+        # rather than asserting a match the launcher never checked.
+        self.assertNotIn("observed", self.make().version_block())
+        self.assertIs(self.make().version_block()["drift"], False)
+        self.assertIs(self.make(allow_drift=True).version_block()["drift"], True)
 
     def test_version_block_lists_observed_models_and_omits_the_field_otherwise(self):
         instance = self.make()

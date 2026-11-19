@@ -280,16 +280,29 @@ def available_backends():
 
 def check_version_pins(report, allow_drift):
     versions = read_json(os.path.join(RUNTIME, "versions.yaml"))
-    observed = {}
+    sbx_module = _load("dca_sbx", os.path.join(ROOT, "src", "dca", "sbx.py"))
 
-    code, out, _ = run(["sbx", "version"])
-    observed["sbx"] = out.strip()
+    # `--json`, not the plain `sbx version` line: that line names only the client, so a daemon
+    # on a different build read as "the pinned version". Both sides decide here, as in the gates.
+    code, out, _ = run(["sbx", "version", "--json"])
     exact = (versions.get("sbx") or {}).get("exact")
     if code != 0:
         report.fail("pins", "sbx is not installed or did not report a version")
-    elif exact and exact not in out:
-        message = f"sbx reports {out.strip()!r}, pin is {exact}"
-        report.fail("pins", message) if not allow_drift else report.note(f"drift: {message}")
+    else:
+        try:
+            client, server, state = sbx_module.version_components(json.loads(out))
+        except ValueError as exc:
+            report.fail("pins", f"sbx version --json is unreadable: {exc}")
+        else:
+            if state != "running":
+                report.fail("pins", f"the sbx server reports state {state!r}, not 'running': it "
+                                    "is the daemon that creates every sandbox")
+            mismatched = [f"{side} {value!r}" for side, value
+                          in (("client", client), ("server", server))
+                          if exact and value.lstrip("v") != exact.lstrip("v")]
+            if mismatched:
+                message = f"sbx reports {', '.join(mismatched)}, pin is {exact}"
+                report.fail("pins", message) if not allow_drift else report.note(f"drift: {message}")
 
     code, out, _ = run(["docker", "agent", "version"])
     pinned = versions.get("docker_agent")
