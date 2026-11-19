@@ -49,6 +49,7 @@ otherwise, printing every problem; 2 on a usage error.
 """
 
 import hashlib
+import importlib.util
 import json
 import os
 import sys
@@ -130,6 +131,28 @@ def canonical_json(obj):
 def runtime_versions_digest(versions):
     """'sha256:' + hex SHA-256 of the canonical JSON of the whole versions document."""
     return "sha256:" + hashlib.sha256(canonical_json(versions).encode("utf-8")).hexdigest()
+
+
+_STAGE_MODULE = None
+
+
+def kit_digest(root=None):
+    """The kit sources' digest, from `runtime/sandbox/kit/stage.py` (tasks.md T114).
+
+    Loaded lazily and by path: `gates/` is not a package, and `stage.py` is the one place that
+    knows which files the kit is built from. Restating that list here is exactly how the two
+    would drift apart, which is the failure this binding exists to prevent.
+    """
+    global _STAGE_MODULE
+    if _STAGE_MODULE is None:
+        root = root or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(root, "runtime", "sandbox", "kit", "stage.py")
+        spec = importlib.util.spec_from_file_location("dca_stage_for_kit_digest", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _STAGE_MODULE = module
+    # The module is cached, never the digest: a changed source file must change the answer.
+    return _STAGE_MODULE.kit_source_digest()
 
 
 def _lookup(obj, path, default=None):
@@ -222,6 +245,14 @@ def check_binding(doc, versions):
             f"stale: runtime_versions_digest is {doc.get('runtime_versions_digest')!r} "
             f"but runtime/versions.yaml gives {digest!r}"
         )
+    # T114: the review is also bound to the kit, so the launcher refuses every run after a kit
+    # edit instead of trusting evidence recorded against different bytes.
+    kit = kit_digest()
+    if doc.get("kit_digest") != kit:
+        problems.append(
+            f"stale: kit_digest is {doc.get('kit_digest')!r} "
+            f"but the staged kit sources give {kit!r}"
+        )
     recorded = doc.get("pinned_versions")
     for field, path in PIN_SOURCES.items():
         want = _lookup(versions, path)
@@ -248,6 +279,9 @@ def evidence_provenance(gate, versions):
             },
             "runtime_versions_digest": digest,
         }
+    if gate == "PRODUCTION-CONFORMANCE":
+        # The gate that tests the PRODUCTION kit is the gate bound to it (T114).
+        return {"runtime_versions_digest": digest, "kit_digest": kit_digest()}
     return {"runtime_versions_digest": digest}
 
 
@@ -274,6 +308,17 @@ def evidence_problems(evidence, versions):
             problems.append(
                 f"{gate}: stale: provenance.runtime_versions_digest is {_show(have)} "
                 f"but runtime/versions.yaml gives {digest!r}"
+            )
+    if gate == "PRODUCTION-CONFORMANCE":
+        # Without this the kit could change after the gate passed and the evidence would still
+        # read PASS - the fail-open T114 names. Only this gate is bound, so a kit change costs
+        # one re-run rather than all 17 documents.
+        want = kit_digest()
+        have = provenance.get("kit_digest", MISSING)
+        if have != want:
+            problems.append(
+                f"{gate}: stale: provenance.kit_digest is {_show(have)} "
+                f"but the staged kit sources now give {want!r}"
             )
     return problems
 

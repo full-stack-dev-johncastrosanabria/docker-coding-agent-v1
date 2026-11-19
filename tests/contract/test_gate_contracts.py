@@ -191,6 +191,9 @@ class GateContractSchemas(unittest.TestCase):
         doc = copy.deepcopy(doc)
         doc["pinned_versions"] = self.rules.pinned_versions(versions)
         doc["runtime_versions_digest"] = self.rules.runtime_versions_digest(versions)
+        # T114: the review is bound to the kit too, so a synthetic document must carry it
+        # or every check_binding call would report it stale for the wrong reason.
+        doc["kit_digest"] = self.rules.kit_digest()
         return doc
 
     def test_schemas_are_draft_2020_12(self):
