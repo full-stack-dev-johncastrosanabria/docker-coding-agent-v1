@@ -439,6 +439,8 @@ class TestRepositoryContentHasNoAuthority(Case):
         # has to meet the same precondition as the flag would.
         document = json.loads((FIXTURES / "codex-unavailable.json").read_text(encoding="utf-8"))
         document["runtime_versions_digest"] = eligibility.canonical_digest(versions)
+        # T114: bound to the kit as well, from the real sources (see the fixture README).
+        document["kit_digest"] = eligibility.kit_digest()
         document["pinned_versions"] = rules.pinned_versions(versions)
         eligibility_path = self.tmp / "eligibility.json"
         eligibility_path.write_text(json.dumps(document), encoding="utf-8")

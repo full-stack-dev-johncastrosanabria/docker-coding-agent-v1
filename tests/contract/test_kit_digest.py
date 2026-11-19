@@ -6,8 +6,8 @@ fails when `stage()` reads something the digest does not cover. Without it, the 
 the kit would silently fall outside the digest and T114's fail-open would be back.
 """
 
-import hashlib
 import importlib.util
+import json
 import os
 from pathlib import Path
 import shutil
@@ -159,6 +159,142 @@ class TestTheEnumerationCannotDriftFromStage(unittest.TestCase):
         self.assertIn(str(ROOT / "runtime" / "instructions" / "root.md"),
                       {os.path.realpath(path) for path in read})
         self.assertGreater(len(read), 10)
+
+
+rules = _load("dca_rules_kit_digest", ROOT / "gates" / "eligibility_rules.py")
+launcher_eligibility = _load("dca_eligibility_kit_digest", ROOT / "src" / "dca" / "eligibility.py")
+publish = _load("dca_publish_kit_digest", ROOT / "gates" / "production" / "publish.py")
+
+OTHER_KIT = "sha256:" + "7" * 64
+
+
+def _evidence(gate, kit=None):
+    provenance = {"runtime_versions_digest": "sha256:" + "1" * 64}
+    if kit is not None:
+        provenance["kit_digest"] = kit
+    return {"gate": gate, "status": "PASS", "provenance": provenance}
+
+
+class TestOnlyProductionConformanceIsBound(unittest.TestCase):
+    """The narrowness is the feature: a kit change must cost one re-run, not twenty."""
+
+    def test_the_provenance_of_production_conformance_carries_the_kit_digest(self):
+        versions = json.loads((ROOT / "runtime" / "versions.yaml").read_text(encoding="utf-8"))
+        provenance = rules.evidence_provenance("PRODUCTION-CONFORMANCE", versions)
+        self.assertEqual(provenance["kit_digest"], rules.kit_digest())
+        self.assertIn("runtime_versions_digest", provenance)
+
+    def test_no_other_gate_records_or_is_checked_for_a_kit_digest(self):
+        versions = json.loads((ROOT / "runtime" / "versions.yaml").read_text(encoding="utf-8"))
+        for gate in ("G0", "G4", "G6", "G9", "G11", "INVENTORY"):
+            with self.subTest(gate=gate):
+                self.assertNotIn("kit_digest", rules.evidence_provenance(gate, versions))
+                # And a document without one is not stale for that reason.
+                document = _evidence(gate)
+                document["provenance"]["runtime_versions_digest"] = \
+                    rules.runtime_versions_digest(versions)
+                problems = [p for p in rules.evidence_problems(document, versions)
+                            if "kit_digest" in p]
+                self.assertEqual(problems, [])
+
+    def test_a_changed_kit_stales_production_conformance_and_nothing_else(self):
+        versions = json.loads((ROOT / "runtime" / "versions.yaml").read_text(encoding="utf-8"))
+        current = rules.runtime_versions_digest(versions)
+        documents = {}
+        for gate in ("G0", "G4", "PRODUCTION-CONFORMANCE"):
+            documents[gate] = _evidence(gate, kit=OTHER_KIT)
+            documents[gate]["provenance"]["runtime_versions_digest"] = current
+        documents["G0"]["provenance"] = {"pins": rules.evidence_provenance(
+            "G0", versions)["pins"]}
+        stale = {p.split(":")[0] for p in rules.check_evidence(documents, versions)}
+        self.assertEqual(stale, {"PRODUCTION-CONFORMANCE"})
+
+    def test_a_missing_kit_digest_is_stale_not_merely_absent(self):
+        versions = json.loads((ROOT / "runtime" / "versions.yaml").read_text(encoding="utf-8"))
+        document = _evidence("PRODUCTION-CONFORMANCE")
+        document["provenance"]["runtime_versions_digest"] = \
+            rules.runtime_versions_digest(versions)
+        problems = rules.evidence_problems(document, versions)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("kit_digest is missing", problems[0])
+
+    def test_the_kit_is_a_parameter_so_the_rules_stay_a_function_of_their_inputs(self):
+        """A synthetic environment binds against its own kit, not whatever is checked out."""
+        versions = json.loads((ROOT / "runtime" / "versions.yaml").read_text(encoding="utf-8"))
+        document = _evidence("PRODUCTION-CONFORMANCE", kit=OTHER_KIT)
+        document["provenance"]["runtime_versions_digest"] = \
+            rules.runtime_versions_digest(versions)
+        self.assertEqual(rules.evidence_problems(document, versions, OTHER_KIT), [])
+        self.assertNotEqual(rules.evidence_problems(document, versions), [])
+
+
+class TestTheLauncherRefusesAfterAKitEdit(unittest.TestCase):
+    """The half that makes T114 not fail-open: review-time checking alone is not enough."""
+
+    def _document(self, kit):
+        versions = launcher_eligibility.load_versions()
+        return {"runtime_versions_digest": launcher_eligibility.canonical_digest(versions),
+                "kit_digest": kit}, versions
+
+    def test_a_matching_kit_passes_the_freshness_check(self):
+        document, versions = self._document(launcher_eligibility.kit_digest())
+        # Reaches the pinned_versions comparison rather than raising on the kit.
+        try:
+            launcher_eligibility.check_freshness(document, versions)
+        except launcher_eligibility.EvidenceProblem as exc:
+            self.assertNotIn("kit_digest", str(exc))
+
+    def test_a_changed_kit_is_refused_with_the_remedy_named(self):
+        document, versions = self._document(OTHER_KIT)
+        with self.assertRaises(launcher_eligibility.EvidenceProblem) as caught:
+            launcher_eligibility.check_freshness(document, versions)
+        self.assertIn("kit_digest", str(caught.exception))
+        self.assertIn("production conformance", str(caught.exception))
+
+    def test_an_absent_kit_digest_is_refused_too(self):
+        document, versions = self._document(None)
+        del document["kit_digest"]
+        with self.assertRaises(launcher_eligibility.EvidenceProblem) as caught:
+            launcher_eligibility.check_freshness(document, versions)
+        self.assertIn("kit_digest", str(caught.exception))
+
+    def test_the_launcher_and_the_rules_agree_on_the_digest(self):
+        self.assertEqual(launcher_eligibility.kit_digest(), rules.kit_digest())
+
+
+class TestThePublishedKitIsTheTestedKit(unittest.TestCase):
+    def test_cells_that_agree_with_the_sources_are_accepted(self):
+        current = rules.kit_digest()
+        foundation = {"cells": [{"backend": "claude", "profile": "trusted",
+                                 "kit_digest": current},
+                                {"backend": "codex", "profile": "trusted",
+                                 "kit_digest": current}]}
+        self.assertIsNone(publish.kit_digest_problem(foundation, current))
+
+    def test_cells_that_staged_different_kits_are_refused(self):
+        foundation = {"cells": [{"backend": "claude", "profile": "trusted", "kit_digest": OTHER_KIT},
+                                {"backend": "codex", "profile": "trusted",
+                                 "kit_digest": rules.kit_digest()}]}
+        problem = publish.kit_digest_problem(foundation, rules.kit_digest())
+        self.assertIn("different kits", problem)
+
+    def test_a_kit_that_changed_since_the_run_is_refused(self):
+        foundation = {"cells": [{"backend": "claude", "profile": "trusted",
+                                 "kit_digest": OTHER_KIT}]}
+        problem = publish.kit_digest_problem(foundation, rules.kit_digest())
+        self.assertIn("re-run gates/production/run.py", problem)
+
+    def test_cells_from_before_the_binding_are_refused_by_name(self):
+        foundation = {"cells": [{"backend": "claude", "profile": "trusted"},
+                                {"backend": "codex", "profile": "untrusted",
+                                 "kit_digest": rules.kit_digest()}]}
+        problem = publish.kit_digest_problem(foundation, rules.kit_digest())
+        self.assertIn("claude/trusted", problem)
+        self.assertIn("predate the T114 binding", problem)
+
+    def test_an_empty_foundation_is_refused(self):
+        self.assertIn("no cells", publish.kit_digest_problem({"cells": []}, rules.kit_digest()))
+        self.assertIn("no cells", publish.kit_digest_problem(None, rules.kit_digest()))
 
 
 if __name__ == "__main__":

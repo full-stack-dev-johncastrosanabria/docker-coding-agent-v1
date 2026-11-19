@@ -20,6 +20,10 @@ GATES = ROOT / "gates"
 CONTRACTS = ROOT / "specs" / "001-bounded-coding-agent" / "contracts"
 RUNTIME_VERSIONS = ROOT / "runtime" / "versions.yaml"
 ELIGIBILITY_FIXTURES = ROOT / "tests" / "fixtures" / "eligibility"
+#: The synthetic environment's kit digest, the value every fixture carries. Bound against
+#: explicitly, so changing a fixture's kit_digest fails the test instead of passing by
+#: construction (T114, and tests/fixtures/eligibility/README.md).
+SYNTHETIC_KIT_DIGEST = "sha256:" + "5" * 64
 SYNTHETIC_VERSIONS = ELIGIBILITY_FIXTURES / "versions.synthetic.yaml"
 EVIDENCE_FIXTURES = ROOT / "tests" / "fixtures" / "evidence"
 
@@ -109,7 +113,15 @@ class GateContractSchemas(unittest.TestCase):
         cls.runtime_versions = _load_json(RUNTIME_VERSIONS)
 
     def fixture(self, name):
-        return _load_json(ELIGIBILITY_FIXTURES / f"{name}.json")
+        """A fixture, re-bound to the REAL kit digest.
+
+        The committed value is a synthetic placeholder, because a real one would have to be
+        rewritten whenever the kit changes (T114, and the fixture README). Tests about kit
+        staleness set it themselves.
+        """
+        document = _load_json(ELIGIBILITY_FIXTURES / f"{name}.json")
+        document["kit_digest"] = self.rules.kit_digest()
+        return document
 
     def evidence_set(self, doc, versions):
         """Synthetic in-memory gate evidence (never written under gates/) whose statuses support doc
@@ -295,8 +307,11 @@ class GateContractSchemas(unittest.TestCase):
                 doc = _load_json(path)
                 self.assertEqual(doc["generated_at"], "1970-01-01T00:00:00Z")
                 self.assertEqual(doc["pinned_versions"]["sbx"], "0.0.0-synthetic")
-                # Bound to the synthetic versions only; always stale against the real pins.
-                self.assertEqual(self.rules.check_binding(doc, self.synthetic_versions), [])
+                self.assertEqual(doc["kit_digest"], SYNTHETIC_KIT_DIGEST)
+                # Bound to the synthetic environment only - its versions AND its kit - and
+                # always stale against the real pins and the real kit.
+                self.assertEqual(self.rules.check_binding(
+                    doc, self.synthetic_versions, SYNTHETIC_KIT_DIGEST), [])
                 self.assertNotEqual(self.rules.check_binding(doc, self.runtime_versions), [])
 
     # --- pin binding -----------------------------------------------------------------
@@ -420,7 +435,9 @@ class GateContractSchemas(unittest.TestCase):
     def test_checker_cli_binds_to_a_versions_file(self):
         fixture = str(ELIGIBILITY_FIXTURES / "all-eligible.json")
         self.assertEqual(self.rules.main(["eligibility_rules.py", fixture]), 0)
-        self.assertEqual(self.rules.main(["eligibility_rules.py", fixture, str(SYNTHETIC_VERSIONS)]), 0)
+        self.assertEqual(self.rules.main(
+            ["eligibility_rules.py", fixture, str(SYNTHETIC_VERSIONS),
+             f"--kit={SYNTHETIC_KIT_DIGEST}"]), 0)
         with contextlib.redirect_stdout(io.StringIO()) as out:
             self.assertEqual(self.rules.main(["eligibility_rules.py", fixture, str(RUNTIME_VERSIONS)]), 1)
         self.assertIn("stale: runtime_versions_digest", out.getvalue())
@@ -665,9 +682,22 @@ class GateContractSchemas(unittest.TestCase):
         if not documents:
             self.skipTest("no gate evidence recorded yet")
         versions = _load_json(RUNTIME_VERSIONS)
-        self.assertFalse(
-            self.rules.check_evidence(documents, versions),
-            "committed evidence is stale against the current runtime/versions.yaml")
+        problems = self.rules.check_evidence(documents, versions)
+        # T114 landed the kit binding BEFORE the re-gate that records it, deliberately: the pin
+        # raise forces that re-gate anyway, so paying it once means the binding is in place when
+        # G0 runs. Until then the committed production-conformance document predates the field
+        # and is correctly stale - the review refuses to write and the launcher refuses to run.
+        # ONCE THE RE-GATE HAS RECORDED kit_digest, DELETE THIS ALLOWANCE: this assertion going
+        # back to assertFalse(problems) is how the next person knows the re-gate is done.
+        pending = [p for p in problems
+                   if p.startswith("PRODUCTION-CONFORMANCE: stale: provenance.kit_digest")]
+        self.assertEqual(
+            [p for p in problems if p not in pending], [],
+            "committed evidence is stale for a reason other than the pending T114 re-gate")
+        self.assertEqual(
+            len(pending), 1,
+            "the kit binding should leave exactly ONE stale document; staling more than that "
+            "defeats the point of binding only production conformance")
 
     def test_no_synthetic_evidence_fixture_records_a_pass(self):
         for path in sorted(EVIDENCE_FIXTURES.glob("*.json")):

@@ -236,8 +236,14 @@ def check(doc):
     return problems
 
 
-def check_binding(doc, versions):
-    """Return the problems that make doc stale against versions; an empty list means bound."""
+def check_binding(doc, versions, kit=None):
+    """Return the problems that make doc stale against versions; an empty list means bound.
+
+    `kit` is the kit digest to bind against, defaulting to this repository's own (T114). It is a
+    parameter so this stays a function of its arguments: a caller binding a document against a
+    SYNTHETIC environment supplies that environment's kit digest, exactly as it supplies its
+    versions file, instead of being compared with whatever kit happens to be checked out.
+    """
     problems = []
     digest = runtime_versions_digest(versions)
     if doc.get("runtime_versions_digest") != digest:
@@ -247,7 +253,7 @@ def check_binding(doc, versions):
         )
     # T114: the review is also bound to the kit, so the launcher refuses every run after a kit
     # edit instead of trusting evidence recorded against different bytes.
-    kit = kit_digest()
+    kit = kit_digest() if kit is None else kit
     if doc.get("kit_digest") != kit:
         problems.append(
             f"stale: kit_digest is {doc.get('kit_digest')!r} "
@@ -285,7 +291,7 @@ def evidence_provenance(gate, versions):
     return {"runtime_versions_digest": digest}
 
 
-def evidence_problems(evidence, versions):
+def evidence_problems(evidence, versions, kit=None):
     """Return the problems that make one gate evidence document stale against versions."""
     gate = evidence.get("gate")
     provenance = evidence.get("provenance")
@@ -313,7 +319,7 @@ def evidence_problems(evidence, versions):
         # Without this the kit could change after the gate passed and the evidence would still
         # read PASS - the fail-open T114 names. Only this gate is bound, so a kit change costs
         # one re-run rather than all 17 documents.
-        want = kit_digest()
+        want = kit_digest() if kit is None else kit
         have = provenance.get("kit_digest", MISSING)
         if have != want:
             problems.append(
@@ -323,14 +329,14 @@ def evidence_problems(evidence, versions):
     return problems
 
 
-def check_evidence(evidence_by_id, versions):
+def check_evidence(evidence_by_id, versions, kit=None):
     """Problems for every evidence document that isn't current; an empty list means all current."""
     problems = []
     for evidence_id, evidence in sorted(evidence_by_id.items()):
         if evidence.get("gate") != evidence_id:
             problems.append(f"gates/{evidence_id}.json records gate {evidence.get('gate')!r}")
             continue
-        problems += evidence_problems(evidence, versions)
+        problems += evidence_problems(evidence, versions, kit)
     return problems
 
 
@@ -353,13 +359,14 @@ def _evidence_status(evidence_by_id, gate, backend=None):
     return evidence.get("status")
 
 
-def check_review(doc, evidence_by_id, versions):
+def check_review(doc, evidence_by_id, versions, kit=None):
     """Problems that stop doc from being a valid review of the current evidence and versions.
 
     Empty only when doc is consistent, bound to versions, every evidence document is
     current, and every recorded status equals its evidence.
     """
-    problems = check(doc) + check_binding(doc, versions) + check_evidence(evidence_by_id, versions)
+    problems = (check(doc) + check_binding(doc, versions, kit)
+                + check_evidence(evidence_by_id, versions, kit))
     for gate in COMMON_GATES:
         want = _evidence_status(evidence_by_id, gate)
         have = doc["common_gates"].get(gate)
@@ -393,10 +400,15 @@ def load_evidence(directory):
 
 
 def main(argv):
+    # T114: --kit=<digest> overrides the kit this document is bound against, which defaults to
+    # this repository's own. Named, not positional, because it has to be usable with or without
+    # an evidence directory. A synthetic environment passes its own kit digest here.
+    kit = next((arg.split("=", 1)[1] for arg in argv[1:] if arg.startswith("--kit=")), None)
+    argv = [arg for arg in argv if not arg.startswith("--kit=")]
     if len(argv) not in (2, 3, 4):
         print(
             "usage: python3 gates/eligibility_rules.py <eligibility.json> "
-            "[<runtime/versions.yaml> [<evidence-dir>]]",
+            "[<runtime/versions.yaml> [<evidence-dir>]] [--kit=<digest>]",
             file=sys.stderr,
         )
         return 2
@@ -408,9 +420,9 @@ def main(argv):
         with open(argv[2], encoding="utf-8") as fh:
             versions = json.load(fh)
         if len(argv) == 3:
-            problems = check(doc) + check_binding(doc, versions)
+            problems = check(doc) + check_binding(doc, versions, kit)
         else:
-            problems = check_review(doc, load_evidence(argv[3]), versions)
+            problems = check_review(doc, load_evidence(argv[3]), versions, kit)
     for problem in problems:
         print(f"eligibility: {problem}")
     return 1 if problems else 0

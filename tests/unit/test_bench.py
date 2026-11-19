@@ -1219,6 +1219,8 @@ class TestAcceptanceCommand(AcceptanceCase):
         (root / "runtime" / "versions.yaml").write_text(json.dumps(versions))
         evidence = json.loads((ELIGIBILITY / document).read_text())
         evidence["runtime_versions_digest"] = eligibility.canonical_digest(versions)
+        # T114: bound to the kit as well, from the real sources (see the fixture README).
+        evidence["kit_digest"] = eligibility.kit_digest()
         evidence["pinned_versions"] = rules.pinned_versions(versions)
         (root / "gates").mkdir()
         (root / "gates" / "eligibility.json").write_text(json.dumps(evidence))

@@ -18,6 +18,7 @@
     }
   },
   "runtime_versions_digest": "sha256:b57d8c517fca96be17a1bef4512f5baa61407c011decc53cc6b2fb31ab2b9643",
+  "kit_digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
   "common_gates": {
     "G0": "PASS",
     "G4": "FAIL",
