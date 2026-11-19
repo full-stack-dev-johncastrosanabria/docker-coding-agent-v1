@@ -3,7 +3,7 @@
 How the benchmark decides whether this agent is good enough to release, and what it has decided
 so far. The authority for each number is the committed file named beside it, never this page.
 
-**Status (2026-11-18): the three result sections at the end are not filled in yet.** The
+**Status (2026-11-19): the three result sections at the end are not filled in yet.** The
 acceptance campaign (T097–T101) has not run; `## Acceptance results`, `## Backend comparison` and
 `## Readability review` say so explicitly rather than showing provisional figures. Everything
 before them is derived from committed files and is final.
@@ -89,15 +89,15 @@ holds two runs out of three is not a control.
 
 ## Acceptance results
 
-**Not yet recorded.** T097 (Claude) and T098 (Codex) have not run. Two host conditions block them,
-neither a defect in this repository:
+**Not yet recorded.** T097 (Claude) and T098 (Codex) have not run. One host condition blocks them,
+not a defect in this repository: the version pins have drifted (sbx v0.54.0 against the pinned
+v0.53.0, Claude Code 2.1.325 against 2.1.323). A drifted run is not acceptance-eligible, and the
+launcher and `bench.pin_drift` both refuse it, so the pins must first be raised by a G0 re-pin —
+the sanctioned response to an upgrade (`research.md:647`).
 
-1. The version pins have drifted (sbx v0.54.0 against the pinned v0.53.0, Claude Code 2.1.325
-   against 2.1.323). A drifted run is not acceptance-eligible, and the launcher and
-   `bench.pin_drift` both refuse it, so the pins must first be raised by a G0 re-pin — the
-   sanctioned response to an upgrade (`research.md:647`).
-2. `git` is unusable on the developer's machine until the Xcode licence is accepted, and
-   `bench.build_seed` rebuilds every fixture seed through it.
+A second condition, an unusable `git`, was **cleared on 2026-11-19**: the Xcode licence was
+accepted, `/usr/bin/git` reports 2.54.0 (Apple Git-157), and all 39 fixture seeds rebuild
+deterministically through `bench.build_seed`.
 
 T099 is already known to run nothing: neither backend is untrusted-eligible per
 `gates/eligibility.json`, so autonomous untrusted coding is **not claimed**, and the task records
