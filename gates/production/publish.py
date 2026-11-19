@@ -96,6 +96,34 @@ def read(path):
     return json.loads(Path(path).read_text(encoding="utf-8")) if Path(path).is_file() else None
 
 
+def kit_digest_problem(foundation, current):
+    """Why the cells' staged kit is not the kit being published, or None when they agree.
+
+    tasks.md T114. Each cell records the digest at the moment it staged, so three things are
+    checked here: that every cell recorded one at all (an older foundation.json predates this
+    binding and cannot be published under it), that they agree with each other, and that they
+    agree with the sources as they are now. A gate bound to a digest it never tested under would
+    be worse than no binding, because it would look like proof.
+    """
+    cells = (foundation or {}).get("cells") or []
+    if not cells:
+        return "gates/production/work/foundation.json records no cells"
+    recorded = {cell.get("kit_digest") for cell in cells}
+    if None in recorded:
+        missing = sorted(f"{cell.get('backend')}/{cell.get('profile')}" for cell in cells
+                         if cell.get("kit_digest") is None)
+        return ("these foundation cells recorded no kit_digest, so they predate the T114 binding "
+                f"and must be re-run: {', '.join(missing)}")
+    if len(recorded) > 1:
+        return ("the foundation cells staged different kits, so no single kit was tested: "
+                f"{', '.join(sorted(recorded))}")
+    staged = recorded.pop()
+    if staged != current:
+        return (f"the foundation cells staged kit {staged} but the kit sources now give "
+                f"{current}: re-run gates/production/run.py against the current kit")
+    return None
+
+
 def foundation_checks(document, backend):
     """{check-id: result} merged across every trust profile of one backend."""
     merged = {}
@@ -151,9 +179,17 @@ def main(argv=None):
         raise SystemExit("gates/production/work/foundation.json is missing: run "
                          "gates/production/run.py first")
 
+    # T114: the kit this gate is bound to must be the kit its cells actually tested. Each cell
+    # recorded the digest when it staged, so a kit that changed mid-run, or between the run and
+    # this publish, is a disagreement here rather than a provenance line naming an untested kit.
+    kit_problem = kit_digest_problem(foundation, rules.kit_digest())
+
     backends = {}
     for backend in BACKENDS:
         available = ((eligibility or {}).get("backends", {}).get(backend, {}).get("available"))
+        if kit_problem and available:
+            backends[backend] = {"status": "NOT-RUN", "not_run_reason": kit_problem}
+            continue
         if not available:
             backends[backend] = {
                 "status": "NOT-APPLICABLE",
@@ -203,7 +239,9 @@ def main(argv=None):
         "versions": {"sbx": (versions.get("sbx") or {}).get("exact"),
                      "docker_agent": versions.get("docker_agent"),
                      "docker_agent_config_version": versions.get("docker_agent_config_version")},
-        "provenance": {"runtime_versions_digest": rules.runtime_versions_digest(versions)},
+        # From rules.evidence_provenance, never hand-built, as gates/README.md requires: the kit
+        # digest is then the one the staleness check compares, by construction.
+        "provenance": rules.evidence_provenance("PRODUCTION-CONFORMANCE", versions),
         "network_policy_fingerprint": foundation.get("global_policy_fingerprint"),
         "criteria": [
             {"id": "PC.0a",

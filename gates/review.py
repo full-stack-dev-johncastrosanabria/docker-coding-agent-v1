@@ -82,6 +82,8 @@ def build(evidence_by_id, versions):
             "%Y-%m-%dT%H:%M:%SZ"),
         "pinned_versions": rules.pinned_versions(versions),
         "runtime_versions_digest": rules.runtime_versions_digest(versions),
+        # T114: binds the review to the bytes the sandbox receives, not only to the version pins.
+        "kit_digest": rules.kit_digest(),
         "common_gates": {g: status_of(evidence_by_id, g) for g in rules.COMMON_GATES},
         "network_policy_fingerprint": (
             (evidence_by_id.get("G4") or {}).get("network_policy_fingerprint")),

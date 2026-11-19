@@ -80,6 +80,11 @@
       "pattern": "^sha256:[0-9a-f]{64}$",
       "description": "Canonical digest of the complete runtime/versions.yaml the review ran against: 'sha256:' + hex SHA-256 of json.dumps(obj, sort_keys=True, separators=(',', ':'), ensure_ascii=False) encoded as UTF-8 (tasks.md, Global constraints). Any changed pin, including the docker-agent artifact SHA-256 or a sandbox base, makes the document stale (launcher-cli precondition 7)."
     },
+    "kit_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Digest of the kit sources the review ran against, from runtime/sandbox/kit/stage.py:kit_source_digest(): 'sha256:' + hex SHA-256 over each committed file stage() reads, its relative path and its bytes, sorted by path (tasks.md T114). Changing the gate bytes, the instructions, the managed settings, a runtime skill or the Node pin makes the document stale, so the launcher refuses the run rather than trusting evidence recorded against different bytes."
+    },
     "common_gates": {
       "type": "object",
       "required": [

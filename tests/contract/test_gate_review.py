@@ -73,6 +73,15 @@ class GateReview(unittest.TestCase):
             source = GATES / f"{evidence_id}.json"
             if source.exists():
                 shutil.copy(source, self.gates / f"{evidence_id}.json")
+        # T114: re-bind the copied production-conformance evidence to the current kit, the way
+        # this setUp already copies the current versions.yaml. These tests are about what
+        # review.py DERIVES; whether the committed evidence happens to be current is
+        # verify.sh's "Gate evidence" check, and a pending re-gate must not fail all of these.
+        conformance = self.gates / "PRODUCTION-CONFORMANCE.json"
+        if conformance.exists():
+            document = json.loads(conformance.read_text(encoding="utf-8"))
+            document["provenance"]["kit_digest"] = rules.kit_digest()
+            conformance.write_text(json.dumps(document, indent=2), encoding="utf-8")
         shutil.copy(GATES / "eligibility.schema.json", self.gates / "eligibility.schema.json")
         self.versions_path = self.tmp / "versions.yaml"
         shutil.copy(ROOT / "runtime" / "versions.yaml", self.versions_path)

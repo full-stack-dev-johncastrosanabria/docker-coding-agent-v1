@@ -377,21 +377,29 @@ class G0Recorder(unittest.TestCase):
                 self.assert_fails("G0.6")
                 self.assertFalse(self.may_change_globals())
 
-    def test_observed_053_shapes_pass_without_changing_the_legacy_guards(self):
-        for component in ("client", "server"):
-            self.files["version.json"][component]["version"] = "v0.53.0"
-        self.files["ls.json"] = []
-        self.texts["policy-before.err"] = (
-            "error: global network policy has not been initialized\n"
-            "  try: sbx policy init <allow-all|balanced|deny-all>\n")
-        self.obs["claude_code"] = "2.1.323"
-        self.obs["docker_agent"] = "v1.160.0"
-        self.assertEqual(self.run_recorder()[0], "PASS")
-        versions = json.loads(self.versions_path.read_text())
-        self.assertEqual(versions["sbx"]["exact"], "v0.53.0")
-        self.assertEqual(versions["claude_code"]["exact"], "2.1.323")
+    def test_observed_shapes_pass_without_changing_the_legacy_guards(self):
+        # Both observed clients, each captured read-only on this host: v0.53.0 on 2026-11-13 and
+        # v0.54.0 on 2026-11-18, whose `ls --json` array and uninitialized-policy stderr were
+        # compared against v0.53.0's and found identical.
+        for observed, claude in (("v0.53.0", "2.1.323"), ("v0.54.0", "2.1.325")):
+            with self.subTest(sbx=observed):
+                self.setUp()
+                for component in ("client", "server"):
+                    self.files["version.json"][component]["version"] = observed
+                self.files["ls.json"] = []
+                self.texts["policy-before.err"] = (
+                    "error: global network policy has not been initialized\n"
+                    "  try: sbx policy init <allow-all|balanced|deny-all>\n")
+                self.obs["claude_code"] = claude
+                self.obs["docker_agent"] = "v1.160.0"
+                self.assertEqual(self.run_recorder()[0], "PASS")
+                versions = json.loads(self.versions_path.read_text())
+                self.assertEqual(versions["sbx"]["exact"], observed)
+                self.assertEqual(versions["claude_code"]["exact"], claude)
+        # A client whose shape has NOT been observed keeps the v0.43.0 wrapper guard.
         self.assertIsNone(self.record_module.sandbox_count([], (0, 43, 0)))
-        self.assertIsNone(self.record_module.sandbox_count([], (0, 54, 0)))
+        self.assertIsNone(self.record_module.sandbox_count([], (0, 55, 0)))
+        self.assertEqual(self.record_module.sandbox_count([], (0, 54, 0)), 0)
 
     def test_053_uninitialized_policy_still_requires_an_exact_match(self):
         self.files["version.json"]["client"]["version"] = "v0.53.0"

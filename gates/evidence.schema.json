@@ -798,13 +798,29 @@
     },
     "digestProvenance": {
       "type": "object",
-      "description": "every gate document other than G0 and G6: the digest of the runtime/versions.yaml in force when the gate ran",
+      "description": "every gate document other than G0, G6 and PRODUCTION-CONFORMANCE: the digest of the runtime/versions.yaml in force when the gate ran",
       "required": [
         "runtime_versions_digest"
       ],
       "additionalProperties": false,
       "properties": {
         "runtime_versions_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "conformanceProvenance": {
+      "type": "object",
+      "description": "PRODUCTION-CONFORMANCE (tasks.md T114): the runtime/versions.yaml digest AND a digest of the kit sources that were staged, because this is the gate that tests the production kit. Binding only this gate is deliberate: a kit change then stales one document and costs one re-run, instead of staling all 17 at once. kit_digest is not in `required`: a document that predates this binding is STALE, not malformed, which is the distinction gates/README.md draws - eligibility_rules reports it as stale and the gate must be re-run, while the document itself stays readable",
+      "required": [
+        "runtime_versions_digest"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "runtime_versions_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "kit_digest": {
           "$ref": "#/$defs/digest"
         }
       }
@@ -975,13 +991,34 @@
       }
     },
     {
+      "description": "production conformance also records a digest of the kit sources it staged (T114)",
+      "if": {
+        "properties": {
+          "gate": {
+            "const": "PRODUCTION-CONFORMANCE"
+          }
+        },
+        "required": [
+          "gate"
+        ]
+      },
+      "then": {
+        "properties": {
+          "provenance": {
+            "$ref": "#/$defs/conformanceProvenance"
+          }
+        }
+      }
+    },
+    {
       "description": "every other gate document records the digest in force when it ran",
       "if": {
         "properties": {
           "gate": {
             "enum": [
               "G0",
-              "G6"
+              "G6",
+              "PRODUCTION-CONFORMANCE"
             ]
           }
         },

@@ -14,6 +14,12 @@ Every fixture is bound to `versions.synthetic.yaml`, a synthetic stand-in for
 (`pinned_versions()`, `runtime_versions_digest()`), so the fixtures pass the binding check against
 the synthetic file and are always **stale** against the real `runtime/versions.yaml`.
 
+`kit_digest` (tasks.md T114) is an all-fives synthetic value rather than a real one. The real kit
+digest is computed from the repository's own files, so a fixture carrying it would have to be
+rewritten every time the kit changes — exactly the drift the digest exists to catch. The value is
+shaped like a digest so the fixtures satisfy the schema, and any test that needs a fixture to be
+CURRENT re-binds it with `rules.kit_digest()`, the same way it re-binds the pins.
+
 Real eligibility is computed only by the gate review (T024) into `gates/eligibility.json`,
 from evidence that the gates actually recorded.
 

@@ -77,6 +77,17 @@ POLICY_UNINITIALIZED_STDERR_053 = (
     "error: global network policy has not been initialized\n"
     "  try: sbx policy init <allow-all|balanced|deny-all>\n"
 )
+#: Clients whose uninitialized-policy representation was OBSERVED to be exactly
+#: POLICY_UNINITIALIZED_STDERR_053, each captured read-only on this host: v0.53.0 (2026-11-13) and
+#: v0.54.0 (2026-11-18, compared byte for byte and identical). A client that is not listed keeps
+#: the v0.43.0 text, because nothing has been observed from it.
+#: The v0.54.0 observation holds for a NON-TTY stdin only. On a TTY that client prompts
+#: ("Choice [1-3, default 2]") rather than reporting the uninitialized state, so it emits this text
+#: only because gates/G0/run.sh detaches stdin; without that it hangs (observed 2026-11-19).
+POLICY_UNINITIALIZED_CLIENTS_053 = ((0, 53, 0), (0, 54, 0))
+#: Clients OBSERVED to emit `sbx ls --json` as a bare array rather than {"sandboxes": [...]}:
+#: v0.53.0 (2026-11-13) and v0.54.0 (2026-11-18, same shape, captured empty on this host).
+BARE_ARRAY_CLIENTS = ((0, 53, 0), (0, 54, 0))
 MISSING = object()
 
 # The order G0 executes in. Step 1 is observed in one go; each later criterion is reached only
@@ -153,9 +164,9 @@ def sandbox_count(listing, client=None):
 
     T008 requires that no sandbox is *running* during the global setting change.
 
-    The authenticated v0.43.0 client emits {"sandboxes": [...]}; the v0.53.0 client emits
-    a bare array. Both were captured read-only on this host. The bare array is accepted only
-    when the separately observed client is exactly v0.53.0:
+    The authenticated v0.43.0 client emits {"sandboxes": [...]}; the v0.53.0 and v0.54.0 clients
+    emit a bare array. All were captured read-only on this host. The bare array is accepted only
+    when the separately observed client is one of those (BARE_ARRAY_CLIENTS):
 
     - a bare array from a legacy or unknown client, a wrapper such as {"warnings": []} or
       {"errors": []}, and a document with any additional top-level key are all unknown. Reading
@@ -166,9 +177,9 @@ def sandbox_count(listing, client=None):
       no JSON field name, and guessing one would be fabrication. Once an entry is observed
       with a reliable status field, this narrows to running sandboxes as T008 states.
     """
-    # Authenticated v0.53.0 was observed returning a bare array. Accept it only for that
+    # v0.53.0 and v0.54.0 were each observed returning a bare array. Accept it only for an
     # observed client; legacy and unknown clients retain the original shape guard.
-    if client == (0, 53, 0) and isinstance(listing, list):
+    if client in BARE_ARRAY_CLIENTS and isinstance(listing, list):
         return len(listing)
     if isinstance(listing, dict) and set(listing) == {"sandboxes"} and isinstance(listing["sandboxes"], list):
         return len(listing["sandboxes"])
@@ -206,7 +217,7 @@ def policy_uninitialized(work, obs):
     """
     version = read_json(work, "version.json") or {}
     client = parse_version((version.get("client") or {}).get("version", ""))
-    expected = (POLICY_UNINITIALIZED_STDERR_053 if client == (0, 53, 0)
+    expected = (POLICY_UNINITIALIZED_STDERR_053 if client in POLICY_UNINITIALIZED_CLIENTS_053
                 else POLICY_UNINITIALIZED_STDERR)
     return (
         obs.get("policy_before_exit") == POLICY_UNINITIALIZED_EXIT

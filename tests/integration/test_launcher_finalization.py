@@ -88,6 +88,9 @@ class FinalizationCase(unittest.TestCase):
         self.document = json.loads((FIXTURES / "all-eligible.json").read_text(encoding="utf-8"))
         self.eligibility_path = self.dir / "eligibility.json"
         self.document["runtime_versions_digest"] = eligibility.canonical_digest(self.versions)
+        # T114: bound to the kit as well, from the real sources, because repo_root is the
+        # real repository; a hardcoded value here would rot when the kit changes.
+        self.document["kit_digest"] = eligibility.kit_digest()
         self.document["pinned_versions"] = rules.pinned_versions(self.versions)
         self.document["network_policy_fingerprint"] = g4.fingerprint(
             {"rules": [], "governance": {"active": False}}, False)

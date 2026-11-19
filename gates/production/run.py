@@ -68,6 +68,10 @@ def run_cell(backend, profile, sbx, versions, network):
     rows = []
     kit = WORK / f"kit-{backend}-{profile}"
     stage.build_sbx_kit(kit, backends=[backend])
+    # Recorded HERE, at staging time, not when publish.py composes the evidence: if the kit
+    # changed in between, the published provenance would name a kit this cell never tested
+    # (tasks.md T114). publish.py refuses unless every cell agrees and matches the sources.
+    kit_digest = stage.kit_source_digest()
     pinned = versions["sandbox_bases"][backend]
     cell = network["backends"][backend][profile]
     allow = list(dict.fromkeys(cell["control_plane"] + cell["allow"]))
@@ -212,7 +216,7 @@ printf 'manifest=%s\\n' "$(sha256sum /opt/dca/kit-manifest.json | cut -d' ' -f1)
         if created:
             status, error = sbx.remove(name)
             checked(rows, "cleanup", status == 0, {"exit": status, "error": error.strip()[:200]})
-    return {"backend": backend, "profile": profile,
+    return {"backend": backend, "profile": profile, "kit_digest": kit_digest,
             "status": "PASS" if rows and all(row["result"] == "PASS" for row in rows) else "FAIL",
             "checks": rows}
 

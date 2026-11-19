@@ -73,6 +73,31 @@ def canonical_digest(versions):
     return "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
+_STAGE = None
+
+
+def kit_digest(root=None):
+    """The kit sources' digest, read from `runtime/sandbox/kit/stage.py` (tasks.md T114).
+
+    Loaded by path and cached, the way this module already loads `jsonschema`. `stage.py` is the
+    one place that knows which files the kit is built from, so the launcher asks it rather than
+    keeping a second list that could disagree about what the sandbox received.
+    """
+    global _STAGE
+    if _STAGE is None:
+        import importlib.util as ilu
+        import sys
+        path = os.path.join(root or _REPO_ROOT, "runtime", "sandbox", "kit", "stage.py")
+        _STAGE = sys.modules.get("dca_stage_for_eligibility")
+        if _STAGE is None:
+            spec = ilu.spec_from_file_location("dca_stage_for_eligibility", path)
+            _STAGE = ilu.module_from_spec(spec)
+            sys.modules["dca_stage_for_eligibility"] = _STAGE
+            spec.loader.exec_module(_STAGE)
+    # The module is cached, never the digest: an edited kit source must change the answer.
+    return _STAGE.kit_source_digest()
+
+
 def structural_problems(document, schema=None):
     """Schema conformance, decided by the stdlib validator. Never imports `jsonschema`."""
     return jsonschema.validate(document, schema or load_schema())
@@ -101,10 +126,12 @@ def load(path=None, schema=None):
 def check_freshness(document, versions=None, path=None):
     """The evidence must describe the environment that is installed right now.
 
-    Both halves matter. The canonical digest catches ANY change to `runtime/versions.yaml`,
+    All three halves matter. The canonical digest catches ANY change to `runtime/versions.yaml`,
     including one to a field the document does not restate; the explicit `pinned_versions`
     comparison catches a document that carries the right digest but disagrees about a pin it does
-    name. Either mismatch means the gates were run somewhere else.
+    name; and the kit digest catches a change to what the sandbox actually RECEIVES, which until
+    T114 was invisible here - the gate bytes, the instructions and the managed settings could all
+    change and every gate still read PASS. Any mismatch means the gates were run somewhere else.
     """
     versions = versions or load_versions()
     expected = canonical_digest(versions)
@@ -114,6 +141,13 @@ def check_freshness(document, versions=None, path=None):
             f"{path or ELIGIBILITY_PATH} is stale: it was computed for runtime_versions_digest "
             f"{recorded}, but runtime/versions.yaml is now {expected}. Re-run the gates and "
             "gates/review.py.")
+    expected_kit = kit_digest()
+    recorded_kit = document.get("kit_digest")
+    if recorded_kit != expected_kit:
+        raise EvidenceProblem(
+            f"{path or ELIGIBILITY_PATH} is stale: it was computed for kit_digest "
+            f"{recorded_kit}, but the kit sources now give {expected_kit}. Re-run production "
+            "conformance and gates/review.py.")
     pinned = document.get("pinned_versions") or {}
     mismatches = []
     for key, path_in_versions in (("docker_agent", ("docker_agent",)),

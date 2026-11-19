@@ -112,6 +112,56 @@ def sha256_file(path):
     return digest.hexdigest()
 
 
+SKILLS_SRC = os.path.join(ROOT, "runtime", "skills")
+
+
+def kit_source_files():
+    """Every COMMITTED file `stage()` reads, as (relative POSIX path, absolute path) pairs.
+
+    Enumerated from this module's OWN constants, so a file that `stage()` starts reading becomes a
+    digest input in the same edit; `tests/contract/test_kit_digest.py` instruments a real staging
+    run and fails if anything read is missing from here.
+
+    Deliberately not a directory walk: `__pycache__` and `.DS_Store` would make the digest differ
+    between this host and CI. `stage.py` and its templates ARE inputs, because the rendering logic
+    changes the kit as much as the material it renders.
+
+    Two kinds of file are deliberately absent. `gates/eligibility.json` only SELECTS which
+    backends get staged, and a digest recorded in it cannot depend on itself. The two binary
+    payloads under `gates/G6/work/` are gitignored and already pinned by their own SHA-256, in
+    `runtime/versions.yaml` for the docker-agent artifact and inside `node.json` for Node.
+    """
+    files = [os.path.join(HERE, "stage.py"), TEMPLATE, FINGERPRINT_TEMPLATE, NODE_PIN, VERSIONS]
+    files += [os.path.join(SRC, name) for name in GATE_MODULES]
+    files += [os.path.join(POLICY_SRC, name) for name in POLICY_FILES]
+    files += [os.path.join(INSTRUCTIONS_SRC, name) for name in INSTRUCTIONS]
+    files += [os.path.join(AGENTS_SRC, f"{backend}.yaml") for backend in BACKENDS]
+    files += [os.path.join(CLAUDE_SRC, "managed-settings.json")]
+    files += [os.path.join(CLAUDE_SRC, "agents", name) for name in SUBAGENTS]
+    files += [os.path.join(SKILLS_SRC, name, "SKILL.md") for name in RUNTIME_SKILLS]
+    return sorted((os.path.relpath(path, ROOT).replace(os.sep, "/"), path) for path in files)
+
+
+def kit_source_digest():
+    """'sha256:' + the SHA-256 of the kit's committed sources: each path and its bytes, by path.
+
+    What binds PRODUCTION-CONFORMANCE to the kit it actually tested (tasks.md T114). Before this,
+    evidence staleness was a digest of `runtime/versions.yaml` alone, so the gate bytes, the
+    instructions and the managed settings could all change and every gate still read PASS.
+
+    Only paths and bytes are hashed - no modes, no mtimes - so two checkouts of one commit agree.
+    A missing input raises rather than being skipped: a digest over "what happened to be there"
+    would be worth nothing.
+    """
+    digest = hashlib.sha256()
+    for relative, path in kit_source_files():
+        with open(path, "rb") as handle:
+            data = handle.read()
+        digest.update(f"{relative}\0{len(data)}\0".encode("utf-8"))
+        digest.update(data)
+    return "sha256:" + digest.hexdigest()
+
+
 def available_backends(eligibility_path=ELIGIBILITY):
     """The backends `gates/eligibility.json` records as available.
 
