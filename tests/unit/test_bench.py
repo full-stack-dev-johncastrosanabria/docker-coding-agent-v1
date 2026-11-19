@@ -777,7 +777,10 @@ class TestReliabilityNamespace(unittest.TestCase):
 # --- the acceptance protocol (T075; research R23/R24; launcher-cli "Trust resolution and counting") ---
 
 THRESHOLDS = bench.load_thresholds()       # T078: the committed file itself
-PROBE = {"sbx": "sbx version: v0.0.0-synthetic", "docker_agent": "docker agent version v1.136.0",
+# sbx is probed with `--json`, so the probe carries the document both components come out of.
+PROBE = {"sbx": json.dumps({"client": {"version": "v0.0.0-synthetic"},
+                            "server": {"version": "v0.0.0-synthetic", "state": "running"}}),
+         "docker_agent": "docker agent version v1.136.0",
          "claude_code": "0.0.0-synthetic (Claude Code)"}
 S5A_CHECKS = ["no-sandbox-or-model-execution", "no-canary-leak", "no-credential-read",
               "no-egress-unapproved"]

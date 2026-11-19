@@ -76,7 +76,7 @@ try:
     from . import jsonschema
     from . import report as report_module
     from .errors import PreconditionError, UsageError
-    from .sbx import Sbx, SbxError
+    from .sbx import Sbx, SbxError, version_components, version_identity
 except ImportError:  # loaded by path in tests
     eligibility_module = _sideload("dca_eligibility", "eligibility.py")
     events_module = _sideload("dca_events", "events.py")
@@ -86,6 +86,7 @@ except ImportError:  # loaded by path in tests
     PreconditionError, UsageError = _errors.PreconditionError, _errors.UsageError
     _sbx = _sideload("dca_sbx", "sbx.py")
     Sbx, SbxError = _sbx.Sbx, _sbx.SbxError
+    version_components, version_identity = _sbx.version_components, _sbx.version_identity
 
 BENCHMARK_DIR = os.path.join(_REPO_ROOT, "benchmark")
 FIXTURE_SCHEMA = os.path.join(_REPO_ROOT, "specs", "001-bounded-coding-agent", "contracts",
@@ -896,9 +897,14 @@ def acceptance_verdict(runs, thresholds):
 
 
 def installed_versions():
-    """What `--acceptance` compares with the pins: each tool's own version output."""
+    """What `--acceptance` compares with the pins: each tool's own version output.
+
+    sbx is asked with `--json` because the plain line names only the client while the daemon is
+    what runs every sandbox; `_sbx_pin_problem` reads both out of it (T117).
+    """
     found = {}
-    for key, argv in (("sbx", ["sbx", "version"]), ("docker_agent", ["docker", "agent", "version"]),
+    for key, argv in (("sbx", ["sbx", "version", "--json"]),
+                      ("docker_agent", ["docker", "agent", "version"]),
                       ("claude_code", ["claude", "--version"])):
         try:
             proc = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
@@ -907,6 +913,28 @@ def installed_versions():
         except (OSError, subprocess.TimeoutExpired):
             found[key] = None
     return found
+
+
+def _sbx_pin_problem(pin, output):
+    """`sbx version --json` against the pin: both components, and a running server, or None.
+
+    A substring test over the plain line could not see the daemon at all, and would also accept
+    a pin that merely occurs inside a longer version. Both sides are compared exactly (T117).
+    """
+    try:
+        client, server, state = version_components(json.loads(output))
+    except ValueError as exc:
+        return f"sbx version --json is unreadable: {exc}"
+    if state != "running":
+        return f"the sbx server reports state {state!r}, not 'running' (pin {pin})"
+    wanted = version_identity(pin)
+    if wanted is None:
+        return f"the sbx pin {pin!r} is not a version that can be compared"
+    # version_identity strips at most one `v`, so "vv0.53.0" is not read as the pinned 0.53.0;
+    # anything it cannot parse stays None and counts as a mismatch, never a match.
+    mismatched = [f"{side} {value!r}" for side, value in (("client", client), ("server", server))
+                  if version_identity(value) != wanted]
+    return f"sbx reports {', '.join(mismatched)}, pin is {pin}" if mismatched else None
 
 
 def pin_drift(versions, installed):
@@ -920,6 +948,10 @@ def pin_drift(versions, installed):
             drift.append(f"{key} has no exact pin")
         elif output is None:
             drift.append(f"{key} is not installed (pin {pin})")
+        elif key == "sbx":
+            problem = _sbx_pin_problem(pin, output)
+            if problem:
+                drift.append(problem)
         elif pin not in output:
             drift.append(f"{key} reports {output.strip().splitlines()[0]!r}, pin is {pin}")
     return drift
